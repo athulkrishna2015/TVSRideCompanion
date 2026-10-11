@@ -21,6 +21,10 @@ object OutboundId {
     const val NAVIGATION_CONTROL = 0x4E
     /** Alternate navigation control. */
     const val NAVIGATION_CONTROL_2 = 0x49
+    /** Navigation text row 1 (`DATA_ID_NAVIGATIONDATA1` in the reference app). */
+    const val NAVIGATION_TEXT = 0x4F
+    /** Navigation text row 2 (`DATA_ID_NAVIGATIONDATA2`). */
+    const val NAVIGATION_TEXT_ALT = 0x50
     /** Caller info. */
     const val CALLER = 0x43
     /** SMS / notification text. */
@@ -136,39 +140,92 @@ object PacketBuilder {
     /**
      * Navigation control: distance, ETA, remaining distance, pictogram.
      *
-     * `0x5B 0x4E` per the Jupiter report §4.1. The cluster firmware renders the
-     * distance-to-turn integer itself on line 1, so this packet mainly carries
-     * the arrow and the two distances.
+     * Transcribed from `BleNavigationPacketBuilder.buildControlPacket` in the
+     * working third-party Jupiter app — a *proven* layout, not an inference:
+     *
+     * ```
+     * [0]  0x5A      start byte (90, START_BYTE_CONTROL)
+     * [1]  0x4E      navigation control (78)
+     * [2..3] distance to turn, metres   (saturating 16-bit)
+     * [4..5] remaining time, minutes    (16-bit)
+     * [6..8] remaining distance, metres (24-bit; falls back to distance if <= 0)
+     * [9]  maneuver id (pictogram)
+     * [10] text rows in use (1)
+     * [11] active flag (1/0)
+     * [12..15] zero
+     * [16..19] zero
+     * [19] 0xFF terminator
+     * ```
+     *
+     * **No checksum.** The control frame does not carry one — only the
+     * outbound mobile-data packet does.
+     *
+     * Distance and remaining-distance saturate rather than wrap: >= 65535 m
+     * writes 0xFFFF, and remaining-distance <= 0 reuses distance-to-turn.
      */
     fun navigationControl(
         nav: NavStep,
         dataId: Int = OutboundId.NAVIGATION_CONTROL,
     ): ByteArray {
         val b = ByteArray(MOBILE_DATA_SIZE)
-        b[0] = StartId.B5.toByte()
+        b[0] = StartId.A5.toByte()
         b[1] = dataId.toByte()
-        putUInt16(b, 2, nav.distanceToTurnMeters.coerceIn(0, 0xFFFF))
+
+        val d = nav.distanceToTurnMeters
+        if (d >= 0xFFFF) {
+            b[2] = 0xFF.toByte(); b[3] = 0xFF.toByte()
+        } else {
+            putUInt16(b, 2, d)
+        }
+
         putUInt16(b, 4, nav.etaMinutes.coerceIn(0, 0xFFFF))
-        putUInt24(b, 6, nav.remainingDistanceMeters.coerceIn(0, 0xFFFFFF))
+
+        var remaining = nav.remainingDistanceMeters
+        if (remaining <= 0) remaining = d
+        putUInt24(b, 6, remaining.coerceIn(0, 0xFFFFFF))
+
         b[9] = nav.pictogram.toByte()
-        b[10] = nav.rows.toByte()
-        b[18] = Checksum.compute(b, 18)
+        b[10] = 1.toByte()   // upstream hardcodes one text row
+        b[11] = if (nav.active) 1 else 0
+        // [12..18] remain zero
         b[19] = 0xFF.toByte()
         return b
     }
 
     /**
-     * A row of plain text. Upstream the caller-info and SMS paths build these
-     * through `generateByteArrayForName`, which pads to the frame length and
-     * terminates with `0xFF`.
+     * Navigation text row.
+     *
+     * `0x5B 0x4F` (`DATA_ID_NAVIGATIONDATA1 == 79`), 17 bytes of UTF-8 text
+     * zero-padded to fill, `0xFF` terminator. **No checksum.**
+     *
+     * Note the text payload starts at index 2 and is *truncated to 17
+     * characters*, not 17 bytes — a multibyte character can overflow the field
+     * and shift the terminator, so callers should keep text ASCII or clamp by
+     * bytes. See [navigationText].
+     */
+    fun navigationText(text: String): ByteArray {
+        val b = ByteArray(MOBILE_DATA_SIZE)
+        b[0] = StartId.B5.toByte()
+        b[1] = OutboundId.NAVIGATION_TEXT.toByte()
+        val bytes = text.take(17).toByteArray(Charsets.UTF_8)
+        // Never let a multibyte sequence run past the 17-byte field.
+        bytes.copyInto(b, destinationOffset = 2, endIndex = minOf(bytes.size, 17))
+        b[19] = 0xFF.toByte()
+        return b
+    }
+
+    /**
+     * A row of plain text for caller ID / notifications.
+     *
+     * `0x5B 0x4C` (76) for row 1 and `0x5B 0x63` (99) for row 2, matching
+     * `buildMessagePackets`. 17 characters, padded, `0xFF` terminator.
      */
     fun textRow(dataId: Int, text: String, maxChars: Int = 17): ByteArray {
-        val payload = text.take(maxChars).toByteArray(Charsets.UTF_8)
         val b = ByteArray(MOBILE_DATA_SIZE)
         b[0] = StartId.B5.toByte()
         b[1] = dataId.toByte()
-        payload.copyInto(b, destinationOffset = 2)
-        b[18] = Checksum.compute(b, 18)
+        val bytes = text.take(maxChars).toByteArray(Charsets.UTF_8)
+        bytes.copyInto(b, destinationOffset = 2, endIndex = minOf(bytes.size, 17))
         b[19] = 0xFF.toByte()
         return b
     }

@@ -22,14 +22,18 @@ without logging in" is enforced by the build, not promised in a README.
 | Area | State |
 | :--- | :--- |
 | Ntorq + Raider inbound | **8 frame layouts transcribed** from the official APK (Raider shares the Ntorq config) |
-| Pictogram table | **transcribed** from the official app |
 | GATT / transport | implemented |
-| Ntorq navigation HUD | **unverified — not yet confirmed on hardware** |
+| AES-CTR handshake | **proven** — key and cipher confirmed in two independent apps |
+| Navigation HUD packets | **proven** — `0x5A 0x4E` / `0x5B 0x4F` transcribed from a working app |
+| Navigation on the Ntorq TFT | **untested on hardware** — width and pictograms unconfirmed |
+| Pictogram table | transcribed (official); a second, conflicting table recorded |
 | Jupiter / Apache / iQube | connect + stream raw frames; drivers not written |
 | APK analysis | complete for the protocol packages |
 
-Nothing below "unverified" has been run against a scooter yet. See
-[docs/CAPTURE.md](docs/CAPTURE.md).
+The handshake and navigation packet layouts are cross-checked against **two**
+independent applications — the official TVS Connect APK and a working
+third-party Jupiter app. Where they agree, a fact is solid; where they differ,
+both are documented rather than silently merged.
 
 ---
 
@@ -45,7 +49,8 @@ protocol/
   VehicleModel.kt     model registry + capability flags
   ProtocolDriver.kt   the per-model interface + generic fallback
   NtorqDriver.kt      Ntorq + Raider: transcribed frame layouts
-  PacketBuilder.kt    outbound frames
+  PacketBuilder.kt    outbound frames (nav layout proven)
+  Handshake.kt        AES-CTR challenge/response
   Pictogram.kt        maneuver table + text-keyword fallback
 transport/
   ScooterBleService.kt   GATT, write mutex, frame stream
@@ -103,9 +108,12 @@ Full attribution, licences and per-source contribution notes are in
 
 **Local artifacts** (parent folder, not redistributed here)
 - `TVS Connect_8.14.1.apk` — the official app, primary protocol source
-- `JupiterRideCompanion.apk` — a working third-party companion app
+- `JupiterRideCompanion.apk` — a working third-party companion app; source of
+  the *proven* nav packet layout and an independent crypto cross-check
 - `JupiterRideCompanion/` docs — **CC BY-NC 4.0**
-- `TVS-Connect-Application-VAPT/` — **CC0 1.0**, background only, see SCOPE
+- `TVS-Connect-Application-VAPT/` — **CC0 1.0**; its crypto finding (CVE-2024-35537)
+  is what demonstrated the BLE "auth" key is hardcoded. The server-side CVEs are
+  unused by design, see SCOPE
 - TechEnclave thread + `kia_uvo.wiki` — methodology
 - `research/refs.txt` — supplied reference list
 

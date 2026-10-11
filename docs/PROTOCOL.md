@@ -69,21 +69,63 @@ data, it is not TVS traffic.
 
 ## 2. Link handshake
 
-Most units require a handshake before accepting raw commands. `[JUPITER]`
+Most units require a handshake before accepting raw commands. Three
+independent sources agree on the shape, and two of them ship actual keys.
 
-1. Scooter emits `0x9A 0xF2` + 16 random bytes via notification (challenge).
-2. Client responds `0x9A 0xF1` + a randomised "shorthand" slice of
-   **AES-128-CTR** (no padding) over those bytes.
+1. Scooter emits a challenge frame — start byte `0x9B`, data id `0xF2`, plus 16
+   random bytes.
+2. Client responds with start byte `0x9A`, data id `0xF1`, an AES-128-CTR
+   (no padding) result, padded to 20 bytes and terminated with `0xFF`.
 
-Key reported in the Jupiter report: `7A A3 20 4D 16 1D B5 33 F4 EB 20 4F BC D7 3D D4`.
+From `BlePacketsProvider.byteArrayForUnLock`:
+```
+0x9A 0xF1 <encrypted> <padding to 20> 0xFF
+```
 
-> This key is transcribed here because it is already public in the folder's
-> report and is the same value across the product line. If Ntorq rejects it,
-> that is a real finding — record it and do not brute-force.
+`BluetoothUtil` uses `AES/CTR/NoPadding` with the **challenge bytes as the
+IV** — a weak construction, since the IV is visible on the wire, but it is what
+the cluster expects.
 
-The TechEnclave participants' consensus is that there is effectively **no real
-security key**; this is a formality the cluster expects, not a secret. Treat
-the handshake as protocol fidelity, not as a security boundary.
+Independently confirmed by the third-party Jupiter app's `CryptoUtils`, which
+builds the identical pipeline:
+
+```java
+Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding");
+new SecretKeySpec(key, "AES");
+new IvParameterSpec(challenge);
+```
+
+### The key is not a secret
+
+| Source | Key bytes |
+| :--- | :--- |
+| Official APK, `KeylessEntryUtils.AES_KEY_BYTE_ARRAY` | `7A A3 20 4D 16 1D B5 **25** F4 EB 20 4F BC D7 3D D4` |
+| Jupiter companion APK, `BleConstants.AES_KEY` | `7A A3 20 4D 16 1D B5 **33** F4 EB 20 4F BC D7 3D D4` |
+| Jupiter report (`REVERSE_ENGINEERING_REPORT.md` §1.1) | `7A A3 20 4D 16 1D B5 **33** F4 EB 20 4F BC D7 3D D4` |
+
+Two independent applications embed a **hardcoded 16-byte key differing in a
+single byte**, and both work against real hardware. That is the client-side
+half of **CVE-2024-35537** — "Broken Cryptography: Leaked secrets on Android
+and iOS application platforms" (FEV LTD). It is reproduced here as a protocol
+requirement, not as a credential. Treat the handshake as protocol fidelity,
+never as a security boundary.
+
+Both variants are in `Handshake.kt`; the official one is the default.
+
+> Note `KeylessEntryUtils.AES_KEY_BYTE_ARRAY` is **not mutable** at this class
+> level, but `setAES_KEY_BYTE_ARRAY()` exists, so the key can be overridden at
+> runtime — plausibly pushed via Firebase RemoteConfig, which the official app
+> embeds heavily. If a cluster rejects the shipped key, that is where to look
+> next. Do not brute-force.
+
+### Obfuscated command blocks
+
+`KeylessEntryUtils` also holds `UNLOCK_COMMAND_UUID`,
+`FIND_VEHICLE_COMMAND_UUID`, `LOCK_COMMAND_UUID` and
+`OPEN_TRUNK_COMMAND_UUID`. Despite the names these are **not UUIDs** — they are
+byte arrays that embed protocol constants (`START_BYTE_5B`, `TRIP_DATA_PACKET`,
+`SONG_NAME_PACKET`, …) to disguise trivial values as opaque blobs. Not
+reproduced here; `PacketBuilder` covers the same operations readably.
 
 ## 3. Ping / "mobile data" packet — `DataID 0x4A`
 

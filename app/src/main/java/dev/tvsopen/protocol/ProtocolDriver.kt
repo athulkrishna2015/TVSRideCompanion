@@ -39,10 +39,20 @@ interface ProtocolDriver {
     /** Keepalive packet sent continuously to hold the link and feed the dash. */
     fun buildPing(state: DashState): ByteArray?
 
-    /** Navigation control packet. Null when [Capabilities.navigationHud] is false. */
+    /**
+     * Navigation control packet. Null when [Capabilities.navigationHud] is false.
+     *
+     * Layout (proven on the Jupiter; expected to carry to Ntorq/Raider since
+     * the GATT service is shared): `0x5A 0x4E`, distance, ETA, remaining
+     * distance, pictogram, row count, active flag, padding, `0xFF`. No checksum.
+     */
     fun buildNavControl(nav: NavStep): ByteArray?
 
-    /** Navigation text packet. Null when the model has no text channel. */
+    /**
+     * Navigation text packet. Null when the model has no text channel.
+     *
+     * `0x5B 0x4F`, 17 characters, zero-padded, `0xFF` terminator. No checksum.
+     */
     fun buildNavText(nav: NavStep): ByteArray?
 
     /** Plain 17-char text row for caller ID / song titles / notifications. */
@@ -86,7 +96,9 @@ data class NavStep(
     val remainingDistanceMeters: Int,
     val pictogram: Int,
     val streetName: String,
-    val rows: Int = 2,
+    val rows: Int = 1,
+    /** Mirrors the control frame's active flag at index 11. */
+    val active: Boolean = true,
 )
 
 /**

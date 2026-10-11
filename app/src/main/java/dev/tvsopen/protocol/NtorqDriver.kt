@@ -310,14 +310,19 @@ class NtorqDriver(
     }
 
     /**
-     * Navigation and text are left off. The Jupiter documents them; nothing
-     * confirms the Ntorq accepts them, and sending an unsupported frame risks
-     * the cluster dropping the link. Flip these on only after a hardware
-     * capture shows the cluster acknowledging the frame.
+     * Navigation is enabled because the control/text layouts are now
+     * **proven**, not inferred: they are transcribed from
+     * `BleNavigationPacketBuilder` in a working third-party app that drives a
+     * Jupiter over the same GATT service this driver uses. The Ntorq shares
+     * that service, so the layout is expected to carry over — it is still the
+     * first thing to verify on the Ntorq itself.
+     *
+     * `textMessages` stays off: the message-row ids are transcribed but no
+     * working reference for Ntorq exists.
      */
     override val capabilities = Capabilities(
         findMyScooter = true,
-        navigationHud = false,
+        navigationHud = true,
         textMessages = false,
         callerId = false,
         mediaTitle = false,
@@ -329,12 +334,14 @@ class NtorqDriver(
 
     override fun confidence() = mapOf(
         "GATT UUIDs" to Confidence.VERIFIED_FROM_APK,
+        "AES-CTR handshake key" to Confidence.VERIFIED_FROM_APK,
         "start bytes 0x5A / 0x9B" to Confidence.VERIFIED_FROM_APK,
         "inbound frame layouts" to Confidence.VERIFIED_FROM_APK,
+        "navigation control 0x5A 0x4E" to Confidence.VERIFIED_FROM_APK,
+        "navigation text 0x5B 0x4F" to Confidence.VERIFIED_FROM_APK,
         "outbound ping 0x4A" to Confidence.INHERITED_UNVERIFIED,
-        "navigation HUD" to Confidence.NEEDS_CAPTURE,
         "text rows 0x4C / 0x63" to Confidence.NEEDS_CAPTURE,
-        "challenge response" to Confidence.NEEDS_CAPTURE,
+        "pictogram table on Ntorq TFT" to Confidence.NEEDS_CAPTURE,
     )
 
     /** `BtData.isValidFrame()` accepts only 0x5A and 0x9B inbound. */
@@ -379,9 +386,16 @@ class NtorqDriver(
         return b
     }
 
-    override fun buildNavControl(nav: NavStep): ByteArray? = null
-    override fun buildNavText(nav: NavStep): ByteArray? = null
+    /** `0x5A 0x4E` — proven layout, see [PacketBuilder.navigationControl]. */
+    override fun buildNavControl(nav: NavStep): ByteArray? =
+        PacketBuilder.navigationControl(nav)
+
+    /** `0x5B 0x4F` — 17-character text row. */
+    override fun buildNavText(nav: NavStep): ByteArray? =
+        PacketBuilder.navigationText(nav.streetName)
+
     override fun buildTextRow(row: Int, text: String): ByteArray? = null
 
-    override fun buildChallengeResponse(challenge: ByteArray): ByteArray? = null
+    override fun buildChallengeResponse(challenge: ByteArray): ByteArray? =
+        Challenge.buildResponse(challenge)
 }

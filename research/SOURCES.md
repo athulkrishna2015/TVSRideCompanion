@@ -7,7 +7,7 @@ Everything this project is derived from, and what each source contributed.
 | File | SHA-256 | Role |
 | --- | --- | --- |
 | `TVS Connect_8.14.1.apk` | `35046ea75eea2bd5f26e82d19b5002448f3ae6408e11bd943631c8c1ae15f0c4` | **Official TVS app**, v8.14.1, `com.tvsm.connect`. Primary protocol specification source. Statically decompiled only; never executed, never instrumented, never run against TVS servers. |
-| `JupiterRideCompanion/JupiterRideCompanion.apk` | `957177a6ae6012b5b61278284a25b184bbc8a281db36478c2d3178d48fcff300` | Third-party companion app that **works against a Jupiter**. The closest thing to a working reference implementation. Cross-check source for packet layout. |
+| `JupiterRideCompanion/JupiterRideCompanion.apk` | `957177a6ae6012b5b61278284a25b184bbc8a281db36478c2d3178d48fcff300` | Third-party companion app that **works against a Jupiter**. Package `com.tvs.jupiter.ble`. Contributed the *proven* navigation packet layout, the AES-CTR crypto confirmation, and an independent GATT/AES-key cross-check. |
 
 Both are read-only inputs and stay in the parent directory. They are not
 redistributed in this repo.
@@ -58,6 +58,56 @@ Primary source for the *current state of the art* in this scene:
 Consensus in the thread: there is no real security key; the protocol is
 insecure by design; the official app's reliability, not its security, is the
 complaint.
+
+## What the Jupiter companion APK contributed
+
+Decompiled (`com.tvs.jupiter.ble`) as a second, independent source. Where the
+two apps agree, a fact is solid; where they differ, both are recorded.
+
+**Confirmed identically in both apps:**
+
+| Fact | Official APK | Jupiter companion |
+| :--- | :--- | :--- |
+| GATT service | `5456534D-…` | `5456534D-…` |
+| Write / read chars | `00005352-…` / `00005354-…` | same |
+| AES mode | `AES/CTR/NoPadding` | `AES/CTR/NoPadding` |
+| IV | the challenge bytes | the challenge bytes |
+| AES key | `…B5 25 F4…` | `…B5 33 F4…` — **one byte differs** |
+
+**Contributed only by the companion app** (it is the only one with a working
+nav implementation):
+
+- `BleNavigationPacketBuilder.buildControlPacket` — the `0x5A 0x4E` layout,
+  including saturating distance encoding, the `remaining <= 0 → reuse distance`
+  fallback, and the absence of any checksum.
+- `buildTextPackets` — `0x5B 0x4F`, 17 characters, and the 5-second text-cycling
+  cadence with the 11-character right-aligned metrics line.
+- `BleConstants.AUTH_*` — `START_BYTE_9A`, `DATA_ID_F1 (0xF1)`,
+  `AUTH_REQUEST_TYPE (0x50)`.
+
+**Corrected by this source:** an earlier draft of this repo added a checksum to
+the navigation frames and used start byte `0x5B` for the control packet. The
+working implementation uses **no checksum** and start byte **`0x5A`**. Fixed in
+`PacketBuilder.navigationControl`.
+
+## What the VAPT contributed
+
+`TVS-Connect-Application-VAPT` (CC0, FEV LTD) is useful in exactly one
+respect, and it is the reason this project can skip the cloud entirely.
+
+**CVE-2024-35537 — "Broken Cryptography: Leaked secrets on Android and iOS
+application platforms"** predicted that the client's secrets are hardcoded and
+recoverable. This project then *demonstrated* it for the BLE layer: the
+official APK embeds a static 16-byte AES key in `KeylessEntryUtils`, and a
+third-party app ships the same key with one byte changed and drives real
+hardware. That is the "authentication" in full — it is protocol fidelity, not a
+security boundary, and this project treats it accordingly.
+
+**CVE-2024-33308 / CVE-2024-33309** (unauthenticated access to other users'
+service history; add/delete any user's emergency contact) are server-side flaws
+against TVS's cloud. **Not used, and deliberately so.** This app never contacts
+TVS, has no `INTERNET` permission, and has no user accounts to attack. The
+findings are recorded only to justify that design — see `docs/SCOPE.md`.
 
 ### `research/refs.txt` — supplied reference list
 A third-party summary of the reverse-engineering landscape: community projects,

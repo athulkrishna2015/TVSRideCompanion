@@ -84,17 +84,23 @@ Our tables come from the APK annotations. The snoop log confirms them.
 
 ## 3. Navigation on the Ntorq
 
-The big unknown. The official app has a full nav implementation
-(`sendNavigationData`, `sendNavigationInstructions`,
-`sendNavigationAssistOn`), so it does work on some cluster.
+The packet layout is **no longer an open question** — `0x5A 0x4E` control and
+`0x5B 0x4F` text are proven by a working third-party app over the same GATT
+service. What remains is whether the Ntorq's **5-inch TFT** behaves the same:
 
-- Which data id: `0x4E` or `0x49` (`DATA_ID_NAVIGATION_CONTROL_2`)?
-- Where does the pictogram byte sit? The Jupiter report says byte 9 of a 20-byte
-  frame; verify.
-- Is the text channel `0x4C`/`0x63`, or `0x4F`/`0x50`?
-- **Character width.** The Jupiter shows 17. The Ntorq's 5-inch TFT is much
-  larger — count characters in a long street name in the snoop log.
-- Roundabout pictograms: confirm 65–71 are the set the cluster actually draws.
+1. Does it accept the control frame at all, or ignore it?
+2. **Character width.** The proven layout is 17 characters. A larger TFT may
+   expect more — send a known 17-char string and check what appears.
+3. **Pictogram table.** The official app's table and the Jupiter companion's
+   disagree on ids 5, 7, 13, 15, 21, 41 and the roundabout block. If arrows
+   render wrong, that is the first suspect — both tables are recorded side by
+   side in `docs/NAVIGATION.md`.
+4. `KEYS.VEHICLETYPEID` — the official app branches on `== "22"` with a
+   different pictogram table. Find the Ntorq's id from the `0x11` vehicle model
+   frame (index 9).
+
+Suggested order: connect, confirm telemetry decodes (that validates the whole
+transport), then send one navigation step and watch the cluster.
 
 ## 4. `KEYS.VEHICLETYPEID`
 
