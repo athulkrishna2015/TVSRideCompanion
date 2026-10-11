@@ -1,6 +1,9 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Kotlin 2.0 moved Compose compilation into a compiler plugin; the old
+    // `kotlinCompilerExtensionVersion` string is rejected outright.
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -24,10 +27,6 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.15"
     }
 
     compileOptions {
@@ -57,9 +56,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
-// CPU budget: see AGENTS.md. Two workers, no daemon left running.
-tasks.withType<org.gradle.api.tasks.compile.KotlinCompile>().configureEach {
-    compilerOptions {
-        freeCompilerArgs.add("-Xjvm-default=all")
-    }
-}
+// CPU budget: see AGENTS.md and gradle.properties — workers.max=2, daemon off.
+// No extra compiler flags are needed; `-Xjvm-default=all` is the default from
+// Kotlin 2.0 and referencing it here broke the script.
