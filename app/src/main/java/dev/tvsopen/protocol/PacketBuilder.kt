@@ -369,7 +369,8 @@ object PacketBuilder {
         b[2] = command.toByte()
         b[3] = id.toByte()
         b[4] = data.size.toByte()
-        data.take(4).copyInto(b, destinationOffset = 5)
+        // ByteArray.take() returns List<Byte>, which has no copyInto — convert first.
+        data.take(4).toByteArray().copyInto(b, destinationOffset = 5)
         b[9] = Checksum.compute(b, 9)
         b[19] = 0xFF.toByte()
         return b

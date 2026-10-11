@@ -31,7 +31,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.UUID
-import kotlin.coroutines.resume
 
 enum class ConnectionState { DISCONNECTED, SCANNING, CONNECTING, CONNECTED, RECONNECTING }
 
@@ -107,7 +106,10 @@ class ScooterBleService(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun disconnect() {
+    suspend fun disconnect() {
+        // Suspend rather than plain fun: withLock is a suspend function, and a
+        // non-suspend caller could not use it. Waiting here also guarantees no
+        // write is in flight when the GATT client is closed.
         writeLock.withLock {
             gatt?.run {
                 disconnect()
@@ -131,14 +133,26 @@ class ScooterBleService(private val context: Context) {
             Log.d(TAG, "write dropped, not connected")
             return@withLock false
         }
-        val ok = suspendCancellableCoroutine { cont ->
+        // Explicit <Boolean>: the lambda's last expression is a conditional on
+        // `cont.resume(...)` which returns Unit, so inference would pick the
+        // wrong T and `ok` would be typed as the continuation result itself.
+        val ok = suspendCancellableCoroutine<Boolean> { cont ->
+            // writeCharacteristic returns an Int status, not a Boolean; compare against
+            // GATT_SUCCESS so the try/catch produces a real Boolean. This
+            // reports whether the write was *accepted* — the on-wire result
+            // arrives later in onCharacteristicWrite.
             val result = try {
-                g.writeCharacteristic(ch, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
+                g.writeCharacteristic(
+                    ch, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+                ) == BluetoothGatt.GATT_SUCCESS
             } catch (e: SecurityException) {
                 Log.e(TAG, "write refused: ${e.message}")
                 false
             }
-            if (cont.isActive) cont.resume(result)
+            // resumeWith, not resume: the `resume` extension on Continuation is
+            // ambiguous against CancellableContinuation's member here, and the
+            // inferred type leaks into `ok`.
+            cont.resumeWith(Result.success(result))
         }
         if (ok) {
             emit(BleFrame(BleFrame.Direction.OUTBOUND, bytes, System.currentTimeMillis()))
@@ -236,12 +250,21 @@ class ScooterBleService(private val context: Context) {
             val ch = svc.getCharacteristic(UUID.fromString(uuid)) ?: continue
             g.setCharacteristicNotification(ch, true)
             val cccd = ch.getDescriptor(CCCD)
-            if (cccd != null && ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
-                @Suppress("DEPRECATION")
+            // Parentheses are required: `and` is an infix *function*, not a bitwise
+            // operator, so `props and FLAG != 0` does not parse as intended.
+            val canNotify = (ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0
+            if (cccd != null && canNotify) {
+                // The two writeDescriptor overloads differ in return type: the API-33 one
+                // returns an Int status code, the deprecated one a Boolean. An
+                // if/else mixing them infers `Comparable & Serializable`, so
+                // normalise both to Boolean here.
                 val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                    g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ==
+                        BluetoothGatt.GATT_SUCCESS
                 } else {
+                    @Suppress("DEPRECATION")
                     cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    @Suppress("DEPRECATION")
                     g.writeDescriptor(cccd)
                 }
                 if (!ok) Log.w(TAG, "CCCD write refused for $uuid")

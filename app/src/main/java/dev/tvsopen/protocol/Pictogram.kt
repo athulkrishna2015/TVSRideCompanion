@@ -120,20 +120,20 @@ object Pictograms {
 object ManeuverResolver {
 
     private val rules: List<Pair<Regex, Int>> = listOf(
-        Regex("u[- ]?turn|make a u", RegexOption.IGNORE_CASE) to Pictogram.U_TURN_LEGACY.id,
-        Regex("\\broundabout\\b", RegexOption.IGNORE_CASE) to Pictogram(68, "roundabout_exit_at_180"),
-        Regex("\\bexit\\b.*\\broundabout\\b|\\bfirst exit\\b", RegexOption.IGNORE_CASE) to Pictogram(65, "roundabout_exit_at_45"),
-        Regex("\\bsharp left\\b", RegexOption.IGNORE_CASE) to Pictogram(1, "sharp_left_turn"),
-        Regex("\\bslight left\\b|\\bkeep left\\b", RegexOption.IGNORE_CASE) to Pictogram(2, "slight_left"),
-        Regex("\\bsharp right\\b", RegexOption.IGNORE_CASE) to Pictogram(4, "sharp_right_turn"),
-        Regex("\\bslight right\\b|\\bkeep right\\b", RegexOption.IGNORE_CASE) to Pictogram(5, "slight_right"),
-        Regex("\\bturn left\\b|\\bleft\\b", RegexOption.IGNORE_CASE) to Pictogram(0, "turn_left"),
-        Regex("\\bturn right\\b|\\bright\\b", RegexOption.IGNORE_CASE) to Pictogram(3, "turn_right"),
-        Regex("\\bearlier\\b|\\bexit\\b", RegexOption.IGNORE_CASE) to Pictogram(9, "exit_highway"),
-        Regex("\\bmerge\\b", RegexOption.IGNORE_CASE) to Pictogram(14, "right_at_junction"),
-        Regex("\\bfork\\b", RegexOption.IGNORE_CASE) to Pictogram(15, "left_at_fork"),
-        Regex("\\barrive|\\bdestination\\b|\\byou have arrived\\b", RegexOption.IGNORE_CASE) to Pictogram(8, "destination"),
-        Regex("\\bstraight\\b|\\bcontinue\\b", RegexOption.IGNORE_CASE) to Pictogram(7, "continue_straight"),
+        Regex("u[- ]?turn|make a u", RegexOption.IGNORE_CASE) to Pictograms.U_TURN_LEGACY.id,
+        Regex("\\broundabout\\b", RegexOption.IGNORE_CASE) to 68,
+        Regex("\\bexit\\b.*\\broundabout\\b|\\bfirst exit\\b", RegexOption.IGNORE_CASE) to 65,
+        Regex("\\bsharp left\\b", RegexOption.IGNORE_CASE) to 1,
+        Regex("\\bslight left\\b|\\bkeep left\\b", RegexOption.IGNORE_CASE) to 2,
+        Regex("\\bsharp right\\b", RegexOption.IGNORE_CASE) to 4,
+        Regex("\\bslight right\\b|\\bkeep right\\b", RegexOption.IGNORE_CASE) to 5,
+        Regex("\\bturn left\\b|\\bleft\\b", RegexOption.IGNORE_CASE) to 0,
+        Regex("\\bturn right\\b|\\bright\\b", RegexOption.IGNORE_CASE) to 3,
+        Regex("\\bearlier\\b|\\bexit\\b", RegexOption.IGNORE_CASE) to 9,
+        Regex("\\bmerge\\b", RegexOption.IGNORE_CASE) to 14,
+        Regex("\\bfork\\b", RegexOption.IGNORE_CASE) to 15,
+        Regex("\\barrive|\\bdestination\\b|\\byou have arrived\\b", RegexOption.IGNORE_CASE) to 8,
+        Regex("\\bstraight\\b|\\bcontinue\\b", RegexOption.IGNORE_CASE) to 7,
     )
 
     /** Returns a pictogram id, or null when nothing matches. */

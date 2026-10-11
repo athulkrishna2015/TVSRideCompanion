@@ -82,7 +82,12 @@ class RideService : android.app.Service() {
     private fun teardown() {
         bridge?.stopKeepalive()
         bridge?.stopNavigation()
-        ble?.disconnect()
+        // ScooterBleService.disconnect() is suspend so it can take the write
+        // mutex. Launch it in the service scope rather than blocking onDestroy.
+        val transport = ble
+        if (transport != null) {
+            scope.launch { transport.disconnect() }
+        }
         bridge = null
     }
 

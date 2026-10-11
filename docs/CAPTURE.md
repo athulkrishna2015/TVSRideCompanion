@@ -89,8 +89,13 @@ The packet layout is **no longer an open question** — `0x5A 0x4E` control and
 service. What remains is whether the Ntorq's **5-inch TFT** behaves the same:
 
 1. Does it accept the control frame at all, or ignore it?
-2. **Character width.** The proven layout is 17 characters. A larger TFT may
-   expect more — send a known 17-char string and check what appears.
+2. **Character width — now the key question.** A photograph of this cluster
+   shows a **three-row text area** of roughly 9-10 characters per row, while the
+   proven Jupiter layout uses a single 17-character row. Determine what this
+   cluster actually accepts:
+   - send a known 17-character ASCII string and count what appears;
+   - check whether `0x5B 0x63` (99) selects a row;
+   - test whether rows 2 and 3 need separate packets.
 3. **Pictogram table.** The official app's table and the Jupiter companion's
    disagree on ids 5, 7, 13, 15, 21, 41 and the roundabout block. If arrows
    render wrong, that is the first suspect — both tables are recorded side by

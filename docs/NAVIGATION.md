@@ -41,6 +41,51 @@ follows the Android navigation notification convention.
 The official app bundles Mappls (`com.mappls.*`) — that is the *server-side*
 turn engine and needs an API key, so it is out of scope here.
 
+## The Ntorq 125 cluster's display zones
+
+From a photograph of the owner's own instrument cluster, captured in
+display-test mode with all segments lit. This is **observation of hardware**,
+not of the protocol — but it bounds what the protocol has to drive.
+
+| Zone | Displayed as | Our decoded field |
+| :--- | :--- | :--- |
+| Trip selector | `TRIP A / B` | `SELECTED_TRIP` |
+| Distance | `ODO / TRIP A / TRIP B`, km | `ODOMETER` (SM1 idx 3-5), `TRIP_F_METER` (idx 14-16) |
+| Timer | `MIN / SEC / MILLI` | `LAP_TIME`, `TIME_60KMPH` |
+| **Avg speed** | `AVG SPEED` km/h | `AVERAGE_SPEED` (SM1 idx 7) |
+| **Top speed** | `TOP SPEED` km/h | `TOP_SPEED` (SM1 idx 9) |
+| **0-60** | seconds | `TIME_60KMPH` (SM1 idx 13) |
+| Speed | large central digits, `KM/H` | `SPEED` (SM1 idx 2) |
+| Fuel | two gauges — an `H-E-F` bar and a segment bar with a pump icon | `FUEL_LEVEL` (SM1 idx 6) |
+
+Two dedicated icon zones sit on the lower right: a **navigation/location pin**
+and a **phone/notification** glyph. Both have a display region, so this cluster
+is built to show caller ID and turn-by-turn.
+
+This independently corroborates the byte offsets — `AVG SPEED`, `TOP SPEED` and
+`0-60` are exactly the three values the official app's Vehicle Overview screen
+renders from `NtorqSpeedOMeter1`.
+
+### The text area is bigger than the Jupiter's
+
+The bottom of the display shows **three** text rows, each rendering roughly
+9-10 characters in the all-segments-on pattern. The Jupiter reference
+implementation targets a **single 17-character row**.
+
+That is a genuine divergence, not a detail:
+
+- The 17-byte text payload (`0x5B 0x4F` / `0x4C` / `0x63`) is proven for the
+  Jupiter.
+- This cluster has a visibly larger, multi-row text region.
+- Whether it accepts the same payload across three rows, wants a row-selecting
+  byte, or wants a longer payload, is **unknown**.
+
+`0x5B 0x63` is 99 — `ARTIST_NAME_PACKET` upstream — and may be the row-selecting
+mechanism for exactly this.
+
+**Do not assume 17 characters on this cluster.** Capture and count; see
+`docs/CAPTURE.md` §3.
+
 ## Packet layouts (proven)
 
 Transcribed from `BleNavigationPacketBuilder` in the working third-party Jupiter

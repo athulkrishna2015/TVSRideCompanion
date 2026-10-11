@@ -27,18 +27,20 @@ without logging in" is enforced by the build, not promised in a README.
 | Navigation HUD packets | **proven** — `0x5A 0x4E` / `0x5B 0x4F` |
 | Text sanitiser | transcribed — cluster cannot render non-ASCII |
 | Ntorq TFT specifics | **untested on hardware** — width and pictograms unconfirmed |
-| UI | Material 3 shell written; **not yet compiled** |
+| UI | Material 3 shell — **builds clean** |
 | APK analysis | complete for the protocol packages |
 
 The handshake, GATT and navigation layouts are cross-checked against **two**
 independent applications. Where they agree, a fact is solid; where they differ,
 both are documented rather than silently merged.
 
-### Not built yet
+### Compiles, not yet proven
 
-**The Kotlin has never been compiled.** Protocol facts are verified, but the app
-does not yet build. Treat `app/` as reviewed-but-unproven until
-[BUILD.md](BUILD.md) is satisfied.
+`:app:assembleDebug` succeeds with zero warnings. The built manifest contains
+**no `INTERNET` permission** — the no-account claim is enforced by the build
+rather than promised in a README.
+
+But the app has never been installed on a device or pointed at a scooter.
 
 ---
 

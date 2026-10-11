@@ -3,7 +3,7 @@
 // The official TVS Connect app splits its protocol code one package per model
 // (protocol/ntorq, protocol/jupiter, protocol/apache, protocol/raider,
 // protocol/u388, u399, u467, u546) with a shared core in protocol/ and a
-// per-model GATT configuration in bikes/*BLEConnectionConfig.
+// per-model GATT configuration in bikes/ (the *BLEConnectionConfig classes).
 //
 // We keep that shape: one shared core, one small driver per model, selected at
 // runtime. A model with no driver yet still connects and reports raw frames.
@@ -42,7 +42,7 @@ enum class VehicleModel(
      * Transcribed from `com.tvs.bike.core.BikeVariants`, whose
      * `getConnectionConfiguration()` returns `NtorqBLEConnectionConfig` for
      * *both* Ntorq and Raider. There is no `RaiderBLEConnectionConfig`, and
-     * `protocol/raider/*` only adds `5A54ACK`/`5A6B`/`5A9D` frames — a
+     * `protocol/raider` only adds `5A54ACK`/`5A6B`/`5A9D` frames — a
      * superset, not a separate protocol. So the Ntorq driver serves Raider too.
      */
     fun sharesNtorqProtocol(): Boolean = this == NTORQ || this == RAIDER_125 || this == RAIDER_180
