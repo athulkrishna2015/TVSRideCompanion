@@ -1,0 +1,20 @@
+# Build artefacts
+build/
+.gradle/
+*.apk
+local.properties
+.idea/
+
+# Captured protocol data — large, and specific to the owner's scooter.
+# Share a redacted sample deliberately, never by accident.
+captures/
+*.btsnoop_hci.log
+*.pcap
+*.pcapng
+
+# Reverse-engineering scratch space. The official APK and any decompilation of
+# it stay OUTSIDE this repository; see research/SOURCES.md.
+apk/
+*.apk
+decompile/
+jadx*/
