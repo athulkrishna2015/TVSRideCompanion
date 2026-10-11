@@ -22,3 +22,9 @@ jadx*/
 #local folders
 ref/
 wrapper.log
+
+# Local build transcripts. Machine noise, and they differ on every run, so they
+# make the history unreviewable. The interesting evidence belongs in log/ and
+# docs/, not in a redirect of stdout. Root-scoped so a deliberate capture
+# elsewhere in the tree is not silently swallowed.
+/*.log

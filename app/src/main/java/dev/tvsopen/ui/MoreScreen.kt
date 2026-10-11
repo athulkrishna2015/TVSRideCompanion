@@ -40,7 +40,7 @@ import dev.tvsopen.protocol.Pictograms
  */
 @Composable
 fun MoreScreen(
-    connection: ConnectionUi,
+    connection: dev.tvsopen.session.ConnectionState1,
     notificationAccessGranted: Boolean,
     onOpenNotificationAccess: () -> Unit,
     onScan: () -> Unit,
@@ -59,7 +59,7 @@ fun MoreScreen(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(connection.modelName, style = MaterialTheme.typography.titleMedium)
+                    Text(connection.model.displayName, style = MaterialTheme.typography.titleMedium)
                     Text("State: ${connection.state}")
                     connection.address?.let { Text("MAC: $it") }
                     Spacer(Modifier.height(8.dp))

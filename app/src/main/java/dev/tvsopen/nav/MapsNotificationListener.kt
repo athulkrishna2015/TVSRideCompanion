@@ -3,8 +3,9 @@ package dev.tvsopen.nav
 import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
+import dev.tvsopen.log.Log
 import dev.tvsopen.protocol.ManeuverResolver
+import dev.tvsopen.session.Session
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,16 +99,45 @@ class MapsNotificationListener : NotificationListenerService() {
             provider = pkg,
         )
 
-        Log.i(TAG, "nav step from $pkg: title='${step.title}' street='${step.street}' " +
-            "d=${step.distanceMeters}m pic=${step.pictogram}")
+        Log.i(
+            TAG,
+            "nav from $pkg: '${step.title}' / '${step.street}' " +
+                "d=${step.distanceMeters}m eta=${step.etaMinutes}m pic=${step.pictogram}",
+        )
+        Session.onHud {
+            it.copy(
+                active = true,
+                instructionTitle = step.title,
+                street = step.street,
+                distanceMeters = step.distanceMeters,
+                etaMinutes = step.etaMinutes,
+                pictogramId = step.pictogram,
+                provider = step.provider,
+            )
+        }
         _instruction.value = step
         _navigating.value = true
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (sbn?.packageName !in allowedPackages) return
+        // Bind to a non-null local first: the safe-call form below would not
+        // smart-cast, leaving sbn nullable at the log line.
+        val removed = sbn ?: return
+        if (removed.packageName !in allowedPackages) return
+        Log.i(TAG, "navigation ended (${removed.packageName})")
+        Session.onHud { it.copy(active = false) }
         _navigating.value = false
         _instruction.value = null
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.i(TAG, "listener connected; allowed: ${allowedPackages.joinToString()}")
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.w(TAG, "listener disconnected — navigation mirroring unavailable")
     }
 
     companion object {

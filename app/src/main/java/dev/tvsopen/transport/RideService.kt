@@ -9,11 +9,14 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import dev.tvsopen.R
+import dev.tvsopen.log.Log
 import dev.tvsopen.nav.MapsNotificationListener
 import dev.tvsopen.nav.NavigationBridge
+import dev.tvsopen.protocol.DashState
 import dev.tvsopen.protocol.DriverRegistry
 import dev.tvsopen.protocol.NtorqDriver
 import dev.tvsopen.protocol.VehicleModel
+import dev.tvsopen.session.Session
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,7 +37,34 @@ class RideService : android.app.Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIF_ID, buildNotification("Starting…"))
+        // Logs go to the app's own files so a crash can still be diagnosed.
+        Log.enableFileSink(java.io.File(filesDir, "logs"))
+        Log.i(TAG, "service created (sdk ${android.os.Build.VERSION.SDK_INT})")
+
+        // A `connectedDevice` foreground service needs BLUETOOTH_CONNECT or
+        // BLUETOOTH_SCAN to be *granted*, not merely declared. Starting it from
+        // a notification tap before the permission dialog is answered throws
+        // SecurityException and takes the process down, so degrade instead:
+        // post a plain notification and retry on ACTION_CONNECT.
+        try {
+            startForeground(NOTIF_ID, buildNotification("Starting…"))
+        } catch (e: SecurityException) {
+            Log.w(TAG, "cannot enter foreground yet: ${e.message}")
+            Log.w(TAG, "BLUETOOTH_CONNECT/SCAN not granted; retry after connect")
+            val nm = getSystemService(NotificationManager::class.java)
+            runCatching {
+                nm?.notify(
+                    NOTIF_ID,
+                    buildNotification("Grant Bluetooth permission to connect"),
+                )
+            }
+        }
+    }
+
+    /** Called once the activity has the runtime BLE permissions. */
+    private fun enterForeground() {
+        runCatching { startForeground(NOTIF_ID, buildNotification("Connecting…")) }
+            .onFailure { Log.w(TAG, "foreground still refused: ${it.message}") }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -55,6 +85,9 @@ class RideService : android.app.Service() {
 
     /** Connect and begin streaming. Called from the UI once a scooter is picked. */
     fun connect(address: String, model: VehicleModel) {
+        // By now the permissions the service was refused at startup have been
+        // granted, so the foreground notification can go up properly.
+        enterForeground()
         val transport = ble ?: ScooterBleService(applicationContext).also { ble = it }
         val driver = when (model) {
             VehicleModel.NTORQ -> NtorqDriver()
@@ -63,20 +96,51 @@ class RideService : android.app.Service() {
         val b = NavigationBridge(transport, scope, driver)
         bridge = b
 
+        Session.onConnection(ConnectionState.CONNECTING, model, address)
+        Log.i(TAG, "connecting to ${model.displayName} at $address")
+
+        // Two independent collectors: one for the bridge (nav state), one for
+        // decoding telemetry into the UI session.
         scope.launch {
-            transport.frames.collect {
+            transport.frames.collect { frame ->
                 b.onInstruction(MapsNotificationListenerRef.current?.instruction?.value)
             }
         }
-        transport.connect(address)
-        b.startKeepalive {
-            dev.tvsopen.protocol.DashState(
-                timeMillis = System.currentTimeMillis(),
-                batteryBars = 4,
-                signalBars = 3,
-            )
+        scope.launch {
+            transport.frames.collect { frame ->
+                if (frame.direction == BleFrame.Direction.INBOUND) {
+                    driver.decode(frame.bytes)?.let { Session.onFrame(it) }
+                }
+            }
         }
+        scope.launch {
+            transport.state.collect { st ->
+                Session.onConnection(st, model, address)
+                Log.d(TAG, "state -> $st")
+                if (st == ConnectionState.CONNECTED) {
+                    b.startKeepalive {
+                        DashState(
+                            timeMillis = System.currentTimeMillis(),
+                            batteryBars = batteryBars(),
+                            signalBars = 4,
+                        )
+                    }
+                }
+            }
+        }
+
+        transport.connect(address)
         notify("Connected to ${model.displayName}")
+    }
+
+    /** Coarse phone battery as 0-5 bars, for the cluster ping packet. */
+    @Suppress("DEPRECATION")
+    private fun batteryBars(): Int {
+        val pct = android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY
+        val level = getSystemService(android.os.BatteryManager::class.java)
+            ?.getIntProperty(pct) ?: -1
+        if (level < 0) return 0
+        return (level / 20).coerceIn(0, 5)
     }
 
     private fun teardown() {
@@ -127,6 +191,7 @@ class RideService : android.app.Service() {
     }
 
     companion object {
+        private const val TAG = "RideService"
         const val CHANNEL = "ride"
         const val NOTIF_ID = 1
         const val ACTION_FIND_MY = "dev.tvsopen.FIND_MY"

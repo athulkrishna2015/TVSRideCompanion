@@ -36,6 +36,25 @@ Note: that report's own telemetry table lists `0x54` as a *"Legacy
 Ntorq-style button press fallback"* — the only Ntorq-specific trace in the
 folder, and a starting point for Ntorq divergence hunting.
 
+### UI reuse from the same source
+
+The Home screen layout and the pastel tile palette are adapted from that
+project's Compose UI, under the same CC BY-NC 4.0 terms and with attribution:
+
+- **Reused:** the two-large-over-three-small telemetry tile arrangement, the
+  rounded action-card pattern, the soft pastel tile colours, and the header shape
+  (name, connection pill, status dot).
+- **Deliberately not reused:** the TVS logo and the Jupiter wordmark. That app
+  presents itself as the Jupiter's companion specifically; this project is
+  unaffiliated and model-universal. Copying their marks into a third-party app
+  would imply endorsement, which is a trademark problem distinct from the
+  copyright licence that permits the reuse above.
+- **Ours, with no counterpart there:** the navigation strip, the Log tab, and
+  the protocol-transparency panel.
+
+Button-gesture mapping and the media-features settings seen in that app are
+**not** implemented here and are not copied — scoped out. See `docs/SCOPE.md`.
+
 ### `TVS-Connect-Application-VAPT/` — aaravavi/TVS-Connect-Application-VAPT
 License: **CC0 1.0**. FEV LTD's pentest of TVS Connect (app v4.6.0/iOS 5.0.0).
 Covers CVE-2024-33308, CVE-2024-33309, CVE-2024-35537.

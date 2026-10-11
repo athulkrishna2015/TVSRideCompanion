@@ -6,283 +6,495 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothDisabled
-import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.tvsopen.protocol.Pictograms
+import androidx.compose.ui.unit.sp
+import dev.tvsopen.session.ConnectionState1
+import dev.tvsopen.session.HudState
+import dev.tvsopen.session.ParkedInfo
+import dev.tvsopen.session.Telemetry
+import dev.tvsopen.transport.ConnectionState
+import dev.tvsopen.ui.theme.LocalTilePalette
+import dev.tvsopen.ui.theme.smallTile
 
 /**
- * Home screen: live telemetry grid + navigation + find-my-scooter.
+ * Dashboard.
  *
- * Layout follows the third-party Jupiter companion's card grid (credited in
- * docs/UI_REFERENCE.md): a two-column grid of metric tiles, a prominent action
- * card for find-my, and a navigation strip when a maps app is directing.
+ * Layout adapted from `overclock98/JupiterRideCompanion` (CC BY-NC 4.0): two
+ * large tiles over three small ones, then stacked action cards. The differences
+ * are deliberate, not oversights:
+ *
+ *  - No TVS or Jupiter branding anywhere. That app's header carries the TVS logo
+ *    and the model name; we keep the structure and substitute our own identity,
+ *    because this project is unaffiliated and serves more than one model.
+ *  - The navigation strip is ours and has no counterpart there.
+ *  - Ride Mode and Last Parked are gated on a live link instead of being faked.
+ *
+ * Every absent value renders as an em dash. A `0` would be a lie: it would mean
+ * the UI had invented a reading rather than reporting that nothing arrived.
  */
 @Composable
 fun HomeScreen(
     telemetry: Telemetry,
-    hud: HudSnapshot,
-    connection: ConnectionUi,
+    hud: HudState,
+    connection: ConnectionState1,
+    parked: ParkedInfo?,
+    rideMode: Boolean,
     findMyEnabled: Boolean,
     navMirroring: Boolean,
     onFindMyChange: (Boolean) -> Unit,
     onNavMirrorChange: (Boolean) -> Unit,
+    onRideModeChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    val connected = connection.state == ConnectionState.CONNECTED
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
     ) {
-        item { ConnectionHeader(connection) }
+        Header(connection, connected)
 
-        if (hud.active && hud.instructionTitle != null) {
-            item { NavigationStrip(hud) }
+        if (hud.active) {
+            Spacer(Modifier.height(10.dp))
+            NavigationStrip(hud)
         }
 
-        item {
+        Spacer(Modifier.height(16.dp))
+        SectionLabel("Telemetry")
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LargeTile(
+                Modifier.weight(1f),
+                Icons.Filled.LocalGasStation,
+                fuelText(telemetry),
+                "",
+                "Fuel Level",
+                LocalTilePalette.current.largeLeft,
+            )
+            LargeTile(
+                Modifier.weight(1f),
+                Icons.Filled.Speed,
+                telemetry.odometerKm?.let { String.format("%.1f", it) } ?: "—",
+                "km",
+                "Odometer",
+                LocalTilePalette.current.largeRight,
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SmallTile(
+                Modifier.weight(1f), Icons.Filled.Timeline,
+                telemetry.distanceToEmptyKm?.toString() ?: "—", "km", "Range", 0,
+            )
+            SmallTile(
+                Modifier.weight(1f), Icons.Filled.TrendingUp,
+                telemetry.avgEconomyKmpl?.toString() ?: "—", "km/L", "Avg Economy", 1,
+            )
+            SmallTile(
+                Modifier.weight(1f), Icons.Filled.Build,
+                when (telemetry.serviceDue) {
+                    true -> "Due"
+                    false -> "OK"
+                    null -> "—"
+                }, "", "Service", 2,
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+        SectionLabel("Vehicle")
+
+        MirrorNavCard(navMirroring, hud, onNavMirrorChange)
+        Spacer(Modifier.height(12.dp))
+        LastParkedCard(parked)
+        Spacer(Modifier.height(12.dp))
+        RideModeCard(rideMode, connected, onRideModeChange)
+        Spacer(Modifier.height(12.dp))
+        FindMyCard(findMyEnabled, onFindMyChange)
+
+        Spacer(Modifier.height(20.dp))
+        SectionLabel("Cluster packets")
+        ClusterStatCard("Hud frames sent: ${hud.framesSent}")
+
+        Spacer(Modifier.height(28.dp))
+    }
+}
+
+/**
+ * Fuel arrives as a 0-5 bar count in a nibble, not a percentage. Reporting it
+ * as `60%` implies a resolution the frame does not carry, so the label says
+ * bars and the number stays honest about what was measured.
+ */
+private fun fuelText(t: Telemetry): String =
+    t.fuelBars?.let { "$it/5" } ?: "—"
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 10.dp),
+    )
+}
+
+@Composable
+private fun Header(connection: ConnectionState1, connected: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("TVSRide", style = MaterialTheme.typography.headlineLarge)
             Text(
-                "Telemetry",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                connection.model.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile(
-                    "Speed", telemetry.speedKmh?.let { "$it" } ?: "—",
-                    "km/h", Modifier.weight(1f), icon = Icons.Filled.Navigation,
-                )
-                MetricTile(
-                    "Odometer",
-                    telemetry.odometerKm?.let { "%.1f".format(it) } ?: "—",
-                    "km", Modifier.weight(1f),
-                )
-            }
-        }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile(
-                    "Fuel", telemetry.fuelBars?.let { "$it/5" } ?: "—",
-                    "", Modifier.weight(1f),
-                )
-                MetricTile(
-                    "Range", telemetry.distanceToEmptyKm?.let { "$it" } ?: "—",
-                    "km", Modifier.weight(1f),
-                )
-            }
-        }
-
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MetricTile(
-                    "Economy", telemetry.avgEconomyKmpl?.let { "$it" } ?: "—",
-                    "km/L", Modifier.weight(1f),
-                )
-                MetricTile(
-                    "Engine", telemetry.engineRpm?.let { "$it" } ?: "—",
-                    "rpm", Modifier.weight(1f),
-                )
-            }
-        }
-
-        item {
-            ActionCard(
-                title = "Find My Scooter",
-                subtitle = "Flash lights and sound horn",
-                checked = findMyEnabled,
-                onCheckedChange = onFindMyChange,
-            )
-        }
-
-        item {
-            ActionCard(
-                title = "Mirror navigation",
-                subtitle = hud.provider?.let { "Reading from $it" }
-                    ?: "Read turn-by-turn from any maps app",
-                checked = navMirroring,
-                onCheckedChange = onNavMirrorChange,
-            )
-        }
-
-        item {
-            Text(
-                "Cluster packets",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Hud frames sent: ${hud.framesSent}")
-                    hud.pictogramId?.let {
-                        Text("Maneuver: #${it} ${Pictograms.label(it)}")
-                    }
-                    hud.lastError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (!telemetry.isFresh() && telemetry.lastFrameAt > 0) {
-                        Text(
-                            "No recent frames from the cluster",
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-        }
-
-        item { Spacer(Modifier.height(8.dp)) }
+        Pill(if (connected) "Connected" else connection.state.name, connected)
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier
+                .size(36.dp)
+                .background(
+                    if (connected) LocalTilePalette.current.connected
+                    else MaterialTheme.colorScheme.outline,
+                    CircleShape,
+                ),
+        )
     }
 }
 
 @Composable
-private fun ConnectionHeader(c: ConnectionUi) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+private fun Pill(text: String, on: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = if (on) LocalTilePalette.current.accent
+        else MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Bluetooth,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LargeTile(
+    modifier: Modifier,
+    icon: ImageVector,
+    value: String,
+    unit: String,
+    label: String,
+    background: Color,
+) {
+    Surface(
+        modifier.height(168.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = background,
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(30.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    value,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                if (unit.isNotEmpty()) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        unit,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 5.dp),
+                    )
+                }
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SmallTile(
+    modifier: Modifier,
+    icon: ImageVector,
+    value: String,
+    unit: String,
+    label: String,
+    index: Int,
+) {
+    Surface(
+        modifier.height(130.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = smallTile(index),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    value,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                if (unit.isNotEmpty()) {
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        unit,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 3.dp),
+                    )
+                }
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * The headline feature, so it sits above the rest of the vehicle cards and
+ * reports where instructions are coming from — a user needs to know which maps
+ * app the cluster is currently being driven by, and that it is their own app,
+ * not a TVS server.
+ */
+@Composable
+private fun MirrorNavCard(enabled: Boolean, hud: HudState, onChange: (Boolean) -> Unit) {
+    ActionCard(
+        background = LocalTilePalette.current.accent,
+        icon = Icons.Filled.Navigation,
+        title = "Mirror navigation",
+        subtitle = when {
+            !enabled -> "Off — turn-by-turn is not being sent"
+            hud.active -> "Live from ${hud.provider ?: "your maps app"}"
+            else -> "On — waiting for a navigation step"
+        },
+        trailing = { Switch(checked = enabled, onCheckedChange = onChange) },
+    )
+}
+
+@Composable
+private fun LastParkedCard(parked: ParkedInfo?) {
+    // Recomputed only when the record changes, not on every recomposition.
+    val ago = remember(parked) {
+        parked?.let { relativeTime(System.currentTimeMillis() - it.atMillis) }
+    }
+    ActionCard(
+        background = LocalTilePalette.current.neutral,
+        icon = Icons.Filled.Place,
+        title = "Last Parked",
+        subtitle = parked?.label ?: "Not recorded on this device",
+        trailing = {
+            Text(
+                if (ago != null) "$ago ago" else "—",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                parked?.distanceMeters?.let { "${it}m away" } ?: "—",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        },
+    )
+}
+
+@Composable
+private fun RideModeCard(enabled: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
+    ActionCard(
+        background = LocalTilePalette.current.neutral,
+        icon = Icons.Filled.DirectionsBike,
+        title = "Ride Mode",
+        subtitle = if (enabled) "On — keeps the app active"
+        else "Off (auto-enables on ride)",
+        trailing = {
+            Switch(checked = enabled, onCheckedChange = onChange, enabled = connected)
+        },
+    )
+}
+
+@Composable
+private fun FindMyCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    ActionCard(
+        background = LocalTilePalette.current.accent,
+        icon = Icons.Filled.NotificationsActive,
+        title = "Find My Scooter",
+        subtitle = "Flash lights & sound horn",
+        trailing = { Switch(checked = enabled, onCheckedChange = onChange) },
+    )
+}
+
+@Composable
+private fun ActionCard(
+    background: Color,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    trailing: @Composable () -> Unit,
+) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = background,
     ) {
         Row(
             Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = if (c.state == "Connected") Icons.Filled.Bluetooth
-                else Icons.Filled.BluetoothDisabled,
+                icon,
                 contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(c.modelName, style = MaterialTheme.typography.titleMedium)
-                Text("${c.state}${c.address?.let { " · $it" } ?: ""}",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            if (c.state == "Connected") {
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(Color(0xFF2E7D32)),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NavigationStrip(hud: HudSnapshot) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                hud.instructionTitle ?: "",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            hud.street?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium)
-            }
-            val d = if (hud.distanceMeters >= 0) {
-                if (hud.distanceMeters >= 1000) "%.1f km".format(hud.distanceMeters / 1000.0)
-                else "${hud.distanceMeters} m"
-            } else ""
-            Text(
-                listOf(d, if (hud.etaMinutes > 0) "${hud.etaMinutes} min" else "")
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
-}
-
-@Composable
-fun MetricTile(
-    label: String,
-    value: String,
-    unit: String,
-    modifier: Modifier = Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (icon != null) {
-                    Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(6.dp))
-                }
-                Text(label, style = MaterialTheme.typography.labelMedium)
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    value,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (unit.isNotBlank()) {
-                    Spacer(Modifier.size(4.dp))
-                    Text(unit, style = MaterialTheme.typography.labelMedium)
-                }
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
+            trailing()
         }
     }
 }
 
 @Composable
-fun ActionCard(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.NotificationsActive,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+private fun ClusterStatCard(text: String) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Row(
-            Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(icon, contentDescription = null)
-            Spacer(Modifier.size(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall)
+        Text(
+            text,
+            Modifier.padding(18.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun NavigationStrip(hud: HudState) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                hud.instructionTitle ?: "Navigating",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            hud.street?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Text(
+                "${hud.distanceMeters} m · ${hud.etaMinutes} min",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
+    }
+}
+
+private fun relativeTime(ms: Long): String {
+    val min = (ms / 60_000).toInt()
+    return when {
+        min < 60 -> "${min}m"
+        min < 60 * 24 -> "${min / 60}h"
+        else -> "${min / (60 * 24)}d"
     }
 }

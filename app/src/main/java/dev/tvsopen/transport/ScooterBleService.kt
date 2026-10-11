@@ -18,7 +18,7 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
-import android.util.Log
+import dev.tvsopen.log.Log
 import dev.tvsopen.protocol.Gatt
 import dev.tvsopen.protocol.GattConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -163,6 +163,13 @@ class ScooterBleService(private val context: Context) {
     private fun emit(frame: BleFrame) {
         _lastFrameAt.value = frame.atMillis
         _frames.tryEmit(frame)
+        // Hex is rendered once here so a burst of frames cannot make the write
+        // path late. Log.frame short-circuits when capture is disabled.
+        Log.frame(
+            if (frame.direction == BleFrame.Direction.INBOUND) "IN " else "OUT",
+            Log.hex(frame.bytes),
+            frame.atMillis,
+        )
     }
 
     private val gattCallback = object : BluetoothGattCallback() {

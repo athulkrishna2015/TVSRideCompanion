@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose supplies the real theme; this is the manifest's launch theme. -->
-    <style name="Theme.TVSRide" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
+    <!-- MainActivity extends AppCompatActivity, which requires a
+         Theme.AppCompat descendant. A plain android:Theme.Material crashes on
+         launch with "You need to use a Theme.AppCompat theme". Compose supplies
+         the real colours via TVSRideTheme. -->
+    <style name="Theme.TVSRide" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 </resources>

@@ -11,10 +11,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -29,7 +29,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.Nucleus
+import dev.tvsopen.log.Log
+import dev.tvsopen.session.Session
 import dev.tvsopen.transport.RideService
 import dev.tvsopen.ui.theme.TVSRideTheme
 
@@ -52,6 +55,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Nucleus.init()
+        // Enable the rotating file sink from the UI process too, so logs are
+        // captured even before the ride service starts.
+        Log.enableFileSink(java.io.File(filesDir, "logs"))
+        Log.i("App", "activity created; drivers registered")
 
         setContent {
             TVSRideTheme {
@@ -80,13 +87,16 @@ class MainActivity : AppCompatActivity() {
         var findMy by rememberSaveable { mutableStateOf(false) }
         var navMirroring by rememberSaveable { mutableStateOf(false) }
 
-        // Placeholder until a scooter is connected; the service owns the live
-        // flows once it is running.
-        val telemetry = remember { Telemetry() }
-        val hud = remember { HudSnapshot() }
-        val connection = remember { ConnectionUi() }
+        // Everything the UI shows comes from the process-scoped Session, which the
+        // BLE service and the notification listener both write into. The
+        // activity only observes.
+        val telemetry by Session.telemetry.collectAsStateWithLifecycle()
+        val hud by Session.hud.collectAsStateWithLifecycle()
+        val connection by Session.connection.collectAsStateWithLifecycle()
+        val parked by Session.parked.collectAsStateWithLifecycle()
+        val rideMode by Session.rideMode.collectAsStateWithLifecycle()
 
-        MaterialTheme {
+        TVSRideTheme {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
@@ -102,6 +112,12 @@ class MainActivity : AppCompatActivity() {
                             icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = "More") },
                             label = { Text("More") },
                         )
+                        NavigationBarItem(
+                            selected = tab == 2,
+                            onClick = { tab = 2 },
+                            icon = { Icon(Icons.Filled.Article, contentDescription = "Log") },
+                            label = { Text("Log") },
+                        )
                     }
                 },
             ) { padding ->
@@ -111,6 +127,8 @@ class MainActivity : AppCompatActivity() {
                             telemetry = telemetry,
                             hud = hud,
                             connection = connection,
+                            parked = parked,
+                            rideMode = rideMode,
                             findMyEnabled = findMy,
                             navMirroring = navMirroring,
                             onFindMyChange = { on ->
@@ -121,8 +139,9 @@ class MainActivity : AppCompatActivity() {
                                 navMirroring = on
                                 onNavMirrorChange(on)
                             },
+                            onRideModeChange = Session::setRideMode,
                         )
-                    } else {
+                    } else if (tab == 1) {
                         MoreScreen(
                             connection = connection,
                             notificationAccessGranted = hasNotificationAccess,
@@ -130,6 +149,8 @@ class MainActivity : AppCompatActivity() {
                             onScan = onScan,
                             onDisconnect = onDisconnect,
                         )
+                    } else {
+                        LogScreen()
                     }
                 }
             }
