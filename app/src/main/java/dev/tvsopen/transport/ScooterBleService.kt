@@ -19,7 +19,6 @@ import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
-import dev.tvsopen.protocol.Checksum
 import dev.tvsopen.protocol.Gatt
 import dev.tvsopen.protocol.GattConfig
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -254,16 +253,23 @@ class ScooterBleService(private val context: Context) {
         private const val TAG = "ScooterBle"
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-        /** Validate an inbound frame's structure without knowing its model. */
+        /**
+         * Cheap structural check for an inbound frame, model-agnostic.
+         *
+         * **Deliberately does not verify a checksum.** Decompiling the official
+         * builders showed that the outbound mobile-data and navigation frames
+         * carry none, and several inbound layouts (`ApacheBasicData`,
+         * `NtorqWifiPasswordFrameData`) declare `CHECKSUM` at index 18 or 19
+         * while others declare none. A checksum check here would reject valid
+         * frames.
+         *
+         * Model-specific validation belongs in each [dev.tvsopen.protocol.ProtocolDriver],
+         * which knows its own layout.
+         */
         fun looksValid(bytes: ByteArray): Boolean {
             if (bytes.size < 3) return false
             val start = bytes[0].toInt() and 0xFF
-            if (start != 0x5A && start != 0x5B && start != 0x9A && start != 0x9B) return false
-            if (bytes.size >= 20) {
-                val expected = Checksum.compute(bytes, 18)
-                if (bytes[18] != expected) return false
-            }
-            return true
+            return start == 0x5A || start == 0x5B || start == 0x9A || start == 0x9B
         }
 
         /** Wrap a UUID string for scanning filters. */

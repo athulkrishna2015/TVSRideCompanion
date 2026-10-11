@@ -90,6 +90,39 @@ the navigation frames and used start byte `0x5B` for the control packet. The
 working implementation uses **no checksum** and start byte **`0x5A`**. Fixed in
 `PacketBuilder.navigationControl`.
 
+## What REA contributed
+
+`morluto/rea` MCP server with `1013503897/jadx-headless-mcp` 0.7.1 as the
+decompiler. Used for the focused, citable decompilations rather than a bulk
+`jadx` pass — every method below was decompiled by REA with
+`body_status: available`, no fallback markers, against a known artifact digest.
+
+The official 180 MB APK exceeds REA's 120 s provider deadline. Working around
+that by building a **slim APK** containing only `classes7.dex` + `classes12.dex`
+(5 MB) brought it inside the deadline and made official-app methods queryable.
+That artifact is a local analysis convenience; the official APK is never
+redistributed.
+
+Findings that changed the implementation:
+
+| Method | Class | Result |
+| :--- | :--- | :--- |
+| `buildControlPacket` | `BleNavigationPacketBuilder` | Confirmed `0x5A 0x4E` layout, no checksum |
+| `returnMobilePacket` | `BlePacketsProvider` | Official ping is 20 bytes, **no checksum**, bytes 12–18 zeroed |
+| `returnValidMobilePacket` | `BlePacketsProvider` | Same shape, network level/battery at [2]/[3] |
+| `returnMobilePacketWithACK` | `BlePacketsProvider` | Same, plus `[12] = 0x01` |
+| `inspect_android_class` ×2 | — | Member inventories with explicit overload indices |
+
+The ping result contradicted the Jupiter report and produced the
+official/enriched split described in `docs/PROTOCOL.md` §3.
+
+### REA limits encountered
+
+- `inspect_android_class` on the full 180 MB APK → `provider_timeout` (120 s,
+  `retryable`). Worked around with the slim APK rather than a larger deadline.
+- REA's JavaScript runtime is confined: `shell` is not exposed to
+  `execute`; use the dedicated shell tool for filesystem work.
+
 ## What the VAPT contributed
 
 `TVS-Connect-Application-VAPT` (CC0, FEV LTD) is useful in exactly one

@@ -87,6 +87,9 @@ data class DashState(
     val temperatureC: Int = 25,
     val networkCode: Int = 0x04,
     val findMyScooter: Boolean = false,
+    /** Official ping bytes [4]/[5]; unused by the enriched layout. */
+    val incomingCall: Boolean = false,
+    val callMuted: Boolean = false,
 )
 
 /** One navigation instruction, provider-agnostic. */

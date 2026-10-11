@@ -222,9 +222,19 @@ data class GattConfig(
     }
 }
 
-/** Checksum shared by the unencrypted outbound frames. */
+/**
+ * Checksum shared by frames that declare one.
+ *
+ * `255 - (sum(bytes[0 until n]) % 256)` — Jupiter report §2.2.
+ *
+ * **Not every frame carries a checksum.** Verified with REA against the
+ * official `BlePacketsProvider`: `returnMobilePacket`,
+ * `returnValidMobilePacket` and `returnMobilePacketWithACK` all write zeros at
+ * [18] with no checksum call, and the navigation frames carry none either.
+ * Some inbound layouts declare `CHECKSUM` at index 18 or 19 and some declare
+ * none. Treat this as per-frame, not per-protocol.
+ */
 object Checksum {
-    /** `255 - (sum(bytes[0 until n]) % 256)` — Jupiter report §2.2. */
     fun compute(bytes: ByteArray, upTo: Int): Byte {
         var sum = 0
         for (i in 0 until upTo) sum += bytes[i].toInt() and 0xFF

@@ -355,36 +355,15 @@ class NtorqDriver(
             ?: GenericDriver(model).decode(raw)
     }
 
-    /** 20-byte plaintext keepalive. Layout per the Jupiter report §2.1. */
-    override fun buildPing(state: DashState): ByteArray? {
-        val b = ByteArray(20)
-        b[0] = StartId.B5.toByte()
-        b[1] = DataId.PING.toByte()
-        b[2] = (((state.signalBars and 0x0F) shl 4) or (state.batteryBars and 0x0F)).toByte()
-        b[3] = 0
-        b[4] = (state.temperatureC + 40).toByte()
-        b[5] = 0
-
-        val cal = java.util.Calendar.getInstance()
-        var hour = cal.get(java.util.Calendar.HOUR)
-        if (hour == 0) hour = 12
-        b[6] = hour.toByte()
-        b[7] = cal.get(java.util.Calendar.MINUTE).toByte()
-        b[8] = cal.get(java.util.Calendar.SECOND).toByte()
-        b[9] = if (cal.get(java.util.Calendar.AM_PM) == java.util.Calendar.PM) 1 else 0
-
-        b[10] = 0
-        b[11] = state.networkCode.toByte()
-        b[12] = cal.get(java.util.Calendar.DAY_OF_MONTH).toByte()
-        b[13] = (cal.get(java.util.Calendar.MONTH) + 1).toByte()
-        b[14] = (cal.get(java.util.Calendar.YEAR) % 100).toByte()
-
-        b[16] = 0
-        b[17] = if (state.findMyScooter) 1 else 0
-        b[18] = Checksum.compute(b, 18)
-        b[19] = 0xFF.toByte()
-        return b
-    }
+    /**
+     * 20-byte plaintext keepalive, **official layout**, verified with REA
+     * against `BlePacketsProvider.returnMobilePacket`. No checksum byte.
+     *
+     * [PacketBuilder.mobileDataEnriched] carries the extra time/date/temperature
+     * fields the Jupiter report documents; it is opt-in because the official
+     * app writes zeros in that region.
+     */
+    override fun buildPing(state: DashState): ByteArray? = PacketBuilder.mobileData(state)
 
     /** `0x5A 0x4E` — proven layout, see [PacketBuilder.navigationControl]. */
     override fun buildNavControl(nav: NavStep): ByteArray? =

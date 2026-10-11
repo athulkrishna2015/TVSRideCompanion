@@ -129,28 +129,57 @@ reproduced here; `PacketBuilder` covers the same operations readably.
 
 ## 3. Ping / "mobile data" packet — `DataID 0x4A`
 
-Sent continuously to keep the link alive and feed the dashboard. **Not
-encrypted.** 20 bytes, plaintext, checksum-protected. `[JUPITER]`
+Sent continuously to keep the link alive and feed the dashboard. Not encrypted.
+20 bytes: `0x5B 0x4A` + 17 payload bytes + `0xFF`.
+
+### Official layout (verified with REA)
+
+Transcribed from `BlePacketsProvider` in the official APK. All three variants —
+`returnMobilePacket`, `returnValidMobilePacket`, `returnMobilePacketWithACK` —
+agree on this shape:
 
 | Byte | Field | Notes |
 | :--- | :--- | :--- |
-| `[0]` | Start | always `0x5B` |
+| `[0]` | Start | `0x5B` |
 | `[1]` | Data ID | `0x4A` |
-| `[2]` | Signal/Battery | upper nibble = signal bars 0–5, lower nibble = battery bars 0–5 |
-| `[4]` | Temperature | °C + 40 (25 °C → `0x41`) |
-| `[6..8]` | Time | hour (12h), minute, second |
-| `[9]` | AM/PM | `0x00` AM, `0x01` PM |
-| `[11]` | Network | `0x04` typically LTE/4G |
-| `[12..14]` | Date | day, month (1–12), year mod 100 |
-| `[17]` | Find Me | `0x01` triggers horn + hazard flash |
-| `[18]` | Checksum | `255 - (sum(bytes[0..17]) % 256)` |
-| `[19]` | End | always `0xFF` |
+| `[2]` | Signal / network level | `0` when no SIM |
+| `[3]` | Battery | from shared preferences |
+| `[4]` | Incoming call status | |
+| `[5]` | Call mute state | |
+| `[6]` | Packet validity | 0 / 1 / 2 |
+| `[7]` | constant | `0x02` |
+| `[8..10]` | padding | zero |
+| `[11]` | Network type | e.g. `0x04` |
+| `[12..18]` | padding | zero (`0x01` at `[12]` in the ACK variant) |
+| `[19]` | End | `0xFF` |
 
-Unlisted bytes are padding, normally `0x00`.
+**There is no checksum byte.** The official builder never writes one — verified
+by decompiling all three variants, none of which call a checksum routine. An
+earlier draft of this repo added one, following the Jupiter report; that was
+wrong and has been corrected.
 
-The Find-My flag is what makes the official app's most complained-about
-feature reliable when injected deliberately: toggle byte 17 and the cluster
-physically responds.
+### Enriched layout (third-party Jupiter app)
+
+The Jupiter report documents a richer packet, which that app does send:
+
+| Byte | Field |
+| :--- | :--- |
+| `[2]` | signal (high nibble) / battery (low nibble) |
+| `[4]` | temperature °C + 40 |
+| `[6..8]` | hour, minute, second |
+| `[9]` | AM/PM |
+| `[11]` | network type |
+| `[12..14]` | day, month, year mod 100 |
+| `[17]` | find-my-scooter flag |
+| `[18]` | checksum (`255 - (sum[0..17] % 256)`) |
+
+That app drives real hardware, so the cluster tolerates this shape — but it is
+the app's own construction, not the vendor format, and it puts a checksum at
+`[18]` where the official app writes zero. Both are implemented:
+`PacketBuilder.mobileData` (default) and `PacketBuilder.mobileDataEnriched`.
+
+Open question for the Ntorq: does it want the enriched fields (time sync,
+find-my) or is the official minimal packet enough?
 
 ## 4. Inbound telemetry `DataID`s
 

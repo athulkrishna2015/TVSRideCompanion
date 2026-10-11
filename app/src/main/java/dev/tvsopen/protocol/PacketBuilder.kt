@@ -99,18 +99,74 @@ object PacketBuilder {
     const val MOBILE_DATA_SIZE = 20
 
     /**
-     * Keepalive / find-my-scooter.
+     * Keepalive — **official layout**, verified with REA against
+     * `BlePacketsProvider` in the official APK.
      *
-     * `0x5B 0x4A`, payload, checksum at index 18, `0xFF` terminator.
-     * Byte 17 is the find-me flag the Jupiter report identified as the
-     * reliable way to make the cluster flash its indicators.
+     * All three official variants (`returnMobilePacket`,
+     * `returnValidMobilePacket`, `returnMobilePacketWithACK`) build:
+     *
+     * ```
+     * [0]      0x5B                    start byte
+     * [1]      0x4A                    mobile data
+     * [2]      signal / network level   0 if no SIM
+     * [3]      battery                 from shared prefs
+     * [4]      incoming call status
+     * [5]      call mute state
+     * [6]      packet validity         0 / 1 / 2
+     * [7]      0x02
+     * [8..10]  zero
+     * [11]     network type
+     * [12..18] zero                    (0x01 at [12] in the ACK variant)
+     * [19]     0xFF                    end byte
+     * ```
+     *
+     * **There is no checksum byte.** The official builder never writes one.
+     * The ACK variant differs only by setting [12] = 0x01.
      */
-    fun mobileData(state: DashState, findMeByteIndex: Int = 17): ByteArray {
+    fun mobileData(state: DashState, ack: Boolean = false): ByteArray {
+        val b = ByteArray(MOBILE_DATA_SIZE)
+        b[0] = StartId.B5.toByte()
+        b[1] = OutboundId.MOBILE_DATA.toByte()
+        b[2] = state.signalBars.coerceIn(0, 5).toByte()
+        b[3] = state.batteryBars.coerceIn(0, 5).toByte()
+        b[4] = if (state.incomingCall) 1 else 0
+        b[5] = if (state.callMuted) 1 else 0
+        b[6] = 0
+        b[7] = 0x02
+        b[8] = 0; b[9] = 0; b[10] = 0
+        b[11] = state.networkCode.toByte()
+        if (ack) b[12] = 0x01
+        b[19] = 0xFF.toByte()
+        return b
+    }
+
+    /**
+     * Keepalive — **enriched layout** used by the third-party Jupiter app.
+     *
+     * The Jupiter reverse-engineering report documents extra fields that the
+     * official app leaves zeroed:
+     *
+     * ```
+     * [2]      signal (high nibble) / battery (low nibble)
+     * [4]      temperature °C + 40
+     * [6..8]   hour, minute, second
+     * [9]      AM/PM
+     * [11]     network type
+     * [12..14] day, month, year mod 100
+     * [17]     find-my-scooter flag
+     * [18]     checksum
+     * ```
+     *
+     * That app drives real hardware, so the cluster tolerates this shape — but
+     * it is **not** the official format, and it writes a checksum at [18] where
+     * the official app writes zero. Prefer [mobileData] until a capture shows
+     * the Ntorq needs time sync or a working find-my flag.
+     */
+    fun mobileDataEnriched(state: DashState, findMeByteIndex: Int = 17): ByteArray {
         val b = ByteArray(MOBILE_DATA_SIZE)
         b[0] = StartId.B5.toByte()
         b[1] = OutboundId.MOBILE_DATA.toByte()
 
-        // signal in the high nibble, battery in the low nibble
         b[2] = (((state.signalBars and 0x0F) shl 4) or (state.batteryBars and 0x0F)).toByte()
         b[3] = 0
         b[4] = (state.temperatureC + 40).toByte()
