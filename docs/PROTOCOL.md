@@ -241,17 +241,71 @@ The cluster firmware natively renders the distance-to-turn integer on line 1
 next to the arrow, so the app only has to fight for the remaining 17-character
 line — hence the 3-second text cycling described in `docs/NAVIGATION.md`.
 
-## 6. Outbound text messages — `0x4C` / `0x63`
+## 6. Outbound text — `0x4C` / `0x63` / `0x4F`
 
-Pure text with no arrow overlay, used for caller ID, song titles and app
-notifications. `[JUPITER] [UNVERIFIED for Ntorq]`
+Pure text with no arrow overlay: caller ID, song titles, notifications, and the
+navigation street line.
 
 | Packet | Purpose |
 | :--- | :--- |
 | `0x5B 0x4C` | message text row 1 (`DATA_ID_MESSAGE1 = 76`) |
 | `0x5B 0x63` | message text row 2 (`DATA_ID_MESSAGE2 = 99`) |
+| `0x5B 0x4F` | navigation text (`DATA_ID_NAVIGATIONDATA1 = 79`) |
+| `0x5B 0x50` | navigation text 2 (`DATA_ID_NAVIGATIONDATA2 = 80`) |
 
-Up to 17 UTF-8 characters per row. Longer strings are chunked and paginated.
+All are 20 bytes: 2-byte header, 17-byte payload, `0xFF` terminator, **no
+checksum**.
+
+### 6a. The cluster cannot render non-ASCII
+
+The most important practical rule for anyone building on this protocol, and not
+obvious. Transcribed from `BluetoothUtil.createMobileToClusterArray` and
+`isEnglishCharacters` in the official APK:
+
+1. **Emoji and symbol codepoints become `@`.** The upstream regex covers
+   `\p{So}`, `\p{Cn}`, U+1F300-1F6FF, U+1F900-1F9FF, U+1FA70-1FAFF,
+   U+2600-26FF and ZWJ (U+200D).
+2. **Anything outside `[A-Za-z0-9 ]` becomes `X`.** `isEnglishCharacters`
+   returns false for any character outside `[A-Za-z]`.
+3. **Truncation.** ASCII is character-truncated to 17; anything else is
+   byte-truncated via `truncateToBytes`, which never splits a multibyte char.
+4. Trimmed, then UTF-8 encoded.
+
+For an Indian vehicle this matters constantly. `NH-44 தென்` reaches the cluster
+as `NH-44 XXXX`, not as mojibake. Skipping this step sends glyphs the cluster
+silently cannot draw. `PacketBuilder.sanitize()` implements it faithfully.
+
+`createMobileToClusterArrayWithEmojiData` is a separate variant that appears to
+carry emoji differently — not transcribed, not needed for navigation.
+
+### 6b. Checksum placement
+
+`BluetoothUtil.addChecksum(byte[])` builds:
+
+```
+[ data[0], data[1], data[2 .. len-2], (255 - sum(data) % 256), 0xFF ]
+```
+
+The checksum is **penultimate** — `length - 2`, not a fixed index. For a 20-byte
+frame that happens to be 18; for a shorter one it is not. Use `Checksum.apply()`,
+which derives the position.
+
+### `isValidChecksum` is not a universal validator
+
+The official app also has `isValidChecksum(byte[])`:
+
+```java
+receivedData[len - 2] + (sum(receivedData) % 256) == 255
+```
+
+where `sum` spans the **entire** array including the checksum and the `0xFF`
+terminator. Checked numerically, that identity does **not** reproduce
+`addChecksum`'s output on a 20-byte frame. It therefore applies only to specific
+frame shapes whose layout differs, and REA did not establish which.
+
+This project does **not** implement it. Inbound validation stops at structural
+checks plus per-model decoding — inventing a validator that discards good frames
+would be worse than having none. See `docs/CAPTURE.md` §2.
 
 ## 7. Button handling — the "silence gap"
 

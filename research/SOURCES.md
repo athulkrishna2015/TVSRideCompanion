@@ -111,10 +111,19 @@ Findings that changed the implementation:
 | `returnMobilePacket` | `BlePacketsProvider` | Official ping is 20 bytes, **no checksum**, bytes 12–18 zeroed |
 | `returnValidMobilePacket` | `BlePacketsProvider` | Same shape, network level/battery at [2]/[3] |
 | `returnMobilePacketWithACK` | `BlePacketsProvider` | Same, plus `[12] = 0x01` |
-| `inspect_android_class` ×2 | — | Member inventories with explicit overload indices |
+| `createMobileToClusterArray` | `BluetoothUtil` | Text sanitiser: emoji→`@`, non-`[A-Za-z0-9 ]`→`X`, byte-truncate 17 |
+| `isEnglishCharacters` | `BluetoothUtil` | Confirms the cluster cannot render non-ASCII |
+| `truncateToBytes`, `toUtf8BytesWithin` | `BluetoothUtil` | Byte-accurate truncation that never splits a char |
+| `addChecksum` | `BluetoothUtil` | Checksum is **penultimate**: `255 - (sum % 256)` |
+| `isValidChecksum` | `BluetoothUtil` | **Not** a universal validator — numerically inconsistent with `addChecksum` on a 20-byte frame |
+| `inspect_android_class` ×3 | — | Member inventories with explicit overload indices |
 
-The ping result contradicted the Jupiter report and produced the
-official/enriched split described in `docs/PROTOCOL.md` §3.
+The `BluetoothUtil` inventory returned 135 methods, which is how the text and
+checksum helpers were located at all.
+
+The ping and text-sanitiser results contradicted earlier assumptions and drove
+the `mobileData` / `mobileDataEnriched` split plus the `sanitize()`
+implementation — see `docs/PROTOCOL.md` §3 and §6a.
 
 ### REA limits encountered
 
