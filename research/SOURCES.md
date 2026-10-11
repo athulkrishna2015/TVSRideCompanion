@@ -59,6 +59,26 @@ Consensus in the thread: there is no real security key; the protocol is
 insecure by design; the official app's reliability, not its security, is the
 complaint.
 
+### `research/refs.txt` — supplied reference list
+A third-party summary of the reverse-engineering landscape: community projects,
+the HCI-snoop-log workflow, decompilation, scanning tools, and cross-industry
+BLE reference repos.
+
+**Methodology is sound and already followed** — snoop log + Wireshark,
+jadx, nRF Connect — and the community-project pointers match what this repo
+already cites independently.
+
+**One claim is factually wrong and was rejected on evidence.** It states the
+TVS app "handles both Bluetooth Classic (RFCOMM/SPP) for core data transmission
+and BLE for initial setup/handshakes", and that "older Ntorq clusters use
+Classic Bluetooth via SPP simulating an RS-232 connection". Grepping all 8,292
+decompiled classes for `createRfcommSocket` and `BluetoothSocket` returns **zero
+hits**; `NonBLEConnectionConfig` is a stub returning `UUID.fromString("")`.
+Every real model is BLE GATT. Recorded in `docs/PROTOCOL.md` §1a so the claim
+does not misdirect a future capture session.
+
+Kept in the repo for traceability rather than deleted.
+
 ### `kia_uvo.wiki/` — fuatakgun/kia_uvo wiki
 License: repo LICENSE is CC0. Unrelated vehicle, but its **methodology** is
 directly reusable: patching an app's network-security config to trust a local

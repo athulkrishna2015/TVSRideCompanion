@@ -14,19 +14,58 @@ assumed shared with Ntorq, `[NATORQ]` = confirmed for Ntorq.
 ## 1. GATT layer
 
 ```
-Service UUID : 5456534D-5647-5341-5342-454E544F5251   [JUPITER] [UNVERIFIED for Ntorq]
-Write char   : 00005352-0000-1000-8000-00805f9b34fb   [JUPITER] [UNVERIFIED]
-Read char    : 00005354-0000-1000-8000-00805f9b34fb   [JUPITER] [UNVERIFIED]
+Service UUID : 5456534D-5647-5341-5342-454E544F5251   [VERIFIED_FROM_APK]
+Write char   : 00005352-0000-1000-8000-00805f9b34fb   [VERIFIED_FROM_APK]
+Read char    : 00005354-0000-1000-8000-00805f9b34fb   [VERIFIED_FROM_APK]
 ```
 
-That service UUID is the ASCII string `TVSM-VGSASBEN TORQ` read byte-wise —
-note the embedded **"TORQ"**. That is the single strongest hint that the same
-service is shared across the SmartXonnect line rather than being Jupiter-only,
-but it is still a hint, not a measurement. Confirm with a GATT dump from the
-Ntorq itself (`docs/CAPTURE.md` step 2).
+Transcribed from `com.tvs.bike.core.bikes.*BLEConnectionConfig`, which declares
+these three UUIDs **identically** for Ntorq, Jupiter, Apache and iQube. Only
+the U388 EV family differs — it builds its service UUID at runtime from
+`U388_SERVICE_UUID_KEY = "9-5342-454E544F5251"`.
 
-The `5352` / `5354` write/read characteristic pair is the Nordic UART-style
-naming convention (`SR`/`ST`) and is what the official app writes to.
+The service UUID is the ASCII string `TVSM-VGSASBEN TORQ` read byte-wise, which
+is why the non-EV line shares one service.
+
+All configs request `getCharacteristicsWriteType() == 2`
+(`WRITE_NO_RESPONSE`) and MTU 512.
+
+### Model → connection config
+
+From `com.tvs.bike.core.BikeVariants.getConnectionConfiguration()`:
+
+| Model | Config | Note |
+| :--- | :--- | :--- |
+| Ntorq | `NtorqBLEConnectionConfig` | `shouldAutoConnect() == false` |
+| **Raider** | **`NtorqBLEConnectionConfig`** | **same config — no RaiderBLEConnectionConfig exists** |
+| Jupiter | `JupiterBLEConnectionConfig` | identical UUIDs |
+| Apache | `ApacheBLEConnectionConfig` | identical UUIDs |
+| iQube | `IQubeBLEConnectionConfig` | identical UUIDs, but `shouldAutoConnect() == true` |
+| U388 | `U388BLEConnectionConfig` | different (EV) service UUID |
+| (NonBLE) | `NonBLEConnectionConfig` | **stub** — empty UUID strings, write type 0 |
+
+Raider sharing the Ntorq config is why one driver covers both: `protocol/raider/*`
+adds only `5A54ACK`, `5A6B` and `5A9D` frames — a superset, not a separate
+protocol.
+
+## 1a. There is no Classic Bluetooth / RFCOMM path
+
+A supplied reference (`research/refs.txt`) claims the TVS app "handles both
+Bluetooth Classic (RFCOMM/SPP) for core data transmission and BLE for initial
+setup/handshakes", and that "older Ntorq clusters use Classic Bluetooth via
+Serial Port Profile (SPP/RFCOMM)".
+
+**That is incorrect, and worth correcting before it misdirects a capture
+session.** Searching all 8,292 decompiled classes for `createRfcommSocket`,
+`createInsecureRfcommSocket` and `BluetoothSocket` returns **zero hits**.
+
+`NonBLEConnectionConfig` is not an RFCOMM transport: it returns
+`UUID.fromString("")` for the service, read and write UUIDs, write type `0`,
+and is referenced only by the `NonBLE` variant stub. It is an unimplemented
+placeholder.
+
+Every real SmartXonnect model uses BLE GATT. If a capture session sees RFCOMM
+data, it is not TVS traffic.
 
 ## 2. Link handshake
 
@@ -73,25 +112,44 @@ physically responds.
 
 ## 4. Inbound telemetry `DataID`s
 
-`[JUPITER]` — these are what the cluster streams **to** the phone.
+Dispatch is by `byteArray[1]` — `IncomingFrameIdentifier.identify()` indexes the
+data-id byte and looks it up in a per-model map. For Ntorq,
+`NtorqFrameIdentifier.getFrameConfig()` returns exactly:
+
+```
+ 16 (0x10) -> SPEEDOMETER_DATA_5A_10_FRAME -> NtorqSpeedOMeter1
+ 17 (0x11) -> SPEEDOMETER_DATA_5A_11_FRAME -> NtorqSpeedOMeter2
+ 25 (0x19) -> SPEEDOMETER_DATA_5A_19_FRAME -> NtorqSpeedOMeter3
+ 24 (0x18) -> SPEEDOMETER_DATA_5A_18_FRAME -> NtorqSpeedOMeter4
+ 55 (0x37) -> SPEEDOMETER_DATA_5A_37_FRAME -> NtorqCalibrationResponse
+107 (0x6B) -> MUSIC_FRAME                  -> NtorqDataFrame5A54
+ 41 (0x29) -> WIFI_PASSWORD_5A_29_FRAME    -> NtorqWifiPasswordFrameData
+ 84 (0x54) -> SPEEDOMETER_DATA_5A_54_FRAME -> NtorqDataFrame5A54ACK
+```
+
+Note `0x54` is the **ACK** here and `0x6B` carries the music command — the
+inverse of what the Jupiter report's table implies. Transcribed in
+`NtorqDriver.kt` with byte offsets and scaling factors.
+
+`BtData.isValidFrame()` accepts only start bytes `0x9B` and `0x5A` inbound.
+
+### Jupiter, for comparison
 
 | Data ID | Offset | Field | Scaling |
 | :--- | :--- | :--- | :--- |
-| `0x10` | 3–5 | Odometer | uint24, ÷ 10.0 → km |
-| `0x10` | 6 | Fuel | lower nibble 0–5 bars; upper nibble reserve flag |
-| `0x10` | 13 | Call command | 1 = answer, 2 = reject |
-| `0x11` | 4 | Service reminder | indicator |
+| `0x10` | 3–5 | Odometer | uint24, ÷ 10 → km |
+| `0x10` | 6 | Fuel | lower nibble bars; upper nibble reserve |
 | `0x19` | 8 | Economy | km/L |
 | `0x19` | 11–12 | Distance to empty | |
-| `0x54` | 2 | Music command | *"legacy Ntorq-style button press fallback"* |
-| `0x6B` | 2 | Dialer command | answer/reject from cluster |
 
-`0x10`, `0x11`, `0x18`, `0x19` are only broadcast with the ignition ON — which
-is how the companion app distinguishes Parked from Ride without any other
-signal. `[JUPITER]`
+Jupiter and Ntorq share `SpeedOMeter1` offsets almost exactly; they differ at
+index 12 (`LOCATION_TAG` on both) and in the trip-meter width (3 bytes on
+Ntorq, 3 on Jupiter SM1). The `jupiter/` package also contains
+`NtorqSpeedOMeter2/3/4`, which are byte-for-byte the Ntorq variants of those
+frames — more evidence the two models share a skeleton.
 
-`0x54` is the one entry the Jupiter report explicitly ties to Ntorq. It needs
-investigation: it may be a Ntorq carry-over retained on Jupiter, or the reverse.
+`0x10`, `0x11`, `0x18`, `0x19` are only broadcast with the ignition ON, which is
+how parked and riding are distinguished. `[JUPITER]`
 
 ## 5. Outbound navigation control — `0x5A 0x4E`
 
@@ -140,12 +198,20 @@ through Android's normal input path.
 
 ## 8. Open questions for the Ntorq specifically
 
-1. GATT service UUID — identical, or a variant?
-2. Does the Ntorq require the `0x9A` handshake at all? The TechEnclave group
-   reports no real key; the handshake may be Jupiter-only ceremony.
-3. Are the `0x10`/`0x19` offsets identical, or has the Ntorq's larger TFT changed
-   the telemetry layout?
-4. Pictogram byte table for the Ntorq's 5-inch TFT — almost certainly **not**
-   the Jupiter table.
-5. Does the Ntorq accept `0x4C`/`0x63` text packets?
-6. What is `0x54` actually doing on this platform?
+1. ~~GATT service UUID — identical, or a variant?~~ **Answered:** identical,
+   verified in `NtorqBLEConnectionConfig`.
+2. Does the Ntorq require the `0x9A` handshake? `byteArrayForUnLock` builds
+   `START_BYTE_9A + DATA_ID_F1 + … + shortHandByteArray` padded to 20 with a
+   `-1` terminator, and `U388ChallengeFrameData` shows the challenge shape.
+   Whether Ntorq enforces it is untested — the TechEnclave consensus is that
+   there is effectively no real key.
+3. Pictogram byte table — the official table is in `Pictogram.kt`, but
+   `ManeuverUtils.getShortInstruction()` branches on
+   `KEYS.VEHICLETYPEID == "22"` with a *different* table. Which branch the
+   Ntorq takes is the open question.
+4. Does the Ntorq accept `0x4C`/`0x63` text packets, and how many characters
+   fit? The Jupiter's 17 is unlikely to hold on a 5-inch TFT.
+5. Navigation data id: `0x4E` (`DATA_ID_NAVIGATION_CONTROL`) or `0x49`
+   (`DATA_ID_NAVIGATION_CONTROL_2`)?
+
+All five need a capture — see `docs/CAPTURE.md`.

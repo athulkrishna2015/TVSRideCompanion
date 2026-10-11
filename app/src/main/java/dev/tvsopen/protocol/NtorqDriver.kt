@@ -291,10 +291,23 @@ object NtorqFrames {
     fun forDataId(id: Int): FrameLayout? = all.firstOrNull { it.dataId == id }
 }
 
-/** Driver for the Ntorq 150. */
-class NtorqDriver : ProtocolDriver {
+/**
+ * Driver for the Ntorq protocol family.
+ *
+ * Covers Ntorq and Raider, which the official app binds to the same
+ * `NtorqBLEConnectionConfig`. [model] selects the display name only — the wire
+ * format is identical.
+ */
+class NtorqDriver(
+    override val model: VehicleModel = VehicleModel.NTORQ,
+) : ProtocolDriver {
 
-    override val model = VehicleModel.NTORQ
+    init {
+        require(model.sharesNtorqProtocol()) {
+            "${model.displayName} does not use the Ntorq protocol; " +
+                "use its own driver or GenericDriver"
+        }
+    }
 
     /**
      * Navigation and text are left off. The Jupiter documents them; nothing

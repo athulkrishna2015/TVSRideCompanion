@@ -11,10 +11,14 @@ import dev.tvsopen.protocol.VehicleModel
 
 object Nucleus {
     fun init() {
-        // Only Ntorq has a transcribed frame table. Every other model falls
-        // through to GenericDriver, which still connects and streams raw frames
-        // so a new vehicle can be characterised without writing a driver first.
-        DriverRegistry.register(NtorqDriver())
+        // Only the Ntorq protocol family has a transcribed frame table.
+        // Raider is bound to the same config upstream, so it gets the same
+        // driver. Every other model falls through to GenericDriver, which still
+        // connects and streams raw frames so a new vehicle can be characterised
+        // without writing a driver first.
+        for (m in VehicleModel.entries.filter { it.sharesNtorqProtocol() }) {
+            DriverRegistry.register(NtorqDriver(m))
+        }
     }
 
     fun describe() = VehicleModel.entries.map { model ->

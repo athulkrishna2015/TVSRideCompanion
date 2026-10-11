@@ -21,11 +21,11 @@ without logging in" is enforced by the build, not promised in a README.
 
 | Area | State |
 | :--- | :--- |
-| Ntorq inbound telemetry | **8 frame layouts transcribed** from the official APK |
+| Ntorq + Raider inbound | **8 frame layouts transcribed** from the official APK (Raider shares the Ntorq config) |
 | Pictogram table | **transcribed** from the official app |
 | GATT / transport | implemented |
 | Ntorq navigation HUD | **unverified — not yet confirmed on hardware** |
-| Jupiter / Apache / Raider / iQube | connect + stream raw frames; drivers not written |
+| Jupiter / Apache / iQube | connect + stream raw frames; drivers not written |
 | APK analysis | complete for the protocol packages |
 
 Nothing below "unverified" has been run against a scooter yet. See
@@ -44,7 +44,7 @@ protocol/
   Constants.kt        frame ids, GATT UUIDs, checksum
   VehicleModel.kt     model registry + capability flags
   ProtocolDriver.kt   the per-model interface + generic fallback
-  NtorqDriver.kt      Ntorq: transcribed frame layouts
+  NtorqDriver.kt      Ntorq + Raider: transcribed frame layouts
   PacketBuilder.kt    outbound frames
   Pictogram.kt        maneuver table + text-keyword fallback
 transport/

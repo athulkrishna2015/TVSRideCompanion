@@ -21,14 +21,31 @@ enum class VehicleModel(
     JUPITER_125("jupiter125", "Jupiter 125"),
     APACHE_160("apache160", "Apache RTR 160"),
     APACHE_180("apache180", "Apache RTR 180"),
+
+    /**
+     * Shares `NtorqBLEConnectionConfig` upstream — see [sharesNtorqProtocol].
+     * Separate model, identical wire protocol.
+     */
     RAIDER_125("raider125", "Raider 125"),
     RAIDER_180("raider180", "Raider 180"),
+
     U388("u388", "U388"),
     U399("u399", "U399"),
     IQUBE("iqube", "iQube"),
     UNKNOWN("unknown", "Unknown SmartXonnect vehicle");
 
     enum class Display { STANDARD, LARGE_TFT }
+
+    /**
+     * Models the official app binds to `NtorqBLEConnectionConfig`.
+     *
+     * Transcribed from `com.tvs.bike.core.BikeVariants`, whose
+     * `getConnectionConfiguration()` returns `NtorqBLEConnectionConfig` for
+     * *both* Ntorq and Raider. There is no `RaiderBLEConnectionConfig`, and
+     * `protocol/raider/*` only adds `5A54ACK`/`5A6B`/`5A9D` frames — a
+     * superset, not a separate protocol. So the Ntorq driver serves Raider too.
+     */
+    fun sharesNtorqProtocol(): Boolean = this == NTORQ || this == RAIDER_125 || this == RAIDER_180
 
     companion object {
         /**

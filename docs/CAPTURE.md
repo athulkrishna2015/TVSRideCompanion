@@ -6,24 +6,24 @@ what to capture, why it is needed, and what it unblocks.
 Run these when hardware is available. Until then the corresponding facts stay
 `Confidence.NEEDS_CAPTURE` in code and are not guessed.
 
-## 0. Prerequisite: is this Ntorq BLE or classic SPP?
+## 0. Prerequisite settled: it is BLE, and there is no RFCOMM path
 
-`research/refs.txt` raises a real question: whether the target Ntorq uses BLE
-GATT or classic Bluetooth RFCOMM/SPP. **The official APK answers this for the
-models it supports** — `NtorqBLEConnectionConfig` declares BLE service
-`5456534D-…` with write/read `00005352-…` / `00005354-…`, and the U388 EV is the
-only classic-BT variant (`U388_SERVICE_UUID_KEY`). So a SmartXonnect Ntorq is
-BLE.
+`research/refs.txt` claims the official app "handles both Bluetooth Classic
+(RFCOMM/SPP) for core data transmission and BLE for initial setup/handshakes",
+and that older Ntorq clusters use SPP. **Both are wrong** — see
+`docs/PROTOCOL.md` §1a. Searching all decompiled classes for `BluetoothSocket`
+and `createRfcommSocket` returns zero hits, and `NonBLEConnectionConfig` is an
+unimplemented stub with empty UUID strings.
 
-But confirm, because "NTORQ 150 SX" spans variants:
+So: **ignore RFCOMM/SPP when reading the snoop log.** If RFCOMM data appears it
+is not TVS traffic. Confirm the GATT service is present with nRF Connect, but do
+not go hunting for a serial profile.
 
-1. Pair with the official app once.
-2. `adb shell dumpsys bluetooth_manager | grep -A20 Bonded`
-3. Or, better, nRF Connect / `BluetoothLeScanner` and look for the service
-   `5456534D-5647-5341-5342-454E544F5251`.
+## 0a. Which model family is it?
 
-If the service is absent, it is a different generation — re-check which
-`*BLEConnectionConfig` the official app selects for it.
+Raider is bound to `NtorqBLEConnectionConfig` upstream, so a Raider works with
+the Ntorq driver as-is. Once connected, read the vehicle model frame (`0x11`,
+`VEHICLE_MODEL` at index 9) and record the value.
 
 ## 1. HCI snoop log — the highest-value capture
 
