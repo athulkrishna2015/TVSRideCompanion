@@ -163,8 +163,16 @@ accounts and cloud APIs are explicitly **out of scope** — see `docs/SCOPE.md`.
 
 ## Code review gotchas seen in this repo
 
-Both cost real build cycles; check for them before blaming the toolchain.
+All of these cost a real build cycle. Check for them before blaming the toolchain.
 
+- **`?:` binds looser than an infix function.** `x?.toString() ?: "—" to "°C"`
+  parses as `x ?: ("—" to "°C")`, so the expression type collapses to `Any` and
+  you get "expected Pair<String,String>, actual Serializable" pointing at the
+  *function declaration*, not the branch. Parenthesise the elvis, or — better —
+  compute the value, then pair it once.
+- **`?.let {}` yields `T?`, not `T`.** A `when` whose branches all end in
+  `?.let` infers `Pair<String?, String>` against a `Pair<String, String>`
+  signature. Apply the fallback once at the end rather than per branch.
 - **Kotlin nests block comments.** A `/*` inside a KDoc opens a nested comment,
   so the KDoc's own `*/` closes the nested one and the outer never terminates.
   This produced 12 phantom "Unresolved reference" errors in one go. A brace
@@ -188,6 +196,16 @@ Both cost real build cycles; check for them before blaming the toolchain.
 - **A crash on a blank screen is often the theme, not the layout.** Compose
   composables that never ran produce no useful log line; check the manifest
   theme before reading the composable.
+- **A `connectedDevice` foreground service needs Bluetooth permissions
+  *granted*, not merely declared.** Calling `startForeground` before the runtime
+  permission dialog is answered throws `SecurityException` and kills the
+  process. Degrade to a plain notification and retry once connected.
+- **Icons used by this app are deprecated in Material 3** (`Article`,
+  `DirectionsBike`). Use the `AutoMirrored` variants; the build is warning-clean
+  by policy and these are the only warnings it produced.
+- **`android-actions/setup-android@v3` is broken** on current runners
+  ("Failed to find package 'tools'"). The workflow locates the runner's own
+  `sdkmanager` instead. Do not reintroduce that action.
 
 ## Repository and releases
 

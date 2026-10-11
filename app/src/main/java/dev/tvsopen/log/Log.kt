@@ -47,7 +47,12 @@ data class LogRecord(
     val throwable: String? = null,
 ) {
     fun format(withTime: Boolean = true): String {
-        val t = if (withTime) "${TIME.get().format(Date(atMillis))} " else ""
+        // SimpleDateFormat is not thread-safe and BLE frames arrive from
+        // several threads, hence the ThreadLocal. get() is declared T? even
+        // though initialValue() is non-null, so the assertion is what the
+        // compiler needs; it can only fail if initialValue() itself throws.
+        val fmt = requireNotNull(TIME.get()) { "log time formatter unavailable" }
+        val t = if (withTime) "${fmt.format(Date(atMillis))} " else ""
         val x = if (throwable != null) "\n$throwable" else ""
         return "$t${level.short}/$tag: $message$x"
     }

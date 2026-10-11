@@ -1,7 +1,9 @@
 package dev.tvsopen.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -78,13 +80,13 @@ private val LightTiles = TilePalette(
 )
 
 private val DarkTiles = TilePalette(
-    largeLeft = Color(0xFF1E2A38),
-    largeRight = Color(0xFF33223A),
-    small1 = Color(0xFF22303F),
-    small2 = Color(0xFF1B2733),
-    small3 = Color(0xFF2C2440),
-    neutral = Color(0xFF232629),
-    accent = Color(0xFF1F3247),
+    largeLeft = Color(0xFF1B2735),
+    largeRight = Color(0xFF2A1F30),
+    small1 = Color(0xFF1F3040),
+    small2 = Color(0xFF1A2430),
+    small3 = Color(0xFF241E33),
+    neutral = Color(0xFF1C2024),
+    accent = Color(0xFF17293A),
     connected = Color(0xFF66BB6A),
 )
 
@@ -111,26 +113,57 @@ private val AppTypography = Typography(
 )
 
 /**
- * The app renders on the light palette by default rather than following the
- * system, because the adapted design is light-only. Pass `darkTheme = true` for
- * the dark scheme; both are tuned for legibility on a glance.
+ * Dark scheme.
+ *
+ * Not an inversion of the light one. The pastel tiles have no readable pairing
+ * on a dark surface, so the whole scheme is desaturated and darkened while
+ * keeping the same accent hues, and `primary` is lightened to clear 4.5:1
+ * against the dark background.
+ */
+private val DarkColors = darkColorScheme(
+    primary = Color(0xFF64B5F6),
+    onPrimary = Color(0xFF00344C),
+    primaryContainer = Color(0xFF1F3247),
+    onPrimaryContainer = Color(0xFFCFE3FB),
+    secondary = Color(0xFFB4C2CE),
+    secondaryContainer = Color(0xFF2A3138),
+    onSecondaryContainer = Color(0xFFD6E1EA),
+    tertiary = Color(0xFFB388E8),
+    tertiaryContainer = Color(0xFF2C2440),
+    onTertiaryContainer = Color(0xFFEEDCFA),
+    error = Color(0xFFEF5350),
+    onError = Color(0xFF3B0907),
+    surface = Color(0xFF12161A),
+    onSurface = Color(0xFFECEFF2),
+    surfaceVariant = Color(0xFF1E2226),
+    onSurfaceVariant = Color(0xFFB4BAC1),
+    outline = Color(0xFF3A4046),
+)
+
+/**
+ * Applies the palette for [mode].
+ *
+ * [ThemeMode.AUTO] follows the system setting, which is why this takes a
+ * `darkTheme` boolean computed by the caller rather than calling
+ * `isSystemInDarkTheme()` internally — the caller already needs to read it to
+ * keep the two in sync.
  */
 @Composable
 fun TVSRideTheme(
-    darkTheme: Boolean = false,
+    mode: ThemeMode = ThemeMode.AUTO,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val useDark = when (mode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.AUTO -> darkTheme
+    }
     CompositionLocalProvider(
-        LocalTilePalette provides if (darkTheme) DarkTiles else LightTiles,
+        LocalTilePalette provides if (useDark) DarkTiles else LightTiles,
     ) {
         MaterialTheme(
-            colorScheme = if (darkTheme) LightColors.copy(
-                surface = Color(0xFF12161A),
-                onSurface = Color(0xFFECEFF2),
-                surfaceVariant = Color(0xFF1E2226),
-                onSurfaceVariant = Color(0xFFB4BAC1),
-                outline = Color(0xFF3A4046),
-            ) else LightColors,
+            colorScheme = if (useDark) DarkColors else LightColors,
             typography = AppTypography,
             content = content,
         )

@@ -11,7 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -111,7 +111,7 @@ fun LogScreen(modifier: Modifier = Modifier) {
                 Modifier.fillMaxSize().padding(24.dp),
                 verticalArrangement = Arrangement.Center,
             ) {
-                Icon(Icons.Filled.Article, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.Article, contentDescription = null)
                 Text(
                     "No records yet. Connect to a scooter, or check the filter level.",
                     style = MaterialTheme.typography.bodyMedium,

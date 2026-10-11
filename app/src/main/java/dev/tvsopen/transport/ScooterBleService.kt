@@ -34,6 +34,19 @@ import java.util.UUID
 
 enum class ConnectionState { DISCONNECTED, SCANNING, CONNECTING, CONNECTED, RECONNECTING }
 
+/**
+ * Human-readable label. The enum's own `name` renders as "DISCONNECTED", which
+ * is shouting in a status pill.
+ */
+val ConnectionState.label: String
+    get() = when (this) {
+        ConnectionState.DISCONNECTED -> "Disconnected"
+        ConnectionState.SCANNING -> "Scanning"
+        ConnectionState.CONNECTING -> "Connecting"
+        ConnectionState.CONNECTED -> "Connected"
+        ConnectionState.RECONNECTING -> "Reconnecting"
+    }
+
 data class BleFrame(val direction: Direction, val bytes: ByteArray, val atMillis: Long) {
     enum class Direction { INBOUND, OUTBOUND }
     val hex: String get() = bytes.joinToString(" ") { "%02X".format(it) }

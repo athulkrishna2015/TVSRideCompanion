@@ -19,6 +19,40 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!--
+      Permissions mirrored from the working Jupiter companion app
+      (com.tvs.jupiter, CC BY-NC 4.0 — see research/SOURCES.md), each with the
+      reason it is wanted here.
+    -->
+    <!-- Doze parks the GATT connection within minutes and the cluster drops the
+         link when the presence packet stops. Without this exemption a ride dies
+         the moment the screen goes off, which is most of a ride. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Reconnect after a reboot or power cut. The cluster keeps advertising;
+         nothing re-attaches without this. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Discovers which navigation app is actually installed, so mirroring is
+         not limited to a hardcoded package list. Read-only; sees no app data. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <!-- "Last Parked" has to be recorded while the phone is in a pocket with
+         the screen off, which only a background location grant permits. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!--
+      Deliberately NOT mirrored, although the Jupiter app asks for them:
+        READ_CALL_LOG, READ_CONTACTS, ANSWER_PHONE_CALLS, CALL_PHONE,
+        READ_PHONE_STATE
+      All five exist to put caller ID on the cluster or to place calls from a
+      handlebar-button gesture. Neither feature is in this app — caller ID and
+      button gestures are scoped out, see docs/SCOPE.md — so requesting them
+      would mean asking for a person's entire call history and contact list in
+      exchange for nothing. Add them if and when caller ID is implemented.
+    -->
+
     <!-- Parked location, only when the user asks for it -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
@@ -32,6 +66,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="TVSRide"
         android:supportsRtl="true"
         android:theme="@style/Theme.TVSRide">
@@ -50,6 +86,18 @@
             android:name=".transport.RideService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Re-attach after reboot. Gated on the user having left the app in a
+             riding state; see BootReceiver. -->
+        <receiver
+            android:name=".transport.BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- The whole point: read turn-by-turn from Google Maps or any other
              maps app without an account anywhere. -->

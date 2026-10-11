@@ -11,7 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Icon
@@ -32,8 +32,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.Nucleus
 import dev.tvsopen.log.Log
+import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.session.Session
 import dev.tvsopen.transport.RideService
+import dev.tvsopen.ui.theme.ThemePrefs
 import dev.tvsopen.ui.theme.TVSRideTheme
 
 /**
@@ -58,7 +60,12 @@ class MainActivity : AppCompatActivity() {
         // Enable the rotating file sink from the UI process too, so logs are
         // captured even before the ride service starts.
         Log.enableFileSink(java.io.File(filesDir, "logs"))
-        Log.i("App", "activity created; drivers registered")
+        ThemePrefs.load(this)
+        val ridePrefs = RidePrefs.load(this)
+        // Restore the riding state so the toggle reflects what survived a
+        // restart rather than silently reverting to off.
+        Session.setRideMode(ridePrefs.rideMode)
+        Log.i("App", "activity created; drivers registered; theme=${ThemePrefs.mode}")
 
         setContent {
             TVSRideTheme {
@@ -96,7 +103,7 @@ class MainActivity : AppCompatActivity() {
         val parked by Session.parked.collectAsStateWithLifecycle()
         val rideMode by Session.rideMode.collectAsStateWithLifecycle()
 
-        TVSRideTheme {
+        TVSRideTheme(mode = ThemePrefs.mode) {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
@@ -115,7 +122,7 @@ class MainActivity : AppCompatActivity() {
                         NavigationBarItem(
                             selected = tab == 2,
                             onClick = { tab = 2 },
-                            icon = { Icon(Icons.Filled.Article, contentDescription = "Log") },
+                            icon = { Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "Log") },
                             label = { Text("Log") },
                         )
                     }
@@ -139,7 +146,15 @@ class MainActivity : AppCompatActivity() {
                                 navMirroring = on
                                 onNavMirrorChange(on)
                             },
-                            onRideModeChange = Session::setRideMode,
+                            onRideModeChange = { on ->
+                                // No local copy to assign: `rideMode` above is
+                                // the collected Session flow, so pushing into
+                                // Session and the prefs is the whole update.
+                                // `this@MainActivity` because inside the Scaffold
+                                // content lambda a bare `this` is the BoxScope.
+                                RidePrefs.load(this@MainActivity).updateRideMode(on)
+                                Session.setRideMode(on)
+                            },
                         )
                     } else if (tab == 1) {
                         MoreScreen(

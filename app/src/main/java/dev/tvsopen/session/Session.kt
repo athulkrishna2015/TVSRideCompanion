@@ -14,7 +14,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Live telemetry, derived from decoded inbound frames. */
+/**
+ * Live telemetry, derived from decoded inbound frames.
+ *
+ * `avgEconomyKmpl` and `distanceToEmptyKm` are decoded but deliberately not
+ * surfaced on the dashboard: TVS's Ntorq 125 manual lists every display
+ * element the cluster has, and neither range nor fuel economy is one of them.
+ * They are phone-app or cloud figures, and this app has no cloud.
+ */
 data class Telemetry(
     val speedKmh: Int? = null,            // SM1 idx 2
     val odometerKm: Double? = null,       // SM1 idx 3..5, /10
@@ -39,7 +46,12 @@ data class Telemetry(
     fun isFresh(now: Long = System.currentTimeMillis()): Boolean =
         lastFrameAt > 0 && now - lastFrameAt < STALE_AFTER_MS
 
-    companion object { const val STALE_AFTER_MS = 10_000L }
+    companion object {
+        const val STALE_AFTER_MS = 10_000L
+
+        /** Bars in the Ntorq 125 cluster's fuel gauge. TVS manual, section 1c. */
+        const val FUEL_BAR_MAX = 6
+    }
 }
 
 /** What the cluster is displaying right now. */
@@ -136,9 +148,12 @@ object Session {
                 speedKmh = idx(Field.SPEED)?.toInt() ?: cur.speedKmh,
                 odometerKm = scaled(Field.ODOMETER, 10.0)?.toDouble()
                     ?: cur.odometerKm,
-                // Fuel is the low nibble of that byte.
+                // Fuel is the low nibble of that byte. The Ntorq 125 cluster gauge has SIX
+                // bars per TVS's own manual, not five, and it explicitly tells
+                // riders not to derive mileage from it.
                 fuelBars = (idx(Field.FUEL_LEVEL)?.toInt()?.and(0x0F))
-                    ?.let { if (it > 5) 5 else it } ?: cur.fuelBars,
+                    ?.let { if (it > Telemetry.FUEL_BAR_MAX) Telemetry.FUEL_BAR_MAX else it }
+                    ?: cur.fuelBars,
                 averageSpeedKmh = idx(Field.AVERAGE_SPEED)?.toInt() ?: cur.averageSpeedKmh,
                 tripStatus = idx(Field.TRIP_STATUS)?.toInt() ?: cur.tripStatus,
                 topSpeedKmh = idx(Field.TOP_SPEED)?.toInt() ?: cur.topSpeedKmh,

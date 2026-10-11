@@ -66,6 +66,47 @@ This independently corroborates the byte offsets — `AVG SPEED`, `TOP SPEED` an
 `0-60` are exactly the three values the official app's Vehicle Overview screen
 renders from `NtorqSpeedOMeter1`.
 
+### What the cluster actually displays — TVS's own list
+
+The table above comes from a photograph. TVS's Ntorq 125 connected-cluster
+manual enumerates the display elements outright, which settles a question the
+photo could not: **which decoded fields are displayable at all.**
+
+Street mode (the riding mode):
+
+| Manual ref | Element |
+| :--- | :--- |
+| 1a | Odometer, km |
+| 1b | Digital clock, 12-hour |
+| 1c | Fuel gauge — **six** digital bars |
+| 1d | Speedometer, km/h |
+| 1e | Engine temperature gauge — **six** digital bars |
+| 1f | Helmet icon |
+| 1g | Low battery indicator |
+| 1h | **Service reminder** (spanner icon) |
+| 1k | Trip A, B and F |
+| 1m | Side stand indicator |
+
+Sport mode adds lap distance, lap timer and the shortest-time (0–60) indicator.
+Ride stats mode adds previous/best lap distance, timer, **average speed**,
+shortest time and **top speed** — but only when the bike is in sport mode and
+static.
+
+Two consequences that cost a wrong tile each:
+
+- **Range is not on this cluster.** `DISTANCE_TO_EMPTY` decodes from `0x19`
+  indexes 11–12, but the cluster has no element for it. It is an app or cloud
+  figure, and this app has neither. Same for `AVERAGE_FUEL_ECONOMY`. The manual
+  goes further and tells riders not to derive mileage from the fuel gauge at
+  all. Neither is shown.
+- **The fuel gauge has six bars, not five.** `FUEL_LEVEL` is a nibble; the
+  dashboard now reports `n/6`. A clamp at 5 was silently discarding a full
+  tank.
+
+The dashboard's tile set is therefore generated from `ui/ClusterTiles.kt`, where
+every entry cites a manual reference. Adding a tile needs a cluster element,
+not just a byte offset we can decode.
+
 ### The text area is bigger than the Jupiter's
 
 The bottom of the display shows **three** text rows, each rendering roughly

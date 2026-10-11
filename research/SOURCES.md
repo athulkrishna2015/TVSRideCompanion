@@ -12,6 +12,19 @@ Everything this project is derived from, and what each source contributed.
 Both are read-only inputs and stay in the parent directory. They are not
 redistributed in this repo.
 
+### `ref/` — TVS's own Ntorq 125 documentation (gitignored)
+
+Held in the untracked `ref/` folder, not redistributed here.
+
+| File | Role |
+| --- | --- |
+| `TVS NTORQ - Connected cluster.pdf` | TVS's official Ntorq 125 connected-cluster manual, 105 pp. **Authoritative** for which values the instrument cluster can display — it enumerates every display element by number (1a odometer … 1m side stand). Settled that range and fuel economy are not cluster features, and that the fuel gauge has six bars. See `docs/NAVIGATION.md`. |
+| `pdf-tvs-ntorq-125-user-manual-overview_compress.pdf` | General owner’s manual, same cluster chapter. |
+
+This is the strongest evidence in the project for display questions because it
+is the manufacturer's own statement of the hardware's capability, rather than
+an inference from a photograph or a decompilation.
+
 ## 2. Local documentation (parent folder)
 
 ### `JupiterRideCompanion/` — overclock98/JupiterRideCompanion

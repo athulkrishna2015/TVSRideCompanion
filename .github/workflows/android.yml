@@ -78,10 +78,28 @@ jobs:
           set -euo pipefail
           for p in android.permission.BLUETOOTH_CONNECT \
                    android.permission.BLUETOOTH_SCAN \
-                   android.permission.POST_NOTIFICATIONS; do
+                   android.permission.POST_NOTIFICATIONS \
+                   android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS \
+                   android.permission.RECEIVE_BOOT_COMPLETED; do
             grep -q "$p" permissions.txt || { echo "::error::missing $p"; exit 1; }
           done
           echo "OK: expected BLE permissions present"
+
+      # Guard the exclusions noted in the manifest. Those five exist for caller
+      # ID and button gestures, neither of which is implemented, so granting
+      # them means taking a call log and a contact list for nothing. If you add
+      # caller ID, delete this step in the same commit that adds the permissions.
+      - name: Assert caller-ID permissions are absent
+        run: |
+          set -euo pipefail
+          for p in READ_CALL_LOG READ_CONTACTS ANSWER_PHONE_CALLS CALL_PHONE \
+                   READ_PHONE_STATE; do
+            if grep -q "android.permission.$p" permissions.txt; then
+              echo "::error::$p present — read the manifest note before granting it"
+              exit 1
+            fi
+          done
+          echo "OK: no caller-ID permissions"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

@@ -18,15 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.DirectionsBike
-import androidx.compose.material.icons.filled.LocalGasStation
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -46,6 +41,7 @@ import dev.tvsopen.session.HudState
 import dev.tvsopen.session.ParkedInfo
 import dev.tvsopen.session.Telemetry
 import dev.tvsopen.transport.ConnectionState
+import dev.tvsopen.transport.label
 import dev.tvsopen.ui.theme.LocalTilePalette
 import dev.tvsopen.ui.theme.smallTile
 
@@ -97,43 +93,46 @@ fun HomeScreen(
         Spacer(Modifier.height(16.dp))
         SectionLabel("Telemetry")
 
+        // Only values the cluster is documented to display. See ClusterTiles for
+        // why range and fuel economy are absent.
+        val tiles = ClusterTiles.forModel(connection.model)
+        val large = tiles.take(2)
+        val small = tiles.drop(2).take(3)
+
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LargeTile(
-                Modifier.weight(1f),
-                Icons.Filled.LocalGasStation,
-                fuelText(telemetry),
-                "",
-                "Fuel Level",
-                LocalTilePalette.current.largeLeft,
-            )
-            LargeTile(
-                Modifier.weight(1f),
-                Icons.Filled.Speed,
-                telemetry.odometerKm?.let { String.format("%.1f", it) } ?: "—",
-                "km",
-                "Odometer",
-                LocalTilePalette.current.largeRight,
-            )
+            large.forEachIndexed { i, spec ->
+                val (value, unit) = ClusterTiles.format(telemetry, spec.value)
+                LargeTile(
+                    Modifier.weight(1f),
+                    spec.icon,
+                    value,
+                    unit,
+                    spec.label,
+                    if (i == 0) LocalTilePalette.current.largeLeft
+                    else LocalTilePalette.current.largeRight,
+                )
+            }
         }
 
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            SmallTile(
-                Modifier.weight(1f), Icons.Filled.Timeline,
-                telemetry.distanceToEmptyKm?.toString() ?: "—", "km", "Range", 0,
-            )
-            SmallTile(
-                Modifier.weight(1f), Icons.Filled.TrendingUp,
-                telemetry.avgEconomyKmpl?.toString() ?: "—", "km/L", "Avg Economy", 1,
-            )
-            SmallTile(
-                Modifier.weight(1f), Icons.Filled.Build,
-                when (telemetry.serviceDue) {
-                    true -> "Due"
-                    false -> "OK"
-                    null -> "—"
-                }, "", "Service", 2,
-            )
+        if (small.isNotEmpty()) {
+            // Chunk into rows of three rather than taking exactly three. A
+            // silent `.take(3)` dropped the Service tile — a real cluster
+            // element — purely because it happened to be sixth in the list.
+            small.chunked(3).forEachIndexed { rowIndex, chunk ->
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    chunk.forEachIndexed { i, spec ->
+                        val (value, unit) = ClusterTiles.format(telemetry, spec.value)
+                        SmallTile(
+                            Modifier.weight(1f), spec.icon, value, unit, spec.label,
+                            rowIndex * 3 + i,
+                        )
+                    }
+                    // Hold a partial row's tiles at the same width as a full
+                    // row's instead of letting them stretch.
+                    repeat(3 - chunk.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -154,14 +153,6 @@ fun HomeScreen(
         Spacer(Modifier.height(28.dp))
     }
 }
-
-/**
- * Fuel arrives as a 0-5 bar count in a nibble, not a percentage. Reporting it
- * as `60%` implies a resolution the frame does not carry, so the label says
- * bars and the number stays honest about what was measured.
- */
-private fun fuelText(t: Telemetry): String =
-    t.fuelBars?.let { "$it/5" } ?: "—"
 
 @Composable
 private fun SectionLabel(text: String) {
@@ -187,7 +178,10 @@ private fun Header(connection: ConnectionState1, connected: Boolean) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Pill(if (connected) "Connected" else connection.state.name, connected)
+        Pill(
+            if (connected) "Connected" else connection.state.label,
+            connected,
+        )
         Spacer(Modifier.width(8.dp))
         Box(
             Modifier
@@ -367,13 +361,17 @@ private fun LastParkedCard(parked: ParkedInfo?) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                parked?.distanceMeters?.let { "${it}m away" } ?: "—",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            // Only accent the distance when there is one. A blue em dash reads
+            // as a stray fragment rather than as "no data".
+            if (parked?.distanceMeters != null) {
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "${parked.distanceMeters}m away",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         },
     )
 }
@@ -382,7 +380,7 @@ private fun LastParkedCard(parked: ParkedInfo?) {
 private fun RideModeCard(enabled: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
     ActionCard(
         background = LocalTilePalette.current.neutral,
-        icon = Icons.Filled.DirectionsBike,
+        icon = Icons.AutoMirrored.Filled.DirectionsBike,
         title = "Ride Mode",
         subtitle = if (enabled) "On — keeps the app active"
         else "Off (auto-enables on ride)",
