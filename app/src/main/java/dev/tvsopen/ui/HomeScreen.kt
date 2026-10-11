@@ -97,7 +97,10 @@ fun HomeScreen(
         // why range and fuel economy are absent.
         val tiles = ClusterTiles.forModel(connection.model)
         val large = tiles.take(2)
-        val small = tiles.drop(2).take(3)
+        // No `.take()` on the remainder: everything after the large pair is
+        // rendered, wrapped onto as many rows as it needs. Truncating to three
+        // silently dropped Service, which is a real cluster element.
+        val small = tiles.drop(2)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             large.forEachIndexed { i, spec ->

@@ -92,11 +92,17 @@ private val DarkTiles = TilePalette(
 
 val LocalTilePalette = staticCompositionLocalOf { LightTiles }
 
-/** Background for the n-th small telemetry tile. */
+/**
+ * Background for the n-th small telemetry tile.
+ *
+ * Cycles rather than clamping. A `when { else -> small3 }` made every tile past
+ * the third reuse one colour, which is invisible until a sixth value is added
+ * and two adjacent tiles become indistinguishable.
+ */
 @Composable
 fun smallTile(index: Int): Color {
     val p = LocalTilePalette.current
-    return when (index) {
+    return when (((index % 3) + 3) % 3) {
         0 -> p.small1
         1 -> p.small2
         else -> p.small3
