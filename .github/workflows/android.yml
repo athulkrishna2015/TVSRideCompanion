@@ -26,10 +26,27 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      # No android-actions/setup-android: v3 fails on current runners with
+      # "Failed to find package 'tools'" and a sdkmanager exit code 1. The
+      # ubuntu image already ships the SDK, so drive sdkmanager directly and
+      # locate it rather than trusting a fixed path.
+      - name: Locate the Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}" >> "$GITHUB_ENV"
+          SDKMANAGER=$(ls -d "${ANDROID_HOME}"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found under ANDROID_HOME"
+            ls -la "${ANDROID_HOME}" || true
+            exit 1
+          fi
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
 
       - name: Install SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - uses: gradle/actions/setup-gradle@v4
 
