@@ -106,10 +106,11 @@ class RideService : android.app.Service() {
 
     private fun buildNotification(text: String): Notification {
         val pending = PendingIntent.getActivity(
-            this, 0, Intent(this, Class.forName("dev.tvsopen.ui.MainActivity")::class.java.name).let {
-                Intent(this, dev.tvsopen.ui.MainActivity::class.java)
-            },
-            PendingIntent.FLAG_IMMUTABLE,
+            this,
+            0,
+            Intent(this, dev.tvsopen.ui.MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL)
             .setContentTitle("TVSRide")

@@ -95,9 +95,14 @@ cd app && ../gradlew assembleDebug --no-daemon --max-workers=2
 | [docs/SCOPE.md](docs/SCOPE.md) | what this project is and deliberately is not |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | the BLE protocol, with per-fact provenance |
 | [docs/NAVIGATION.md](docs/NAVIGATION.md) | navigation architecture, pictogram tables |
+| [docs/UI_REFERENCE.md](docs/UI_REFERENCE.md) | which apps the UI draws on, and privacy rules |
 | [docs/CAPTURE.md](docs/CAPTURE.md) | what still needs a scooter, and how to get it |
 | [research/SOURCES.md](research/SOURCES.md) | every source, and what it contributed |
 | [AGENTS.md](AGENTS.md) | working rules for agents on this repo |
+
+`ref/` holds UI reference screenshots and is **gitignored** — it contains
+personal data (registration number, home location). See
+[docs/UI_REFERENCE.md](docs/UI_REFERENCE.md) §3.
 
 ---
 

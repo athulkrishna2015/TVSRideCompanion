@@ -249,22 +249,79 @@ object PacketBuilder {
     }
 
     /**
+     * Sanitise text for the cluster display.
+     *
+     * Transcribed from `BluetoothUtil.createMobileToClusterArray` in the
+     * official APK, which is stricter than it first appears:
+     *
+     * 1. Emoji and symbol codepoints become `@` — the regex covers `\p{So}`,
+     *    `\p{Cn}`, U+1F300-1F6FF, U+1F900-1F9FF, U+1FA70-1FAFF, U+2600-26FF
+     *    and ZWJ.
+     * 2. Any remaining character outside `[A-Za-z0-9 ]` becomes `X`.
+     * 3. Non-ASCII text is byte-truncated; ASCII is character-truncated to 17.
+     * 4. Trimmed, then UTF-8 encoded.
+     *
+     * The cluster cannot render Indic or emoji glyphs. Indian street names are
+     * routinely mixed-script, so step 2 is what keeps "NH-44 தென்" from turning
+     * into mojibake on the dash.
+     */
+    fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
+        val symbolised = EMOJI_OR_SYMBOL.replace(text, "@")
+
+        val filtered = buildString(symbolised.length) {
+            for (ch in symbolised) {
+                val ok = (ch in 'A'..'Z') || (ch in 'a'..'z') || (ch in '0'..'9') || ch == ' '
+                append(if (ok) ch else 'X')
+            }
+        }
+
+        val clamped = if (isAsciiPrintable(filtered)) {
+            if (filtered.length > maxBytes) filtered.take(maxBytes) else filtered
+        } else {
+            truncateToBytes(filtered, maxBytes)
+        }
+
+        return clamped.trim().toByteArray(Charsets.UTF_8)
+    }
+
+    private fun isAsciiPrintable(s: String): Boolean =
+        s.all { (it in 'A'..'Z') || (it in 'a'..'z') || (it in '0'..'9') || it == ' ' }
+
+    /** Byte-accurate truncation that never splits a multibyte character. */
+    private fun truncateToBytes(text: String, maxBytes: Int): String {
+        val sb = StringBuilder()
+        var used = 0
+        for (ch in text) {
+            val size = ch.toString().toByteArray(Charsets.UTF_8).size
+            if (size + used >= maxBytes) break
+            sb.append(ch)
+            used += size
+        }
+        return sb.toString()
+    }
+
+    private val EMOJI_OR_SYMBOL = Regex(
+        "[\\p{So}\\p{Cn}" +
+            "\\x{1F300}-\\x{1F6FF}" +
+            "\\x{1F900}-\\x{1F9FF}" +
+            "\\x{1FA70}-\\x{1FAFF}" +
+            "\\x{2600}-\\x{26FF}" +
+            "\\u200D]"
+    )
+
+    /**
      * Navigation text row.
      *
      * `0x5B 0x4F` (`DATA_ID_NAVIGATIONDATA1 == 79`), 17 bytes of UTF-8 text
      * zero-padded to fill, `0xFF` terminator. **No checksum.**
      *
-     * Note the text payload starts at index 2 and is *truncated to 17
-     * characters*, not 17 bytes — a multibyte character can overflow the field
-     * and shift the terminator, so callers should keep text ASCII or clamp by
-     * bytes. See [navigationText].
+     * Text is passed through [sanitize]; the cluster rejects non-ASCII glyphs.
      */
     fun navigationText(text: String): ByteArray {
         val b = ByteArray(MOBILE_DATA_SIZE)
         b[0] = StartId.B5.toByte()
         b[1] = OutboundId.NAVIGATION_TEXT.toByte()
-        val bytes = text.take(17).toByteArray(Charsets.UTF_8)
-        // Never let a multibyte sequence run past the 17-byte field.
+        val bytes = sanitize(text)
         bytes.copyInto(b, destinationOffset = 2, endIndex = minOf(bytes.size, 17))
         b[19] = 0xFF.toByte()
         return b
@@ -274,13 +331,13 @@ object PacketBuilder {
      * A row of plain text for caller ID / notifications.
      *
      * `0x5B 0x4C` (76) for row 1 and `0x5B 0x63` (99) for row 2, matching
-     * `buildMessagePackets`. 17 characters, padded, `0xFF` terminator.
+     * `createMobileToClusterArray`. Same 17-byte sanitised payload.
      */
     fun textRow(dataId: Int, text: String, maxChars: Int = 17): ByteArray {
         val b = ByteArray(MOBILE_DATA_SIZE)
         b[0] = StartId.B5.toByte()
         b[1] = dataId.toByte()
-        val bytes = text.take(maxChars).toByteArray(Charsets.UTF_8)
+        val bytes = sanitize(text, maxChars)
         bytes.copyInto(b, destinationOffset = 2, endIndex = minOf(bytes.size, 17))
         b[19] = 0xFF.toByte()
         return b

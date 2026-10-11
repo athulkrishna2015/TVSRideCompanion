@@ -235,9 +235,44 @@ data class GattConfig(
  * none. Treat this as per-frame, not per-protocol.
  */
 object Checksum {
-    fun compute(bytes: ByteArray, upTo: Int): Byte {
+
+    /**
+     * Compute the checksum byte for [bytes] over the first [upTo] bytes.
+     *
+     * The official `addChecksum(byte[])` is unambiguous:
+     *
+     * ```
+     * sum = 255 - (sum(dataToCluster) % 256)
+     * return [data[0], data[1], data[2..len-2], sum, 0xFF]
+     * ```
+     *
+     * i.e. `255 - (sum % 256)`, with the checksum landing penultimate.
+     */
+    fun compute(bytes: ByteArray, upTo: Int = bytes.size - 2): Byte {
         var sum = 0
         for (i in 0 until upTo) sum += bytes[i].toInt() and 0xFF
         return ((255 - (sum % 256)) and 0xFF).toByte()
     }
+
+    /** Write the checksum into [bytes] at the penultimate position. */
+    fun apply(bytes: ByteArray) {
+        if (bytes.size < 3) return
+        bytes[bytes.size - 2] = compute(bytes)
+    }
+
+    /**
+     * **Deliberately not implemented as a universal frame validator.**
+     *
+     * The official app has `isValidChecksum(byte[])`, written as
+     * `data[len-2] + (sum(data) % 256) == 255` where `sum` spans the entire
+     * array including the checksum byte and the `0xFF` terminator. That identity
+     * does not hold for an arbitrary 20-byte frame — checked numerically, it
+     * does not reproduce `addChecksum`'s output. It is therefore only valid for
+     * particular frame shapes whose layout differs from the 20-byte mobile-data
+     * frame, and REA did not show which.
+     *
+     * Until a capture establishes the per-frame rule, inbound validation stops
+     * at structural checks and model-specific decoding. Guessing here would
+     * silently discard good frames.
+     */
 }

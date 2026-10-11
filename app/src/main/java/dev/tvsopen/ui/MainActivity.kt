@@ -6,92 +6,156 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Button
-import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import dev.tvsopen.R
-import dev.tvsopen.protocol.VehicleModel
+import dev.tvsopen.Nucleus
 import dev.tvsopen.transport.RideService
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
+import dev.tvsopen.ui.theme.TVSRideTheme
 
 /**
- * Minimal control surface.
+ * Single-activity host: bottom navigation between Home and More.
  *
- * Deliberately thin: the value is in the protocol layer, and a heavier UI would
- * be built once the hardware questions in docs/CAPTURE.md are answered.
+ * Deliberately thin. The protocol layer is the substance; the UI observes state
+ * and sends intents to [RideService]. There is no account, no repository and no
+ * network client, because there is no network client in the app at all.
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var status: TextView
-    private lateinit var navStatus: TextView
-
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-            val missing = granted.filterValues { !it }.keys
-            if (missing.isEmpty()) connectOrExplain() else {
-                status.text = "Missing permissions: ${missing.joinToString()}"
+            if (granted.values.any { !it }) {
+                Toast.makeText(this, "Some permissions were denied", Toast.LENGTH_LONG).show()
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        Nucleus.init()
 
-        status = findViewById(R.id.status)
-        navStatus = findViewById(R.id.nav_status)
-
-        findViewById<Button>(R.id.connect).setOnClickListener { requestPermissionsThenConnect() }
-        findViewById<Button>(R.id.find_my).setOnClickListener { send(RideService.ACTION_FIND_MY) }
-        findViewById<Button>(R.id.stop_find_my).setOnClickListener { send(RideService.ACTION_STOP_FIND_MY) }
-        findViewById<Button>(R.id.start_nav).setOnClickListener { send(RideService.ACTION_START_NAV) }
-        findViewById<Button>(R.id.stop_nav).setOnClickListener { send(RideService.ACTION_STOP_NAV) }
-        findViewById<Button>(R.id.disconnect).setOnClickListener { send(RideService.ACTION_DISCONNECT) }
-        findViewById<Button>(R.id.notification_access).setOnClickListener { openNotificationAccess() }
+        setContent {
+            TVSRideTheme {
+                AppRoot(
+                    onFindMyChange = { send(RideService.ACTION_FIND_MY) },
+                    onNavMirrorChange = { send(RideService.ACTION_START_NAV) },
+                    onScan = { requestBlePermissions() },
+                    onDisconnect = { send(RideService.ACTION_DISCONNECT) },
+                    onOpenNotificationAccess = { openNotificationAccess() },
+                    hasNotificationAccess = hasNotificationAccess(),
+                )
+            }
+        }
     }
 
-    private fun neededPermissions(): Array<String> {
-        val perms = mutableListOf<String>()
+    @Composable
+    private fun AppRoot(
+        onFindMyChange: (Boolean) -> Unit,
+        onNavMirrorChange: (Boolean) -> Unit,
+        onScan: () -> Unit,
+        onDisconnect: () -> Unit,
+        onOpenNotificationAccess: () -> Unit,
+        hasNotificationAccess: Boolean,
+    ) {
+        var tab by rememberSaveable { mutableStateOf(0) }
+        var findMy by rememberSaveable { mutableStateOf(false) }
+        var navMirroring by rememberSaveable { mutableStateOf(false) }
+
+        // Placeholder until a scooter is connected; the service owns the live
+        // flows once it is running.
+        val telemetry = remember { Telemetry() }
+        val hud = remember { HudSnapshot() }
+        val connection = remember { ConnectionUi() }
+
+        MaterialTheme {
+            Scaffold(
+                bottomBar = {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = tab == 0,
+                            onClick = { tab = 0 },
+                            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                            label = { Text("Home") },
+                        )
+                        NavigationBarItem(
+                            selected = tab == 1,
+                            onClick = { tab = 1 },
+                            icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = "More") },
+                            label = { Text("More") },
+                        )
+                    }
+                },
+            ) { padding ->
+                androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
+                    if (tab == 0) {
+                        HomeScreen(
+                            telemetry = telemetry,
+                            hud = hud,
+                            connection = connection,
+                            findMyEnabled = findMy,
+                            navMirroring = navMirroring,
+                            onFindMyChange = { on ->
+                                findMy = on
+                                onFindMyChange(on)
+                            },
+                            onNavMirrorChange = { on ->
+                                navMirroring = on
+                                onNavMirrorChange(on)
+                            },
+                        )
+                    } else {
+                        MoreScreen(
+                            connection = connection,
+                            notificationAccessGranted = hasNotificationAccess,
+                            onOpenNotificationAccess = onOpenNotificationAccess,
+                            onScan = onScan,
+                            onDisconnect = onDisconnect,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun send(action: String) {
+        runCatching { startForegroundService(Intent(this, RideService::class.java).setAction(action)) }
+            .onFailure { Toast.makeText(this, "Ride service not running", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun requestBlePermissions() {
+        val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            perms += Manifest.permission.BLUETOOTH_SCAN
-            perms += Manifest.permission.BLUETOOTH_CONNECT
+            needed += Manifest.permission.BLUETOOTH_SCAN
+            needed += Manifest.permission.BLUETOOTH_CONNECT
         } else {
-            perms += Manifest.permission.ACCESS_FINE_LOCATION
+            needed += Manifest.permission.ACCESS_FINE_LOCATION
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms += Manifest.permission.POST_NOTIFICATIONS
-        }
-        return perms.toTypedArray()
-    }
-
-    private fun requestPermissionsThenConnect() {
-        val missing = neededPermissions().filter {
+        val missing = needed.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isEmpty()) connectOrExplain() else permissionLauncher.launch(missing.toTypedArray())
-    }
-
-    /**
-     * TODO: replace with a BLE scan + model picker once a scooter is in range.
-     * Until then this explains what the app needs rather than pretending to
-     * connect to something it cannot find.
-     */
-    private fun connectOrExplain() {
-        if (!hasNotificationAccess()) {
-            status.text = "Grant notification access, then reconnect."
-            return
+        if (missing.isEmpty()) {
+            Toast.makeText(this, "Scanning for SmartXonnect clusters…", Toast.LENGTH_SHORT).show()
+        } else {
+            permissionLauncher.launch(missing.toTypedArray())
         }
-        status.text = "Scanning for SmartXonnect clusters…\n" +
-            "Service ${dev.tvsopen.protocol.Gatt.SERVICE}\n" +
-            "Models: " + VehicleModel.entries
-                .filter { it != VehicleModel.UNKNOWN }
-                .joinToString { it.displayName }
     }
 
     private fun hasNotificationAccess(): Boolean =
@@ -99,16 +163,10 @@ class MainActivity : AppCompatActivity() {
             ?.contains(packageName) == true
 
     private fun openNotificationAccess() {
-        val i = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-        } else {
-            Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-        }
+        val i = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
         runCatching { startActivity(i) }
-            .onFailure { Toast.makeText(this, "Open notification access manually", Toast.LENGTH_LONG).show() }
-    }
-
-    private fun send(action: String) {
-        startForegroundService(Intent(this, RideService::class.java).setAction(action))
+            .onFailure {
+                Toast.makeText(this, "Open notification access from system settings", Toast.LENGTH_LONG).show()
+            }
     }
 }
