@@ -5,6 +5,15 @@ build/
 local.properties
 .idea/
 
+# Signing material. The keystore lives outside the repo entirely, in
+# ~/tvs-signing/, and reaches CI only as a base64 secret. These two entries are
+# a backstop for a local build that writes them into the tree — a leaked
+# keystore cannot be un-leaked, and anyone holding it could sign an "update" to
+# this app.
+key.properties
+*.jks
+*.keystore
+
 # Captured protocol data — large, and specific to the owner's scooter.
 # Share a redacted sample deliberately, never by accident.
 captures/

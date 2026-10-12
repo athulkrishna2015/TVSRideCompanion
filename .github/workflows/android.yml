@@ -50,6 +50,37 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # One signing key for every build, so an installed app can be upgraded in
+      # place. Without it every runner generates its own debug keystore and
+      # `adb install -r` fails with INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+      #
+      # The keystore exists only as a base64 secret — never in the repo — and the
+      # file is written *after* checkout so it cannot be committed by accident.
+      # This step is allowed to do nothing: on a pull request from a fork the
+      # secrets are deliberately absent, the build must still succeed, and
+      # `app/build.gradle.kts` falls back to the debug key whenever
+      # key.properties is missing.
+      - name: Materialise signing key
+        env:
+          TVS_KEYSTORE_B64: ${{ secrets.TVS_KEYSTORE_B64 }}
+          TVS_KEYSTORE_PASS: ${{ secrets.TVS_KEYSTORE_PASS }}
+          TVS_KEY_ALIAS: ${{ secrets.TVS_KEY_ALIAS }}
+          TVS_KEY_PASS: ${{ secrets.TVS_KEY_PASS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TVS_KEYSTORE_B64:-}" ]; then
+            echo "No signing secret — building debug-signed (expected on forks)."
+            exit 0
+          fi
+          printf '%s' "$TVS_KEYSTORE_B64" | base64 -d > tvs-release.jks
+          {
+            echo "storeFile=tvs-release.jks"
+            echo "storePassword=$TVS_KEYSTORE_PASS"
+            echo "keyAlias=$TVS_KEY_ALIAS"
+            echo "keyPassword=$TVS_KEY_PASS"
+          } > key.properties
+          echo "Signing key materialised."
+
       # A debug APK, not the release one. There is no signing key, so
       # assembleRelease yields an unsigned APK that cannot be installed — and a
       # debuggable APK is what lets `adb shell run-as dev.tvsopen` pull the
@@ -127,7 +158,11 @@ jobs:
           files: app/build/outputs/apk/debug/app-debug.apk
           generate_release_notes: true
           body: |
-            Debug-signed APK, built by GitHub Actions.
+            Signed APK, built by GitHub Actions.
+
+            Every release is signed with the same project key, so you can
+            install over the previous version with `adb install -r` instead of
+            uninstalling and losing your settings and logs.
 
             Install with `adb install -r app-debug.apk`, then grant notification
             access so navigation mirroring can read turn-by-turn from your maps

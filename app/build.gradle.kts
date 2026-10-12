@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,27 @@ plugins {
     // `kotlinCompilerExtensionVersion` string is rejected outright.
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+/**
+ * Release signing, when a key has been provided.
+ *
+ * `key.properties` is **not in the repo and must never be**. CI writes it from
+ * GitHub Actions secrets immediately before building; a local build can write it
+ * by hand. When it is absent — a fork, a contributor without the secrets,
+ * anyone cloning to read the source — this is null and every build falls back to
+ * the ordinary debug key, so the build never depends on a secret existing.
+ *
+ * The reason for having a key at all: each CI runner generates its *own* debug
+ * keystore, so without this every build was signed differently and
+ * `adb install -r` failed with INSTALL_FAILED_UPDATE_INCOMPATIBLE. One key,
+ * held only as a secret, makes an installed app upgradeable in place.
+ */
+val keyProps = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasReleaseKey = keyProps.getProperty("storeFile")
+    ?.let { rootProject.file(it).exists() } == true
 
 android {
     namespace = "dev.tvsopen"
@@ -18,10 +41,34 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keyProps.getProperty("storeFile"))
+                storePassword = keyProps.getProperty("storePassword")
+                keyAlias = keyProps.getProperty("keyAlias")
+                keyPassword = keyProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        // Signed with the project key when one exists, debug-signed otherwise.
+        // `assembleDebug` stays the shipped variant and stays debuggable, so
+        // `adb shell run-as` can still pull the on-device log without root,
+        // which is the entire debugging story for this project.
+        debug {
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 
