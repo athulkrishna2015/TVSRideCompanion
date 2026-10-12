@@ -38,10 +38,30 @@ class RidePrefs private constructor(private val ctx: Context) {
         sp.edit().putBoolean(KEY_RESUME_BOOT, on).apply()
     }
 
+    /**
+     * Last link the service established, for reconnect-after-reboot. Plain
+     * getters, not observable state: only MainActivity reads them once at
+     * startup, and SharedPreferences is the source of truth.
+     */
+    val lastAddress: String?
+        get() = sp.getString(KEY_LAST_ADDRESS, null)
+
+    val lastModelId: String?
+        get() = sp.getString(KEY_LAST_MODEL, null)
+
+    fun updateLastConnection(address: String, modelId: String) {
+        sp.edit()
+            .putString(KEY_LAST_ADDRESS, address)
+            .putString(KEY_LAST_MODEL, modelId)
+            .apply()
+    }
+
     companion object {
         private const val NAME = "tvsride"
         private const val KEY_RIDE_MODE = "ride_mode"
         private const val KEY_RESUME_BOOT = "resume_on_boot"
+        private const val KEY_LAST_ADDRESS = "last_address"
+        private const val KEY_LAST_MODEL = "last_model"
 
         @Volatile
         private var instance: RidePrefs? = null

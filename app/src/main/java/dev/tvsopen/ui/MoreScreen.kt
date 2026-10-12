@@ -39,10 +39,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.tvsopen.Nucleus
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.Confidence
 import dev.tvsopen.protocol.Pictograms
+import dev.tvsopen.transport.label
 import dev.tvsopen.ui.theme.ThemeMode
 import dev.tvsopen.ui.theme.ThemePrefs
 import kotlinx.coroutines.delay
@@ -91,7 +93,8 @@ fun MoreScreen(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(connection.model.displayName, style = MaterialTheme.typography.titleMedium)
-                    Text("State: ${connection.state}")
+                    // .label, not the enum name: this printed "CONNECTING".
+                    Text("State: ${connection.state.label}")
                     connection.address?.let { Text("MAC: $it") }
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -238,6 +241,13 @@ private fun DozeCard() {
     val scope = rememberCoroutineScope()
     var exempt by remember { mutableStateOf(isDozeExempt(ctx)) }
     val prefs = remember { RidePrefs.load(ctx) }
+
+    // Re-read on every resume, not once. The grant happens in system settings,
+    // so `remember` alone kept reporting "not exempt" until the process died.
+    LifecycleResumeEffect(Unit) {
+        exempt = isDozeExempt(ctx)
+        onPauseOrDispose { }
+    }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {

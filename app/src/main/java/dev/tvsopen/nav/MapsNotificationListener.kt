@@ -63,12 +63,16 @@ class MapsNotificationListener : NotificationListenerService() {
     /** Packages to trust in addition to structural detection. */
     @Volatile
     var allowedPackages: Set<String> = DEFAULT_MAPS_PACKAGES
-        set(value) { field = value }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val n = sbn ?: return
-        val pkg = n.packageName ?: return
+        // packageName is platform-defined non-null, but it is typed String? in
+        // the SDK. `?: return` on a non-null type is a compile error, so it was
+        // written as a pointless `n.packageName ?: return` elsewhere; bind it
+        // plainly and let the next line filter.
+        val pkg = n.packageName
         val extras = n.notification?.extras ?: return
+        if (pkg.isBlank()) return
 
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()

@@ -12,7 +12,15 @@
 
 package dev.tvsopen.protocol
 
-/** A field's position and width within a frame. */
+/**
+ * A field's position and width within a frame.
+ *
+ * Values are stored **raw** — no scaling here. An earlier version applied
+ * `scale` in [FrameLayout.decode] while `Session` divided again, so every
+ * scaled quantity (odometer, throttle, 0-60, trip F) arrived at the UI divided
+ * twice: the odometer read ~10x low. Engineering conversion lives in exactly
+ * one place, `Session.onFrame`, which cites the byte index next to each use.
+ */
 data class FieldSpec(
     val field: Field,
     /** 0-based byte index. */
@@ -20,8 +28,6 @@ data class FieldSpec(
     /** Byte count; 1 unless the field is a multi-byte integer. */
     val length: Int = 1,
     val signed: Boolean = false,
-    /** Divisor applied to the raw integer to yield the engineering value. */
-    val scale: Double = 1.0,
 ) {
     fun read(buf: ByteArray): Long? {
         if (offset < 0 || offset + length > buf.size) return null
@@ -58,7 +64,7 @@ data class FrameLayout(
         for (spec in fields) {
             val v = spec.read(raw) ?: continue
             fieldMap[spec.offset] = spec.field
-            values[spec.offset] = if (spec.scale == 1.0) v else (v / spec.scale).toLong()
+            values[spec.offset] = v
         }
         return DecodedFrame(StartId.A5, dataId, fieldMap, values, raw)
     }
@@ -125,19 +131,19 @@ object NtorqFrames {
             FieldSpec(Field.START_BYTE, 0),
             FieldSpec(Field.DATA_ID, 1),
             FieldSpec(Field.SPEED, 2),
-            FieldSpec(Field.ODOMETER, 3, length = 3, scale = 10.0),
+            FieldSpec(Field.ODOMETER, 3, length = 3),
             FieldSpec(Field.FUEL_LEVEL, 6),
             FieldSpec(Field.AVERAGE_SPEED, 7),
             FieldSpec(Field.TRIP_STATUS, 8),
             FieldSpec(Field.TOP_SPEED, 9),
-            FieldSpec(Field.THROTTLE_POSITION, 10, scale = 2.0),
+            FieldSpec(Field.THROTTLE_POSITION, 10),
             // Official app reads two nibbles out of this single byte:
             //   getBacklightIllumination() -> hex char 0 (high nibble)
             //   getBtPairMode()            -> hex char 1 (low nibble)
             FieldSpec(Field.BACKLIGHT, 11),
             FieldSpec(Field.LOCATION_TAG, 12),
-            FieldSpec(Field.TIME_60KMPH, 13, scale = 10.0),
-            FieldSpec(Field.TRIP_F_METER, 14, length = 3, scale = 10.0),
+            FieldSpec(Field.TIME_60KMPH, 13),
+            FieldSpec(Field.TRIP_F_METER, 14, length = 3),
             FieldSpec(Field.ENGINE_RPM, 17, length = 2),
             FieldSpec(Field.END_BYTE, 19),
         ),
@@ -239,8 +245,9 @@ object NtorqFrames {
     /**
      * NtorqDataFrame5A54 / ACK — media command.
      *
-     * Both classes declare identical layouts. Dispatched as 0x54 -> MUSIC_FRAME
-     * and 0x6B -> SPEEDOMETER_DATA_5A_54_FRAME respectively.
+     * Per the dispatch table above, 0x6B (107) -> MUSIC_FRAME and 0x54 (84) ->
+     * SPEEDOMETER_DATA_5A_54_FRAME — which is the ACK class,
+     * `NtorqDataFrame5A54ACK`, despite the name suggesting otherwise.
      */
     fun music(isAck: Boolean) = FrameLayout(
         dataId = if (isAck) 0x54 else 0x6B,

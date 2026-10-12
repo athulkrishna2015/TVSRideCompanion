@@ -133,60 +133,58 @@ object Session {
      */
     fun onFrame(frame: DecodedFrame) {
         val now = System.currentTimeMillis()
-        val f = frame.fields
-        val v = frame.values
 
-        fun idx(name: Field): Long? =
-            f.entries.firstOrNull { it.value == name }?.let { v[it.key] }
-
-        fun scaled(name: Field, div: Double): Int? =
-            idx(name)?.let { (it / div).toInt() }
+        // Raw integer divided once, here, into a Double — never an Int, so a
+        // 7.3 s 0-60 run does not become 7, and a 3098.0 km odometer does not
+        // become 3098 and then 309. (It did both of those before the driver
+        // stopped pre-scaling in decode.)
+        fun scaled(name: Field, div: Double): Double? =
+            frame.field(name)?.let { it / div }
 
         val cur = _telemetry.value
         _telemetry.value = when (frame.dataId) {
             0x10 -> cur.copy(
-                speedKmh = idx(Field.SPEED)?.toInt() ?: cur.speedKmh,
-                odometerKm = scaled(Field.ODOMETER, 10.0)?.toDouble()
-                    ?: cur.odometerKm,
+                speedKmh = frame.field(Field.SPEED)?.toInt() ?: cur.speedKmh,
+                odometerKm = scaled(Field.ODOMETER, 10.0) ?: cur.odometerKm,
                 // Fuel is the low nibble of that byte. The Ntorq 125 cluster gauge has SIX
                 // bars per TVS's own manual, not five, and it explicitly tells
                 // riders not to derive mileage from it.
-                fuelBars = (idx(Field.FUEL_LEVEL)?.toInt()?.and(0x0F))
+                fuelBars = (frame.field(Field.FUEL_LEVEL)?.toInt()?.and(0x0F))
                     ?.let { if (it > Telemetry.FUEL_BAR_MAX) Telemetry.FUEL_BAR_MAX else it }
                     ?: cur.fuelBars,
-                averageSpeedKmh = idx(Field.AVERAGE_SPEED)?.toInt() ?: cur.averageSpeedKmh,
-                tripStatus = idx(Field.TRIP_STATUS)?.toInt() ?: cur.tripStatus,
-                topSpeedKmh = idx(Field.TOP_SPEED)?.toInt() ?: cur.topSpeedKmh,
-                throttlePercent = scaled(Field.THROTTLE_POSITION, 2.0)
+                averageSpeedKmh = frame.field(Field.AVERAGE_SPEED)?.toInt() ?: cur.averageSpeedKmh,
+                tripStatus = frame.field(Field.TRIP_STATUS)?.toInt() ?: cur.tripStatus,
+                topSpeedKmh = frame.field(Field.TOP_SPEED)?.toInt() ?: cur.topSpeedKmh,
+                throttlePercent = scaled(Field.THROTTLE_POSITION, 2.0)?.toInt()
                     ?: cur.throttlePercent,
-                timeTo60Sec = scaled(Field.TIME_60KMPH, 10.0)?.toDouble()
+                timeTo60Sec = scaled(Field.TIME_60KMPH, 10.0)
                     ?: cur.timeTo60Sec,
-                tripFMeters = scaled(Field.TRIP_F_METER, 10.0) ?: cur.tripFMeters,
-                engineRpm = idx(Field.ENGINE_RPM)?.toInt() ?: cur.engineRpm,
+                tripFMeters = scaled(Field.TRIP_F_METER, 10.0)?.toInt() ?: cur.tripFMeters,
+                engineRpm = frame.field(Field.ENGINE_RPM)?.toInt() ?: cur.engineRpm,
                 lastFrameAt = now,
             )
 
             0x11 -> cur.copy(
-                serviceDue = (idx(Field.SERVICE_REMINDER)?.toInt()?.let { it != 0 })
+                serviceDue = (frame.field(Field.SERVICE_REMINDER)?.toInt()?.let { it != 0 })
                     ?: cur.serviceDue,
-                softwareVersion = idx(Field.SOFTWARE_VERSION)?.toInt()
+                softwareVersion = frame.field(Field.SOFTWARE_VERSION)?.toInt()
                     ?.let { "0x%X".format(it) } ?: cur.softwareVersion,
                 lastFrameAt = now,
             )
 
             0x19 -> cur.copy(
-                avgEconomyKmpl = idx(Field.AVERAGE_FUEL_ECONOMY)?.toInt()
+                avgEconomyKmpl = frame.field(Field.AVERAGE_FUEL_ECONOMY)?.toInt()
                     ?: cur.avgEconomyKmpl,
-                instantEconomyKmpl = idx(Field.INSTANTANEOUS_FUEL_ECONOMY)?.toInt()
+                instantEconomyKmpl = frame.field(Field.INSTANTANEOUS_FUEL_ECONOMY)?.toInt()
                     ?: cur.instantEconomyKmpl,
-                distanceToEmptyKm = idx(Field.DISTANCE_TO_EMPTY)?.toInt()
+                distanceToEmptyKm = frame.field(Field.DISTANCE_TO_EMPTY)?.toInt()
                     ?: cur.distanceToEmptyKm,
                 lastFrameAt = now,
             )
 
             0x18 -> cur.copy(
-                engineTempC = idx(Field.ENGINE_TEMPRATURE)?.toInt() ?: cur.engineTempC,
-                batteryVoltage = idx(Field.BATTERY_VOLTAGE)?.toInt() ?: cur.batteryVoltage,
+                engineTempC = frame.field(Field.ENGINE_TEMPRATURE)?.toInt() ?: cur.engineTempC,
+                batteryVoltage = frame.field(Field.BATTERY_VOLTAGE)?.toInt() ?: cur.batteryVoltage,
                 lastFrameAt = now,
             )
 

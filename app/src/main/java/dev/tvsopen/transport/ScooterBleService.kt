@@ -143,21 +143,30 @@ class ScooterBleService(private val context: Context) {
         val g = gatt
         val ch = writeChar
         if (g == null || ch == null || _state.value != ConnectionState.CONNECTED) {
-            Log.d(TAG, "write dropped, not connected")
+            Log.d(TAG, "write dropped, link not ready")
             return@withLock false
         }
         // Explicit <Boolean>: the lambda's last expression is a conditional on
         // `cont.resume(...)` which returns Unit, so inference would pick the
         // wrong T and `ok` would be typed as the continuation result itself.
         val ok = suspendCancellableCoroutine<Boolean> { cont ->
-            // writeCharacteristic returns an Int status, not a Boolean; compare against
-            // GATT_SUCCESS so the try/catch produces a real Boolean. This
-            // reports whether the write was *accepted* — the on-wire result
-            // arrives later in onCharacteristicWrite.
             val result = try {
-                g.writeCharacteristic(
-                    ch, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
-                ) == BluetoothGatt.GATT_SUCCESS
+                // The 3-argument overload exists only on API 33+. Calling it on
+                // an older phone throws NoSuchMethodError and takes the writer
+                // down, so the legacy path sets the value and type on the
+                // characteristic first — that is the only form API 26-32 has.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    g.writeCharacteristic(
+                        ch, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+                    ) == BluetoothGatt.GATT_SUCCESS
+                } else {
+                    @Suppress("DEPRECATION")
+                    ch.value = bytes
+                    @Suppress("DEPRECATION")
+                    ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    @Suppress("DEPRECATION")
+                    g.writeCharacteristic(ch)
+                }
             } catch (e: SecurityException) {
                 Log.e(TAG, "write refused: ${e.message}")
                 false
@@ -176,11 +185,11 @@ class ScooterBleService(private val context: Context) {
     private fun emit(frame: BleFrame) {
         _lastFrameAt.value = frame.atMillis
         _frames.tryEmit(frame)
-        // Hex is rendered once here so a burst of frames cannot make the write
-        // path late. Log.frame short-circuits when capture is disabled.
+        // Bytes go in, hex comes out inside Log.frame, which also skips the
+        // formatting cost entirely when capture is disabled.
         Log.frame(
             if (frame.direction == BleFrame.Direction.INBOUND) "IN " else "OUT",
-            Log.hex(frame.bytes),
+            frame.bytes,
             frame.atMillis,
         )
     }
@@ -256,6 +265,48 @@ class ScooterBleService(private val context: Context) {
             status: Int,
         ) {
             Log.d(TAG, "descriptor write status=$status")
+            // One CCCD write at a time: firing the next while one is pending
+            // makes the stack refuse it, so the queue advances here.
+            writeNextCccd(g)
+        }
+    }
+
+    /** Pending CCCD writes, drained one per [onDescriptorWrite]. Guarded because
+     * the callback arrives on a binder thread, not the caller's. */
+    private val cccdQueue = ArrayDeque<BluetoothGattDescriptor>()
+    private val cccdLock = Any()
+
+    @SuppressLint("MissingPermission")
+    private fun writeNextCccd(g: BluetoothGatt) {
+        val next = synchronized(cccdLock) {
+            if (cccdQueue.isNotEmpty()) cccdQueue.removeFirst() else null
+        } ?: return
+        // The two writeDescriptor overloads differ in return type: the API-33 one
+        // returns an Int status code, the deprecated one a Boolean. An
+        // if/else mixing them infers `Comparable & Serializable`, so
+        // normalise both to Boolean here.
+        val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try {
+                g.writeDescriptor(next, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ==
+                    BluetoothGatt.GATT_SUCCESS
+            } catch (e: SecurityException) {
+                Log.e(TAG, "CCCD write refused: ${e.message}")
+                false
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            next.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            try {
+                @Suppress("DEPRECATION")
+                g.writeDescriptor(next)
+            } catch (e: SecurityException) {
+                Log.e(TAG, "CCCD write refused: ${e.message}")
+                false
+            }
+        }
+        if (!ok) {
+            Log.w(TAG, "CCCD write refused; continuing with the rest")
+            writeNextCccd(g)
         }
     }
 
@@ -266,6 +317,7 @@ class ScooterBleService(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun enableNotifications(g: BluetoothGatt, svc: android.bluetooth.BluetoothGattService) {
+        val pending = ArrayList<BluetoothGattDescriptor>()
         for (uuid in listOf(Gatt.READ, Gatt.DEVICE_INFO)) {
             val ch = svc.getCharacteristic(UUID.fromString(uuid)) ?: continue
             g.setCharacteristicNotification(ch, true)
@@ -273,23 +325,15 @@ class ScooterBleService(private val context: Context) {
             // Parentheses are required: `and` is an infix *function*, not a bitwise
             // operator, so `props and FLAG != 0` does not parse as intended.
             val canNotify = (ch.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0
-            if (cccd != null && canNotify) {
-                // The two writeDescriptor overloads differ in return type: the API-33 one
-                // returns an Int status code, the deprecated one a Boolean. An
-                // if/else mixing them infers `Comparable & Serializable`, so
-                // normalise both to Boolean here.
-                val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) ==
-                        BluetoothGatt.GATT_SUCCESS
-                } else {
-                    @Suppress("DEPRECATION")
-                    cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    @Suppress("DEPRECATION")
-                    g.writeDescriptor(cccd)
-                }
-                if (!ok) Log.w(TAG, "CCCD write refused for $uuid")
-            }
+            if (cccd != null && canNotify) pending += cccd
+            else Log.d(TAG, "no notifiable CCCD for $uuid")
         }
+        if (pending.isEmpty()) return
+        synchronized(cccdLock) {
+            cccdQueue.clear()
+            cccdQueue.addAll(pending)
+        }
+        writeNextCccd(g)
     }
 
     companion object {

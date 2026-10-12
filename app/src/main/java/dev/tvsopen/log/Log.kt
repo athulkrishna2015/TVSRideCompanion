@@ -122,6 +122,10 @@ object Log {
     /** Point the file sink at a directory. Creates it if needed. */
     fun enableFileSink(dir: File) {
         synchronized(lock) {
+            // Close a previous sink first: replacing the writer without closing
+            // it leaks a file descriptor on every call.
+            runCatching { writer?.flush(); writer?.close() }
+            writer = null
             runCatching {
                 if (!dir.exists()) dir.mkdirs()
                 val f = File(dir, "tvsride.log")
@@ -217,6 +221,9 @@ object Log {
                     if (fileBytes > FILE_MAX_BYTES) {
                         w.flush()
                         rotate(fileDir!!)
+                        // Close the old writer before replacing it: rotation
+                        // used to orphan it, leaking a descriptor per rotation.
+                        runCatching { w.close() }
                         writer = PrintWriter(
                             java.io.BufferedWriter(java.io.FileWriter(File(fileDir!!, "tvsride.log"), true)),
                         )
@@ -243,13 +250,16 @@ object Log {
     /**
      * Record one BLE frame.
      *
-     * [hex] is passed pre-rendered by [hex] so the formatting cost is paid once
-     * and can be skipped entirely when frame capture is off.
+     * Takes the raw bytes, not a pre-rendered string: the earlier shape took
+     * `hex: String` and derived the count as `hex.length / 2`, but a rendered
+     * dump is three characters per byte ("XX "), so a 20-byte frame was logged
+     * as 29 bytes. Counting the array is exact, and formatting is still skipped
+     * entirely when capture is off.
      */
-    fun frame(direction: String, hex: String, atMillis: Long = System.currentTimeMillis()) {
+    fun frame(direction: String, bytes: ByteArray, atMillis: Long = System.currentTimeMillis()) {
         _frameCount.value = _frameCount.value + 1
         if (!captureFrames) return
-        log(Level.DEBUG, "BLE", "$direction $hex (${hex.length / 2} bytes)")
+        log(Level.DEBUG, "BLE", "$direction ${hex(bytes)} (${bytes.size} bytes)")
     }
 
     /** `5B 4A 03 00 …` — uppercase, space separated, two digits per byte. */

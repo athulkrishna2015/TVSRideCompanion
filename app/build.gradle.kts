@@ -58,6 +58,12 @@ dependencies {
     // collectAsStateWithLifecycle, used by Session-backed screens.
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Pure-JVM tests for the protocol layer. No Android, no device: the packet
+    // builders and the frame decoder are plain arithmetic on byte arrays, and
+    // the double-division bug that made the odometer read 10x low was invisible
+    // to the compiler and to every smoke test on a disconnected phone.
+    testImplementation("junit:junit:4.13.2")
 }
 
 // CPU budget: see AGENTS.md and gradle.properties — workers.max=2, daemon off.

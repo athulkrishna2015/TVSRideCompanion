@@ -42,6 +42,17 @@ ps -o ni,pcpu -p $(pgrep -f GradleDaemon | head -1)
 Do not run more than one CPU-heavy background job at a time. Do not use a thread
 count equal to `nproc`.
 
+## Tests
+
+`./gradlew :app:testDebugUnitTest` — pure JVM, no device, no emulator, ~20 s.
+CI runs it before the APK build, so keep it that way.
+
+This is not ceremony. The worst bug in this codebase — odometer reading 10x low
+because `decode` and `Session` each divided by 10 — compiled clean, produced no
+warning, passed every on-device smoke test, and was only findable by writing a
+test. The protocol layer is arithmetic on byte arrays, so anything that scales,
+truncates, or orders bytes belongs in `app/src/test/java/dev/tvsopen/protocol/`.
+
 ## Build, install, test
 
 Toolchain (all outside the repo, none on `PATH` by default):

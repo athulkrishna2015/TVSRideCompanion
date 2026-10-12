@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import dev.tvsopen.log.Log
 import dev.tvsopen.prefs.RidePrefs
+import dev.tvsopen.protocol.VehicleModel
 
 /**
  * Re-attach after a reboot.
@@ -28,17 +29,32 @@ class BootReceiver : BroadcastReceiver() {
 
         val prefs = RidePrefs.load(context)
         if (!prefs.resumeOnBoot) {
-            Log.i(TAG, "boot: not resuming, ride mode was off")
+            Log.i(TAG, "boot: not resuming, user has not opted in")
+            return
+        }
+        val address = prefs.lastAddress
+        if (address.isNullOrBlank()) {
+            // Starting the service with no address would only put up a
+            // foreground notification with nothing behind it. Do nothing.
+            Log.i(TAG, "boot: no remembered cluster; not starting the service")
             return
         }
 
-        Log.i(TAG, "boot: resuming ride service (sdk ${Build.VERSION.SDK_INT})")
+        Log.i(TAG, "boot: resuming ride service to $address (sdk ${Build.VERSION.SDK_INT})")
         // startForegroundService, not startService: this is a background start
         // and the service must already be foreground by the time onCreate runs
-        // or Android throws.
+        // or Android throws. Passing the address along matters — after a reboot
+        // the runtime BLE permissions are usually still granted, but the
+        // service must not depend on that to know what to reconnect to.
         runCatching {
             context.startForegroundService(
-                Intent(context, RideService::class.java),
+                Intent(context, RideService::class.java)
+                    .setAction(RideService.ACTION_CONNECT)
+                    .putExtra(RideService.EXTRA_ADDRESS, address)
+                    .putExtra(
+                        RideService.EXTRA_MODEL,
+                        prefs.lastModelId ?: VehicleModel.NTORQ.name,
+                    ),
             )
         }.onFailure {
             Log.w(TAG, "boot: could not start ride service: ${it.message}")

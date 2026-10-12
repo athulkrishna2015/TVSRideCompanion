@@ -35,6 +35,48 @@ adb shell settings put global bluetooth_hci_snoop_log_mode full
 adb shell settings get global bluetooth_hci_snoop_log_mode   # expect: full
 ```
 
+### Attempt on 2026-10-12: no capture, and here is why
+
+The owner connected to the scooter with the official TVS Connect app on an
+Android 15 phone (RMX3312, SDK 35) and expected a capture to exist. **It does
+not.** Verified, not assumed:
+
+| Check | Result |
+| :--- | :--- |
+| `settings get global bluetooth_hci_log` | `null` — never set |
+| `dumpsys bluetooth_manager` → `sSnoopLogSettingAtEnable` | `EMPTY` |
+| `/sdcard/Android/data/com.android.bluetooth/files/` | does not exist |
+| `find /sdcard -iname '*btsnoop*'` | nothing |
+| `/data/misc/bluetooth/logs/` | exists, **permission denied** (needs root) |
+
+So HCI snoop logging was never on and nothing was recorded. A second finding
+from the same session: the bonded-device list holds **only** Rockerz 333,
+IBELL and MiTV-AXSO0 — all audio or TV. **No scooter is bonded.** Either the
+official app paired ephemerally, or the bond was cleared afterwards. That is
+worth knowing before reading any capture: if the scooter is not bonded, the
+capture will show a connect with no subsequent bond, which changes how the
+handshake must be read.
+
+Both settings keys are now set on that device, but a key being writable is not
+proof the Bluetooth stack reads it. The Developer options UI toggle is the
+reliable switch, and only starts a fresh log on a Bluetooth off/on cycle.
+
+### Tools
+
+Two scripts, both gitignore-safe to keep in the tree:
+
+```
+tools/capture-hci.sh check      # is logging on, and is there a log yet?
+tools/capture-hci.sh enable     # set the keys, open Developer options
+tools/capture-hci.sh watch 120  # poll size while you reconnect
+tools/capture-hci.sh pull       # save to captures/, gitignored
+tools/decode-snoop.py <file> --frames
+```
+
+`decode-snoop.py` turns the binary into one line per ATT packet with
+direction, handle, opcode name and a `<5A>`-style tag for SmartXonnect frames,
+so `--frames` reduces a multi-megabyte capture to just the protocol traffic.
+
 Then: start TVS Connect, pair, ride, trigger in order —
 
 1. ignition on, stationary

@@ -19,6 +19,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.Nucleus
 import dev.tvsopen.log.Log
 import dev.tvsopen.prefs.RidePrefs
+import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Session
 import dev.tvsopen.transport.RideService
 import dev.tvsopen.ui.theme.ThemePrefs
@@ -49,8 +51,12 @@ class MainActivity : AppCompatActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-            if (granted.values.any { !it }) {
-                Toast.makeText(this, "Some permissions were denied", Toast.LENGTH_LONG).show()
+            if (granted.values.all { it }) {
+                // Previously this only toasted and dropped the grant. Now that
+                // permission is in hand, finish the job the button asked for.
+                connectToRememberedCluster()
+            } else {
+                Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -68,23 +74,28 @@ class MainActivity : AppCompatActivity() {
         Log.i("App", "activity created; drivers registered; theme=${ThemePrefs.mode}")
 
         setContent {
-            TVSRideTheme {
-                AppRoot(
-                    onFindMyChange = { send(RideService.ACTION_FIND_MY) },
-                    onNavMirrorChange = { send(RideService.ACTION_START_NAV) },
-                    onScan = { requestBlePermissions() },
-                    onDisconnect = { send(RideService.ACTION_DISCONNECT) },
-                    onOpenNotificationAccess = { openNotificationAccess() },
-                    hasNotificationAccess = hasNotificationAccess(),
-                )
-            }
+            // No theme wrapper here: AppRoot applies TVSRideTheme around the
+            // Scaffold. Wrapping twice meant the outer instance supplied the
+            // colours and the inner one re-supplied them, so the two could
+            // disagree after a theme change.
+            AppRoot(
+                onFindMyChange = { send(it) },
+                onNavMirrorChange = { send(it) },
+                onScan = { requestBlePermissions() },
+                onDisconnect = { send(RideService.ACTION_DISCONNECT) },
+                onOpenNotificationAccess = { openNotificationAccess() },
+                // Re-read on every recomposition: the user grants notification
+                // access in system settings and comes back, so a value sampled
+                // once in onCreate is permanently stale.
+                hasNotificationAccess = notificationAccess,
+            )
         }
     }
 
     @Composable
     private fun AppRoot(
-        onFindMyChange: (Boolean) -> Unit,
-        onNavMirrorChange: (Boolean) -> Unit,
+        onFindMyChange: (String) -> Unit,
+        onNavMirrorChange: (String) -> Unit,
         onScan: () -> Unit,
         onDisconnect: () -> Unit,
         onOpenNotificationAccess: () -> Unit,
@@ -103,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         val parked by Session.parked.collectAsStateWithLifecycle()
         val rideMode by Session.rideMode.collectAsStateWithLifecycle()
 
-        TVSRideTheme(mode = ThemePrefs.mode) {
+        TVSRideTheme(mode = ThemePrefs.mode, darkTheme = isSystemInDarkTheme()) {
             Scaffold(
                 bottomBar = {
                     NavigationBar {
@@ -140,11 +151,21 @@ class MainActivity : AppCompatActivity() {
                             navMirroring = navMirroring,
                             onFindMyChange = { on ->
                                 findMy = on
-                                onFindMyChange(on)
+                                // Off used to send ACTION_FIND_MY too, so the
+                                // rider could never switch it back off from the
+                                // UI — the toggle started the action regardless
+                                // of its new value.
+                                onFindMyChange(
+                                    if (on) RideService.ACTION_FIND_MY
+                                    else RideService.ACTION_STOP_FIND_MY,
+                                )
                             },
                             onNavMirrorChange = { on ->
                                 navMirroring = on
-                                onNavMirrorChange(on)
+                                onNavMirrorChange(
+                                    if (on) RideService.ACTION_START_NAV
+                                    else RideService.ACTION_STOP_NAV,
+                                )
                             },
                             onRideModeChange = { on ->
                                 // No local copy to assign: `rideMode` above is
@@ -177,6 +198,15 @@ class MainActivity : AppCompatActivity() {
             .onFailure { Toast.makeText(this, "Ride service not running", Toast.LENGTH_LONG).show() }
     }
 
+    /**
+     * Scan, or connect to the remembered cluster once permission is in hand.
+     *
+     * The callback used to be granted-permission-and-forget: it checked the
+     * dialog result, showed a toast if anything was denied, and dropped the
+     * grant on the floor. Nothing ever connected, so `connect()` in the service
+     * was unreachable. There is still no scan screen, so this reconnects to the
+     * last known cluster — the nearest honest thing to "Scan".
+     */
     private fun requestBlePermissions() {
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -189,10 +219,51 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isEmpty()) {
-            Toast.makeText(this, "Scanning for SmartXonnect clusters…", Toast.LENGTH_SHORT).show()
+            connectToRememberedCluster()
         } else {
             permissionLauncher.launch(missing.toTypedArray())
         }
+    }
+
+    private fun connectToRememberedCluster() {
+        val prefs = RidePrefs.load(this)
+        val address = prefs.lastAddress
+        if (address.isNullOrBlank()) {
+            Toast.makeText(
+                this,
+                "Bluetooth ready. No scooter remembered yet — pick one when a " +
+                    "scan screen lands.",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        val model = prefs.lastModelId
+            ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
+            ?: VehicleModel.NTORQ
+        runCatching {
+            startForegroundService(
+                Intent(this, RideService::class.java)
+                    .setAction(RideService.ACTION_CONNECT)
+                    .putExtra(RideService.EXTRA_ADDRESS, address)
+                    .putExtra(RideService.EXTRA_MODEL, model.name),
+            )
+        }.onFailure {
+            Toast.makeText(this, "Could not start the ride service", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Read on every composition, so it must not touch the disk.
+     *
+     * `Settings.Secure.getString` is a provider query; doing it per recomposition
+     * would hammer it. Cached, and invalidated whenever the activity resumes —
+     * which is exactly when the user comes back from granting access.
+     */
+    private var notificationAccess by mutableStateOf(false)
+
+    override fun onResume() {
+        super.onResume()
+        notificationAccess = hasNotificationAccess()
     }
 
     private fun hasNotificationAccess(): Boolean =

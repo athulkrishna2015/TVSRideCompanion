@@ -54,6 +54,13 @@ jobs:
       # assembleRelease yields an unsigned APK that cannot be installed — and a
       # debuggable APK is what lets `adb shell run-as dev.tvsopen` pull the
       # on-device log file, which is the whole debugging story for this project.
+      # Unit tests run before the APK is assembled. The protocol layer is plain
+      # arithmetic on byte arrays, so these need no device and no emulator —
+      # which is exactly why they caught the odometer double-division bug that
+      # every on-device smoke test was blind to.
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
       - name: Build
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 

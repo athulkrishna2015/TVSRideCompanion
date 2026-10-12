@@ -149,9 +149,11 @@ fun HomeScreen(
         Spacer(Modifier.height(12.dp))
         FindMyCard(findMyEnabled, onFindMyChange)
 
+        // Telemetry freshness is the number that actually tells you whether the
+        // link is alive. The frame counter belongs in the Log tab, not here.
         Spacer(Modifier.height(20.dp))
-        SectionLabel("Cluster packets")
-        ClusterStatCard("Hud frames sent: ${hud.framesSent}")
+        SectionLabel("Link")
+        LinkCard(telemetry)
 
         Spacer(Modifier.height(28.dp))
     }
@@ -446,19 +448,36 @@ private fun ActionCard(
     }
 }
 
+/**
+ * Telemetry freshness.
+ *
+ * The single most useful "is this thing actually working" signal. Dashboards
+ * fill with values from the last frame received, so without this the screen
+ * looks identical whether the link is streaming or died a minute ago.
+ */
 @Composable
-private fun ClusterStatCard(text: String) {
+private fun LinkCard(telemetry: Telemetry) {
+    val age = remember(telemetry.lastFrameAt) {
+        if (telemetry.lastFrameAt == 0L) null
+        else System.currentTimeMillis() - telemetry.lastFrameAt
+    }
     Surface(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Text(
-            text,
-            Modifier.padding(18.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(Modifier.padding(18.dp)) {
+            Text(
+                when {
+                    age == null -> "No telemetry received yet"
+                    age < 3_000 -> "Telemetry live"
+                    age < Telemetry.STALE_AFTER_MS -> "Telemetry ${age / 1000}s old"
+                    else -> "Telemetry stale — ${age / 1000}s since last frame"
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -482,8 +501,13 @@ private fun NavigationStrip(hud: HudState) {
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
+            // -1 is the "no distance in the notification" sentinel, so never
+            // render it as a figure: it reached the cluster as 0 and the strip
+            // used to say "-1 m" while the dash said 0.
+            val distance = hud.distanceMeters
             Text(
-                "${hud.distanceMeters} m · ${hud.etaMinutes} min",
+                if (distance >= 0) "$distance m · ${hud.etaMinutes} min"
+                else "${hud.etaMinutes} min to arrival",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )

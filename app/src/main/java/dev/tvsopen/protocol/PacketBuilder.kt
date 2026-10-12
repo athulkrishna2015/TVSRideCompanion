@@ -231,7 +231,10 @@ object PacketBuilder {
         if (d >= 0xFFFF) {
             b[2] = 0xFF.toByte(); b[3] = 0xFF.toByte()
         } else {
-            putUInt16(b, 2, d)
+            // Clamped at 0: the field is unsigned, so a negative distance would
+            // write 0xFFFF — the *maximum*, i.e. "turn in 65 km" rather than
+            // "unknown". Anything negative means unknown and becomes 0.
+            putUInt16(b, 2, d.coerceIn(0, 0xFFFF))
         }
 
         putUInt16(b, 4, nav.etaMinutes.coerceIn(0, 0xFFFF))
@@ -241,7 +244,9 @@ object PacketBuilder {
         putUInt24(b, 6, remaining.coerceIn(0, 0xFFFFFF))
 
         b[9] = nav.pictogram.toByte()
-        b[10] = 1.toByte()   // upstream hardcodes one text row
+        // Upstream hardcodes one text row, but NavStep carries the count, so use
+        // it. Ignoring the field made "rows" a lie that no caller could correct.
+        b[10] = nav.rows.coerceIn(1, 0xFF).toByte()
         b[11] = if (nav.active) 1 else 0
         // [12..18] remain zero
         b[19] = 0xFF.toByte()
@@ -254,11 +259,12 @@ object PacketBuilder {
      * Transcribed from `BluetoothUtil.createMobileToClusterArray` in the
      * official APK, which is stricter than it first appears:
      *
-     * 1. Emoji and symbol codepoints become `@` — the regex covers `\p{So}`,
-     *    `\p{Cn}`, U+1F300-1F6FF, U+1F900-1F9FF, U+1FA70-1FAFF, U+2600-26FF
-     *    and ZWJ.
+     * 1. Emoji and symbol codepoints collapse to a single `X` — the regex covers
+     *    `\p{So}`, `\p{Cn}`, U+1F300-1F6FF, U+1F900-1F9FF, U+1FA70-1FAFF,
+     *    U+2600-26FF and ZWJ. Collapsing matters because an emoji is two UTF-16
+     *    chars and the row is only seventeen wide.
      * 2. Any remaining character outside `[A-Za-z0-9 ]` becomes `X`.
-     * 3. Non-ASCII text is byte-truncated; ASCII is character-truncated to 17.
+     * 3. Text is truncated to the row width.
      * 4. Trimmed, then UTF-8 encoded.
      *
      * The cluster cannot render Indic or emoji glyphs. Indian street names are
@@ -266,7 +272,15 @@ object PacketBuilder {
      * into mojibake on the dash.
      */
     fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
-        val symbolised = EMOJI_OR_SYMBOL.replace(text, "@")
+        // Collapse each emoji/symbol run to a single 'X'.
+        //
+        // The replacement used to be "@", but step 2 below rewrites every
+        // non-alphanumeric character — including '@' — to 'X', so the documented
+        // "emoji become @" never reached the wire; they arrived as 'X' anyway.
+        // Going straight to 'X' keeps the one thing that actually matters: a
+        // UTF-16 surrogate pair is two chars, so without this an emoji would
+        // eat two of the seventeen available columns.
+        val symbolised = EMOJI_OR_SYMBOL.replace(text, "X")
 
         val filtered = buildString(symbolised.length) {
             for (ch in symbolised) {
@@ -275,8 +289,12 @@ object PacketBuilder {
             }
         }
 
+        // After sanitising, `filtered` is pure ASCII, so this branch and the
+        // byte-accurate one below are always equivalent. It was kept because
+        // the check exists in the upstream helper and a future change to the
+        // character filter must not silently make the ASCII path wrong.
         val clamped = if (isAsciiPrintable(filtered)) {
-            if (filtered.length > maxBytes) filtered.take(maxBytes) else filtered
+            filtered.take(maxBytes)
         } else {
             truncateToBytes(filtered, maxBytes)
         }
@@ -293,7 +311,10 @@ object PacketBuilder {
         var used = 0
         for (ch in text) {
             val size = ch.toString().toByteArray(Charsets.UTF_8).size
-            if (size + used >= maxBytes) break
+            // `>=` rather than `>`: the official helper packs 17 *bytes* into a
+            // 17-character field, so a multi-byte character would overrun and
+            // corrupt the trailing terminator. Never exceed the budget.
+            if (used + size > maxBytes) break
             sb.append(ch)
             used += size
         }
@@ -322,7 +343,9 @@ object PacketBuilder {
         b[0] = StartId.B5.toByte()
         b[1] = OutboundId.NAVIGATION_TEXT.toByte()
         val bytes = sanitize(text)
-        bytes.copyInto(b, destinationOffset = 2, endIndex = minOf(bytes.size, 17))
+        // 20 - 3: two header bytes and the 0xFF terminator.
+        val n = minOf(bytes.size, b.size - 3)
+        if (n > 0) bytes.copyInto(b, destinationOffset = 2, endIndex = n)
         b[19] = 0xFF.toByte()
         return b
     }
@@ -338,7 +361,11 @@ object PacketBuilder {
         b[0] = StartId.B5.toByte()
         b[1] = dataId.toByte()
         val bytes = sanitize(text, maxChars)
-        bytes.copyInto(b, destinationOffset = 2, endIndex = minOf(bytes.size, 17))
+        // Bound the copy by the destination, not by 17. `maxChars` above 17 used
+        // to throw IndexOutOfBounds because 2 + 17 + 1 already reaches the
+        // terminator at index 19.
+        val n = minOf(bytes.size, b.size - 3)
+        if (n > 0) bytes.copyInto(b, destinationOffset = 2, endIndex = n)
         b[19] = 0xFF.toByte()
         return b
     }
@@ -352,10 +379,13 @@ object PacketBuilder {
     /** Traffic-signal-light hint shown on the cluster. */
     fun trafficSignal(action: TslAction): ByteArray = textRow(
         OutboundId.VEHICLE_MODE,
+        // No glyphs. sanitize() turns every non-alphanumeric character into 'X',
+        // so "← TURN LEFT" shipped to the cluster as "XX TURN LEFT". The manual
+        // rules them out anyway, so the words carry the meaning on their own.
         when (action) {
-            TslAction.LEFT -> "← TURN LEFT"
-            TslAction.RIGHT -> "TURN RIGHT →"
-            TslAction.HAZARD -> "⚠ HAZARD AHEAD"
+            TslAction.LEFT -> "TURN LEFT"
+            TslAction.RIGHT -> "TURN RIGHT"
+            TslAction.HAZARD -> "HAZARD AHEAD"
             TslAction.OFF -> ""
             else -> ""
         }.take(17),

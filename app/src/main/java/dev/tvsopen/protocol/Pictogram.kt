@@ -100,6 +100,15 @@ object Pictograms {
      */
     val U_TURN_LEGACY = Pictogram(41, "make_a_u_turn")
 
+    /**
+     * Id to send when the maneuver is genuinely unknown.
+     *
+     * `continue_straight` (7) in the official table. A wrong-but-plausible arrow
+     * is worse than an honest straight-on at a junction the rider has to read
+     * anyway, and the text line carries the real instruction regardless.
+     */
+    const val STRAIGHT = 7
+
     fun forId(id: Int): Pictogram? = byId[id] ?: if (id == U_TURN_LEGACY.id) U_TURN_LEGACY else null
 
     fun label(id: Int): String = forId(id)?.label ?: "turn_left"

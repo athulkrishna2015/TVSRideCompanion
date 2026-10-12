@@ -10,6 +10,7 @@ import dev.tvsopen.protocol.DashState
 import dev.tvsopen.protocol.NavStep
 import dev.tvsopen.protocol.OutboundId
 import dev.tvsopen.protocol.PacketBuilder
+import dev.tvsopen.protocol.Pictograms
 import dev.tvsopen.protocol.ProtocolDriver
 import dev.tvsopen.transport.ScooterBleService
 import kotlinx.coroutines.CoroutineScope
@@ -152,10 +153,13 @@ class NavigationBridge(
     }
 
     private fun NavInstruction.toNavStep() = NavStep(
-        distanceToTurnMeters = distanceMeters.coerceAtLeast(0),
+        distanceToTurnMeters = distanceMeters.coerceIn(0, 0xFFFF),
         etaMinutes = etaMinutes,
         remainingDistanceMeters = 0,
-        pictogram = pictogram ?: 7,
+        // Tier 2 of the pictogram resolver: when the provider gives no usable
+        // icon and the words do not resolve, send straight-ahead. Named, not a
+        // bare 7, so the value stays checkable against the table above.
+        pictogram = pictogram ?: Pictograms.STRAIGHT,
         streetName = street,
     )
 
