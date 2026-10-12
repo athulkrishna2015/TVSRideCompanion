@@ -307,8 +307,25 @@ tools/make-snoop-fixture.py /tmp/fx.log && tools/decode-snoop.py /tmp/fx.log
 # expect: 3 ATT packets (1 in, 2 out), 2 rows tagged <5A>
 ```
 
-**OS-level HCI snoop does not work on this phone.** The log is created with a
-header and zero records, because the build uses a socket snoop sink
-(`INIT_gd_hal_snoop_logger_socket=true`) that nothing consumes. Full diagnosis
-and the ruled-out list are in `docs/CAPTURE.md`. Capture from inside our own
-app instead — `dev.tvsopen.log.Log` already captures every frame.
+**OS-level HCI snoop does not work on this phone, and it is not a settings
+problem.** The Developer options toggle *is* on ("Enable Bluetooth HCI snoop log"
+→ Enabled, sub-mode *Enabled*), and `dumpsys bluetooth_manager` shows the
+toggle's own BT off/on cycle at 08:55:26/08:55:34 — the same second the log file
+was created. The file is a 16-byte btsnoop header with zero records because
+`auditd` denied `vendor.bthcisnoop.running` to `u:r:bluetooth:s0` at that
+moment, and `INIT_gd_hal_snoop_logger_socket=true` routes records to a socket
+nobody consumes.
+
+Two facts that cost time:
+
+- **This device has no root.** `adb root` replies `adbd cannot run as root in
+  production builds`, `adb shell` is `uid=2000(shell)`, and `su` does not
+  exist. `setprop persist.bluetooth.btsnoopenable true` is therefore impossible,
+  and `/data/misc/bluetooth/**` is `Permission denied`. `adb bugreport` is the
+  only route, because dumpstate inside it runs as root — do not infer from a
+  readable bugreport that adb itself is rooted.
+- **Don't `pkill -f` your own pattern.** See the gotchas list.
+
+Full diagnosis and the ruled-out list are in `docs/CAPTURE.md` (Attempt 3).
+Capture from inside our own app instead — `dev.tvsopen.log.Log` already captures
+every frame, and `docs/CAPTURE.md` §0b has the in-app route.

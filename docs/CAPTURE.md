@@ -59,6 +59,18 @@ APK is debuggable:
 adb exec-out run-as dev.tvsopen cat files/logs/tvsride.log > session.log
 ```
 
+Or from the Log tab, **Export**, which bundles every rotated file into one
+timestamped copy under `getExternalFilesDir("logs")` — app-scoped, so it needs
+no storage permission and **no root**:
+
+```bash
+adb pull /sdcard/Android/data/dev.tvsopen/files/logs/tvsride-<stamp>.log
+tools/decode-snoop.py   # n/a — this is text, read it directly
+```
+
+Verified on device 2026-10-12: exported and pulled 98 lines, rotation history
+intact. Prefer this on any phone you cannot root, which is most of them.
+
 **This has never been run against a real cluster.** Everything the scanner does
 is verified only in that the platform accepts the scan and the UI renders. The
 first question it answers is simply whether the Ntorq advertises the UUID we
@@ -82,11 +94,15 @@ not.** Verified, not assumed:
 
 | Check | Result |
 | :--- | :--- |
-| `settings get global bluetooth_hci_log` | `null` — never set |
-| `dumpsys bluetooth_manager` → `sSnoopLogSettingAtEnable` | `EMPTY` |
+| `settings get global bluetooth_hci_log` | `null` — a different key; see Attempt 3 |
+| `settings get global bluetooth_hci_snoop_log_mode` | `full` (the key the UI actually writes) |
+| `dumpsys bluetooth_manager` → `sSnoopLogSettingAtEnable` | `EMPTY`, but the UI says enabled — the two disagree |
 | `/sdcard/Android/data/com.android.bluetooth/files/` | does not exist |
 | `find /sdcard -iname '*btsnoop*'` | nothing |
 | `/data/misc/bluetooth/logs/` | exists, **permission denied** (needs root) |
+
+> Two of these rows were misread at the time and are corrected by Attempt 3
+> below: the toggle *was* on, and this device has no root at all.
 
 So HCI snoop logging was never on and nothing was recorded. A second finding
 from the same session: the bonded-device list holds **only** Rockerz 333,
@@ -194,6 +210,82 @@ Tried and ruled out:
 `INIT_gd_hal_snoop_logger_socket=true` is the likely explanation: on this build
 the snoop logger streams to a socket consumer instead of rotating a file, and
 nothing is consuming it, so the file gets a header and no writes.
+
+### Attempt 3 on 2026-10-12 evening: the toggle is on, and there is no root
+
+Earlier notes in this file say "HCI snoop logging was never on". **That is
+wrong**, and it is wrong in a way that matters, because it stopped anyone
+looking further. Three separate checks now:
+
+**1. Developer options shows it enabled.** Settings → Developer options →
+*Enable Bluetooth HCI snoop log* → **Enabled**, and the sub-screen radio is on
+**Enabled** (full), not *Disabled* or *Enabled Filtered*. The AOSP toggle was
+genuinely flipped. `dumpsys bluetooth_manager` corroborates it in its enable
+history, which shows the toggle's own Bluetooth off/on cycle:
+
+```
+10-12 08:55:26.078  Package [android] requested to [Disable].
+10-12 08:55:34.267  Package [android] requested to [Enable].   (8 s later)
+```
+
+`Package [android]` is the system, not an app — that is the snoop toggle
+restarting the stack, and it is the same second the `.cfa` was created. So the
+log *was* opened deliberately. It recorded nothing anyway, which points at the
+sink, not at the switch.
+
+**2. The stack was denied a property at exactly that moment.** From the
+bugreport's own log:
+
+```
+08:55:34.684 auditd: denied { set } for property=vendor.bthcisnoop.running
+          pid=30690 uid=1002 gid=1002
+          scontext=u:r:bluetooth:s0 tcontext=u:object_r:vendor_default_prop:s0
+          permissive=0
+```
+
+twice, ~16 ms apart, from the `bluetooth` uid as the snoop logger came up. The
+log file is created at enable time and the logger is denied its vendor property
+there and then, leaving a header and no writes.
+
+**3. There is no root on this device, so none of the remaining levers exist.**
+
+| Command | Result |
+| :--- | :--- |
+| `adb root` | `adbd cannot run as root in production builds` |
+| `adb shell id` | `uid=2000(shell) groups=… net_bt_admin, net_bt …` |
+| `su -c …` | `su: inaccessible or not found` |
+| `ls /data/misc/bluetooth{,/logs,/../bluedroid}` | `Permission denied` |
+| `setprop persist.bluetooth.btsnoopenable true` | not reachable |
+
+An earlier note in this file took `adb` reporting itself rooted at face value.
+It is not — dumpstate inside `adb bugreport` runs as root and can read
+`/data/misc/bluetooth/`, which is the only reason any log has ever been seen.
+
+Note also `persist.bluetooth.btsnoopenable` is **empty** and
+`persist.bluetooth.btsnoopdefaultmode` is `disabled`, even though the UI says
+enabled. The UI writes `Settings.Global.bluetooth_hci_snoop_log_mode` (= `full`);
+the `persist.*` property is read at init and cannot be set without root. Do not
+treat `dumpsys` and the UI as redundant — here they genuinely disagree.
+
+`dumpsys bluetooth_manager` is not a substitute for the bonding database
+either: it masks the controller address (`XX:XX:XX:XX:27:54`) and exposes no
+bonded-device list to `shell`.
+
+**4. The decisive test: real traffic, forced flush, still nothing.** Ran our
+own app's unfiltered BLE scan for ~20 s (so the controller is genuinely
+exchanging HCI packets), then `adb shell svc bluetooth disable` — which is what
+forces the snoop logger to close and flush its file — and took a fresh
+`adb bugreport`. Result:
+
+```
+FS/data/misc/bluetooth/logs/BT_HCI_2026_1012_085534.cfa    16 bytes   08:55
+```
+
+That is the **same** 16-byte file from the morning, unchanged. No new log file
+was created at the flush, and the existing one was not appended to, despite
+real traffic and an explicit close. This settles it: on this build the snoop
+logger does not write the file sink at all, in any circumstance reachable
+without root. There is no further adb trick to find.
 
 **Conclusion: stop relying on OS-level snoop on this device.** The next route is
 capturing from inside our own app — `dev.tvsopen.log.Log` already hex-dumps
