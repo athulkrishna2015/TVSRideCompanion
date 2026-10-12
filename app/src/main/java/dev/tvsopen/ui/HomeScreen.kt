@@ -109,7 +109,7 @@ fun HomeScreen(
         // RidePrefs.resumeOnBoot and RidePrefs.rideMode to decide whether to
         // re-attach after a reboot, so with no toggle the resume path is dead
         // code that can never fire.
-        RideModeCard(rideMode, connected, onRideModeChange)
+        RideModeCard(rideMode, onRideModeChange)
 
         Spacer(Modifier.height(20.dp))
         SectionLabel("While riding")
@@ -466,7 +466,7 @@ private fun relativeTime(ms: Long): String {
 }
 
 @Composable
-private fun RideModeCard(enabled: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
+private fun RideModeCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
     ActionCard(
         background = LocalTilePalette.current.neutral,
         icon = Icons.AutoMirrored.Filled.DirectionsBike,
@@ -474,8 +474,14 @@ private fun RideModeCard(enabled: Boolean, connected: Boolean, onChange: (Boolea
         subtitle = if (enabled) "On \u2014 keeps the app active across a reboot"
         else "Off (auto-enables on ride)",
         trailing = {
+            // Deliberately NOT gated on `connected`. It used to be, which made
+            // it unreachable in the only state a new install can reach — no
+            // scooter, and no scan screen yet to find one — and BootReceiver
+            // decides the post-reboot resume from RidePrefs.rideMode. A toggle
+            // that cannot be flipped cannot set that flag, so the resume path
+            // was dead code dressed up as reachable UI.
             androidx.compose.material3.Switch(
-                checked = enabled, onCheckedChange = onChange, enabled = connected,
+                checked = enabled, onCheckedChange = onChange,
             )
         },
     )

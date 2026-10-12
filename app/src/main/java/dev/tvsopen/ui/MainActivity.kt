@@ -183,8 +183,8 @@ class MainActivity : AppCompatActivity() {
                                 RidePrefs.load(this@MainActivity).updateRideMode(on)
                                 Session.setRideMode(on)
                             },
-                            onOpenOverview = { tab = 3 },
-                            onOpenParked = { tab = 3 },
+                            onOpenOverview = { tab = 2 },
+                            onOpenParked = { tab = 2 },
                             onConnect = { send(RideService.ACTION_CONNECT) },
                         )
                     } else if (tab == 1) {
@@ -196,11 +196,13 @@ class MainActivity : AppCompatActivity() {
                             onDisconnect = onDisconnect,
                         )
                     } else if (tab == 2) {
-                        LogScreen()
-                    } else {
-                        // Tab 3 is the Overview. It was a nav item with no
-                        // destination, so tapping it showed nothing.
+                        // Must match the nav bar order: Home, More, Overview,
+                        // Log. These two destinations were swapped, so tapping
+                        // Overview rendered the log and tapping Log rendered
+                        // the dashboard.
                         OverviewScreen(telemetry = telemetry)
+                    } else {
+                        LogScreen()
                     }
                 }
             }
