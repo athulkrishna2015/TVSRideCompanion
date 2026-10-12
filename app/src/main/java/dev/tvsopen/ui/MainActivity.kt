@@ -133,6 +133,12 @@ class MainActivity : AppCompatActivity() {
                         NavigationBarItem(
                             selected = tab == 2,
                             onClick = { tab = 2 },
+                            icon = { Icon(Icons.Filled.Speed, contentDescription = "Overview") },
+                            label = { Text("Overview") },
+                        )
+                        NavigationBarItem(
+                            selected = tab == 3,
+                            onClick = { tab = 3 },
                             icon = { Icon(Icons.AutoMirrored.Filled.Article, contentDescription = "Log") },
                             label = { Text("Log") },
                         )
@@ -146,7 +152,6 @@ class MainActivity : AppCompatActivity() {
                             hud = hud,
                             connection = connection,
                             parked = parked,
-                            rideMode = rideMode,
                             findMyEnabled = findMy,
                             navMirroring = navMirroring,
                             onFindMyChange = { on ->

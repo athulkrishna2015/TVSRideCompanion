@@ -28,3 +28,9 @@ wrapper.log
 # docs/, not in a redirect of stdout. Root-scoped so a deliberate capture
 # elsewhere in the tree is not silently swallowed.
 /*.log
+
+# Decompiled vendor code (see research/vendor/README.md). Expensive to
+# regenerate — hours of CPU on a 2-core budget — so it is kept on disk but
+# never committed. The two APKs it came from live in the parent folder and
+# are referenced by SHA-256 in research/SOURCES.md.
+research/vendor/

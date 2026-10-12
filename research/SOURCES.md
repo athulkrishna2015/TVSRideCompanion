@@ -12,6 +12,19 @@ Everything this project is derived from, and what each source contributed.
 Both are read-only inputs and stay in the parent directory. They are not
 redistributed in this repo.
 
+### Preserved analysis inputs: `research/vendor/`
+
+The decompilations of both APKs, the trimmed APK used for REA queries, and the
+extracted Ntorq manual text are kept on disk under `research/vendor/` —
+**gitignored**, because hours of 2-core decompilation are expensive to repeat
+and because it is other people's proprietary code. See
+`research/vendor/README.md` for the manifest, sizes and exact regeneration
+commands.
+
+What lives in the repo are the *conclusions* drawn from them, recorded with
+provenance in `docs/PROTOCOL.md` and `docs/NAVIGATION.md`, so those survive the
+directory being lost.
+
 ### `ref/` — TVS's own Ntorq 125 documentation (gitignored)
 
 Held in the untracked `ref/` folder, not redistributed here.

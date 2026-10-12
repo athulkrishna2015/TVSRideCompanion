@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
@@ -48,15 +47,14 @@ import dev.tvsopen.ui.theme.smallTile
 /**
  * Dashboard.
  *
- * Layout adapted from `overclock98/JupiterRideCompanion` (CC BY-NC 4.0): two
- * large tiles over three small ones, then stacked action cards. The differences
- * are deliberate, not oversights:
+ * Card navigation rather than a wall of values: connect, then the two places
+ * there is something to read. Mirrors the official TVS app's Ntorq dashboard,
+ * minus everything that is cloud-backed (ride history, ride modes, the server
+ * "last parked" pin) because this app has no account and no network.
  *
- *  - No TVS or Jupiter branding anywhere. That app's header carries the TVS logo
- *    and the model name; we keep the structure and substitute our own identity,
- *    because this project is unaffiliated and serves more than one model.
- *  - The navigation strip is ours and has no counterpart there.
- *  - Ride Mode and Last Parked are gated on a live link instead of being faked.
+ * Layout shape adapted from `overclock98/JupiterRideCompanion` (CC BY-NC 4.0),
+ * with no TVS or Jupiter branding — that project is the Jupiter's companion,
+ * this one is unaffiliated and model-universal.
  *
  * Every absent value renders as an em dash. A `0` would be a lie: it would mean
  * the UI had invented a reading rather than reporting that nothing arrived.
@@ -67,12 +65,13 @@ fun HomeScreen(
     hud: HudState,
     connection: ConnectionState1,
     parked: ParkedInfo?,
-    rideMode: Boolean,
     findMyEnabled: Boolean,
     navMirroring: Boolean,
     onFindMyChange: (Boolean) -> Unit,
     onNavMirrorChange: (Boolean) -> Unit,
-    onRideModeChange: (Boolean) -> Unit,
+    onOpenOverview: () -> Unit,
+    onOpenParked: () -> Unit,
+    onConnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val connected = connection.state == ConnectionState.CONNECTED
@@ -90,64 +89,26 @@ fun HomeScreen(
             NavigationStrip(hud)
         }
 
-        Spacer(Modifier.height(16.dp))
-        SectionLabel("Telemetry")
+        Spacer(Modifier.height(20.dp))
+        SectionLabel("Your scooter")
 
-        // Only values the cluster is documented to display. See ClusterTiles for
-        // why range and fuel economy are absent.
-        val tiles = ClusterTiles.forModel(connection.model)
-        val large = tiles.take(2)
-        // No `.take()` on the remainder: everything after the large pair is
-        // rendered, wrapped onto as many rows as it needs. Truncating to three
-        // silently dropped Service, which is a real cluster element.
-        val small = tiles.drop(2)
-
+        // Card navigation rather than a value grid, mirroring the official app's
+        // dashboard. The values live on the Overview tab where they belong.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            large.forEachIndexed { i, spec ->
-                val (value, unit) = ClusterTiles.format(telemetry, spec.value)
-                LargeTile(
-                    Modifier.weight(1f),
-                    spec.icon,
-                    value,
-                    unit,
-                    spec.label,
-                    if (i == 0) LocalTilePalette.current.largeLeft
-                    else LocalTilePalette.current.largeRight,
-                )
-            }
+            NavCard(Modifier.weight(1f), Icons.Filled.Speed, "Overview", onOpenOverview)
+            NavCard(Modifier.weight(1f), Icons.Filled.Place, "Last parked", onOpenParked)
         }
-
-        if (small.isNotEmpty()) {
-            // Chunk into rows of three rather than taking exactly three. A
-            // silent `.take(3)` dropped the Service tile — a real cluster
-            // element — purely because it happened to be sixth in the list.
-            small.chunked(3).forEachIndexed { rowIndex, chunk ->
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    chunk.forEachIndexed { i, spec ->
-                        val (value, unit) = ClusterTiles.format(telemetry, spec.value)
-                        SmallTile(
-                            Modifier.weight(1f), spec.icon, value, unit, spec.label,
-                            rowIndex * 3 + i,
-                        )
-                    }
-                    // Hold a partial row's tiles at the same width as a full
-                    // row's instead of letting them stretch.
-                    repeat(3 - chunk.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
-        }
+        Spacer(Modifier.height(12.dp))
+        ConnectCard(connected, connection.state.label, onConnect)
 
         Spacer(Modifier.height(20.dp))
-        SectionLabel("Vehicle")
+        SectionLabel("While riding")
 
         MirrorNavCard(navMirroring, hud, onNavMirrorChange)
         Spacer(Modifier.height(12.dp))
-        LastParkedCard(parked)
-        Spacer(Modifier.height(12.dp))
-        RideModeCard(rideMode, connected, onRideModeChange)
-        Spacer(Modifier.height(12.dp))
         FindMyCard(findMyEnabled, onFindMyChange)
+        Spacer(Modifier.height(12.dp))
+        LastParkedCard(parked)
 
         // Telemetry freshness is the number that actually tells you whether the
         // link is alive. The frame counter belongs in the Log tab, not here.
@@ -156,6 +117,83 @@ fun HomeScreen(
         LinkCard(telemetry)
 
         Spacer(Modifier.height(28.dp))
+    }
+}
+
+@Composable
+private fun NavCard(
+    modifier: Modifier,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier.height(104.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        onClick = onClick,
+    ) {
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/**
+ * The connection card.
+ *
+ * Honest about state: says "Not connected" rather than pretending a scan is
+ * running, because there is no scan screen yet and the button reconnects to
+ * the last known cluster.
+ */
+@Composable
+private fun ConnectCard(connected: Boolean, stateLabel: String, onClick: () -> Unit) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = LocalTilePalette.current.accent,
+        onClick = onClick,
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Bluetooth,
+                contentDescription = null,
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (connected) "Connected" else "Connect",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    if (connected) "Using Bluetooth" else stateLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -228,105 +266,7 @@ private fun Pill(text: String, on: Boolean) {
     }
 }
 
-@Composable
-private fun LargeTile(
-    modifier: Modifier,
-    icon: ImageVector,
-    value: String,
-    unit: String,
-    label: String,
-    background: Color,
-) {
-    Surface(
-        modifier.height(168.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = background,
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(30.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    value,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                )
-                if (unit.isNotEmpty()) {
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        unit,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 5.dp),
-                    )
-                }
-            }
-            Text(
-                label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
-}
 
-@Composable
-private fun SmallTile(
-    modifier: Modifier,
-    icon: ImageVector,
-    value: String,
-    unit: String,
-    label: String,
-    index: Int,
-) {
-    Surface(
-        modifier.height(130.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = smallTile(index),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    value,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                )
-                if (unit.isNotEmpty()) {
-                    Spacer(Modifier.width(3.dp))
-                    Text(
-                        unit,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 3.dp),
-                    )
-                }
-            }
-            Text(
-                label,
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-            )
-        }
-    }
-}
 
 /**
  * The headline feature, so it sits above the rest of the vehicle cards and
@@ -381,19 +321,6 @@ private fun LastParkedCard(parked: ParkedInfo?) {
     )
 }
 
-@Composable
-private fun RideModeCard(enabled: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
-    ActionCard(
-        background = LocalTilePalette.current.neutral,
-        icon = Icons.AutoMirrored.Filled.DirectionsBike,
-        title = "Ride Mode",
-        subtitle = if (enabled) "On — keeps the app active"
-        else "Off (auto-enables on ride)",
-        trailing = {
-            Switch(checked = enabled, onCheckedChange = onChange, enabled = connected)
-        },
-    )
-}
 
 @Composable
 private fun FindMyCard(enabled: Boolean, onChange: (Boolean) -> Unit) {

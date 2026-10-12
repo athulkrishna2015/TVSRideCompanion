@@ -41,7 +41,27 @@ data class Telemetry(
     val engineTempC: Int? = null,         // SM4 idx 8
     val batteryVoltage: Int? = null,      // SM4 idx 11
     val lastFrameAt: Long = 0L,
+    /**
+     * Odometer reading when this link was established.
+     *
+     * The official app shows "Connected Distance" on its Vehicle Overview, but
+     * that is computed server-side from ride records. We have no cloud, so this
+     * is the same number done locally: odometer now minus odometer at connect.
+     */
+    val odometerAtConnectKm: Double? = null,
 ) {
+    /**
+     * Distance travelled on this connection, or null when it cannot be known —
+     * either no odometer yet, or the bike appears to have gone backwards
+     * (a reset or a cluster swap), which must not report as a negative ride.
+     */
+    fun connectedDistanceKm(): Double? {
+        val start = odometerAtConnectKm ?: return null
+        val now = odometerKm ?: return null
+        val d = now - start
+        return if (d >= 0) d else null
+    }
+
     /** No frames for this long means the link is stale, not merely idle. */
     fun isFresh(now: Long = System.currentTimeMillis()): Boolean =
         lastFrameAt > 0 && now - lastFrameAt < STALE_AFTER_MS
@@ -111,6 +131,43 @@ object Session {
     private val _rideMode = MutableStateFlow(false)
     val rideMode: StateFlow<Boolean> = _rideMode.asStateFlow()
 
+    /**
+     * Local ride log, created once the Activity supplies a Context.
+     *
+     * Nullable rather than injected so `Session` stays usable from a
+     * BroadcastReceiver that has no Activity to construct it with.
+     */
+    @Volatile
+    private var rideLog: RideLog? = null
+
+    private val _rides = MutableStateFlow<List<Ride>>(emptyList())
+    val rides: StateFlow<List<Ride>> = _rides.asStateFlow()
+
+    private val _totalRides = MutableStateFlow(0)
+    val totalRides: StateFlow<Int> = _totalRides.asStateFlow()
+
+    private val _totalRideDistanceKm = MutableStateFlow(0.0)
+    val totalRideDistanceKm: StateFlow<Double> = _totalRideDistanceKm.asStateFlow()
+
+    fun attachRideLog(context: android.content.Context) {
+        if (rideLog != null) return
+        synchronized(this) {
+            if (rideLog != null) return
+            val log = RideLog(context)
+            rideLog = log
+            _rides.value = log.rides.value
+            _totalRides.value = log.totalRides
+            _totalRideDistanceKm.value = log.totalDistanceKm
+        }
+    }
+
+    /** Keep the open ride's distance in step with the odometer. */
+    private fun trackRideDistance() {
+        val log = rideLog ?: return
+        log.update(connectedDistanceKm() ?: 0.0)
+        _rides.value = log.rides.value
+    }
+
     fun setRideMode(on: Boolean) { _rideMode.value = on }
 
     fun onParked(info: ParkedInfo) { _parked.value = info }
@@ -121,6 +178,24 @@ object Session {
     }
 
     fun onConnection(state: ConnectionState, model: VehicleModel, address: String?) {
+        val previous = _connection.value
+        val wasConnected = previous.state == ConnectionState.CONNECTED
+        val isConnected = state == ConnectionState.CONNECTED
+
+        // Stamp the odometer baseline on the first frame after a connect, so
+        // "Connected Distance" is measured from the start of this link.
+        if (isConnected && !wasConnected) {
+            _telemetry.value = _telemetry.value.copy(
+                odometerAtConnectKm = _telemetry.value.odometerKm,
+            )
+            rideLog?.start()
+        }
+        if (!isConnected && wasConnected) {
+            rideLog?.finish()
+            _totalRides.value = rideLog?.totalRides ?: _totalRides.value
+            _totalRideDistanceKm.value = rideLog?.totalDistanceKm ?: _totalRideDistanceKm.value
+        }
+
         _connection.value = ConnectionState1(state, model, address)
     }
 
@@ -162,7 +237,7 @@ object Session {
                 tripFMeters = scaled(Field.TRIP_F_METER, 10.0)?.toInt() ?: cur.tripFMeters,
                 engineRpm = frame.field(Field.ENGINE_RPM)?.toInt() ?: cur.engineRpm,
                 lastFrameAt = now,
-            )
+            ).also { trackRideDistance() }
 
             0x11 -> cur.copy(
                 serviceDue = (frame.field(Field.SERVICE_REMINDER)?.toInt()?.let { it != 0 })

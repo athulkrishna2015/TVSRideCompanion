@@ -70,12 +70,97 @@ tools/capture-hci.sh check      # is logging on, and is there a log yet?
 tools/capture-hci.sh enable     # set the keys, open Developer options
 tools/capture-hci.sh watch 120  # poll size while you reconnect
 tools/capture-hci.sh pull       # save to captures/, gitignored
+tools/auto-capture.sh 1800      # wait for the scooter, then dump automatically
 tools/decode-snoop.py <file> --frames
 ```
 
 `decode-snoop.py` turns the binary into one line per ATT packet with
 direction, handle, opcode name and a `<5A>`-style tag for SmartXonnect frames,
 so `--frames` reduces a multi-megabyte capture to just the protocol traffic.
+
+### Enabling snoop by adb — the Bluetooth cycle is the part that matters
+
+Settled 2026-10-12. Both settings keys can be written and read back
+successfully, and **that proves nothing**: the Bluetooth stack only samples
+them when it initialises, so the log silently never starts. Observed:
+
+```
+before:  sSnoopLogSettingAtEnable = EMPTY
+         settings get global bluetooth_hci_log  ->  1      (already set!)
+
+adb shell svc bluetooth disable && sleep 8 && adb shell svc bluetooth enable
+
+after:   sSnoopLogSettingAtEnable = FULL
+```
+
+So the working recipe, entirely by adb, without touching Developer options:
+
+```bash
+adb shell settings put global bluetooth_hci_log 1
+adb shell settings put global bluetooth_hci_snoop_log_mode full
+adb shell svc bluetooth disable && sleep 8 && adb shell svc bluetooth enable
+sleep 12
+adb shell dumpsys bluetooth_manager | grep sSnoopLogSettingAtEnable   # FULL = good
+```
+
+Verify with `sSnoopLogSettingAtEnable`, **never** with the settings key — the
+key reads `1` whether or not anything is recording.
+
+### Reading the log on Android 15 without root
+
+Once `FULL` is set, the capture is written to `/data/misc/bluetooth/logs/`,
+which `adb shell` cannot read — permission denied, and the directory does not
+exist under any `/sdcard` path on this build. `find /sdcard -iname '*btsnoop*'`
+returns nothing.
+
+That leaves `adb bugreport` as the only no-root route:
+
+```bash
+adb bugreport captures/bugreport-$(date +%s).zip      # 2-5 min, several hundred MB
+unzip -l captures/bugreport-*.zip | grep -i snoop     # the path varies by build
+unzip -o -j captures/bugreport-*.zip '*btsnoop_hci.log*' -d captures/
+tools/decode-snoop.py captures/btsnoop_hci.log --frames
+```
+
+### Attempt 2 on 2026-10-12: capture obtained, and it is empty
+
+The dump worked and the file was there, but it contains **zero records**:
+
+```
+FS/data/misc/bluetooth/logs/BT_HCI_2026_1012_085534.cfa    16 bytes
+
+00000000: 6274 736e 6f6f 7000 0000 0001 0000 03ea  btsnoop.........
+```
+
+Those sixteen bytes are the btsnoop header and nothing else — magic
+`btsnoop\0`, version 1, datalink `0x03EA` (1002, HCI UART H4) — and not one
+packet. Note the extension is `.cfa`, a Qualcomm convention, while the
+*contents* are still standard btsnoop: `decode-snoop.py` parses it without
+complaint and correctly reports zero. The fault is upstream of the parser.
+
+TVS Connect's live dashboard was foregrounded throughout (pid 25037,
+`U458LiveDashboardActivity`), so traffic should have existed.
+
+Tried and ruled out:
+
+| Attempt | Result |
+| :--- | :--- |
+| `settings put global bluetooth_hci_snoop_log_mode full` | writable, no effect on its own |
+| `svc bluetooth disable`/`enable` to force re-init | flipped `sSnoopLogSettingAtEnable` `EMPTY` → `FULL`, still zero records |
+| `setprop persist.vendor.bluetooth.btsnooplogmode` | **failed**, needs root |
+| `persist.device_config.aconfig_flags.bluetooth.INIT_gd_hal_snoop_logger_{socket,filtering}` | both `true` — the stack uses a **socket** snoop sink, not a file |
+| Oplus `init.svc.olc_get_bt_hci_log` / `countCachedHciLog` | both `stopped`, no binary under `/system/bin` or `/vendor/bin` |
+| `persist.sys.oplus.bt.cache_hcilog_*` | a separate Oplus HCI cache exists (`mode=1`, `allow_all_devices=1`) but exposes no adb entry point |
+
+`INIT_gd_hal_snoop_logger_socket=true` is the likely explanation: on this build
+the snoop logger streams to a socket consumer instead of rotating a file, and
+nothing is consuming it, so the file gets a header and no writes.
+
+**Conclusion: stop relying on OS-level snoop on this device.** The next route is
+capturing from inside our own app — `dev.tvsopen.log.Log` already hex-dumps
+every frame in and out, and the app can hold the GATT link itself. That is
+strictly better for our purposes: the trigger order is ours to choose, and it
+needs neither root nor a working snoop sink.
 
 Then: start TVS Connect, pair, ride, trigger in order —
 

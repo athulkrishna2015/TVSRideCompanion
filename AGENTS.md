@@ -250,3 +250,30 @@ ui/          Compose screens (Home, More, Log)
 ```
 
 No Gradle daemon left running after a build. Always `--no-daemon`.
+## Preserved analysis inputs
+
+`research/vendor/` holds the decompiled vendor code, the trimmed APK used for
+REA queries, and the extracted Ntorq manual text. **Gitignored** — it is other
+people's proprietary code and hours of 2-core decompilation. `AGENTS.md`-level
+rule: never `git add -f` it.
+
+If `/tmp` is cleared, restore it with the commands in
+`research/vendor/README.md`; both source APKs remain in the parent folder.
+
+## Capture tooling
+
+`tools/` holds the HCI capture and decode scripts. `make-snoop-fixture.py`
+generates a synthetic btsnoop with a known answer, because the real captures are
+gitignored and the decoder would otherwise have no test. Run it after any change
+to `decode-snoop.py`:
+
+```bash
+tools/make-snoop-fixture.py /tmp/fx.log && tools/decode-snoop.py /tmp/fx.log
+# expect: 3 ATT packets (1 in, 2 out), 2 rows tagged <5A>
+```
+
+**OS-level HCI snoop does not work on this phone.** The log is created with a
+header and zero records, because the build uses a socket snoop sink
+(`INIT_gd_hal_snoop_logger_socket=true`) that nothing consumes. Full diagnosis
+and the ruled-out list are in `docs/CAPTURE.md`. Capture from inside our own
+app instead — `dev.tvsopen.log.Log` already captures every frame.

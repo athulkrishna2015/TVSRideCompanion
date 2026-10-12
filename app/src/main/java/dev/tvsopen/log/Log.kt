@@ -131,9 +131,16 @@ object Log {
                 val f = File(dir, "tvsride.log")
                 if (f.exists() && f.length() > FILE_MAX_BYTES) rotate(dir)
                 fileDir = dir
-                // File.writer takes no `append` flag; append mode comes from the
-                // FileWriter(file, true) constructor.
-                writer = PrintWriter(java.io.BufferedWriter(java.io.FileWriter(f, true)))
+                // autoFlush: PrintWriter flushes on every println(). Without it
+                // the sink only reached disk every FLUSH_EVERY records, and a
+                // normal session writes two or three — so force-stopping the
+                // app discarded exactly the records you open the log to read.
+                // One write() per line is nothing next to a 2 Hz BLE frame, and
+                // "the file always matches what happened" is the whole point.
+                writer = PrintWriter(
+                    java.io.BufferedWriter(java.io.FileWriter(f, true)),
+                    true,
+                )
                 fileBytes = f.length()
             }.onFailure { v("log", "file sink unavailable: ${it.message}") }
         }
@@ -225,13 +232,17 @@ object Log {
                         // used to orphan it, leaking a descriptor per rotation.
                         runCatching { w.close() }
                         writer = PrintWriter(
-                            java.io.BufferedWriter(java.io.FileWriter(File(fileDir!!, "tvsride.log"), true)),
+                            java.io.BufferedWriter(
+                                java.io.FileWriter(File(fileDir!!, "tvsride.log"), true),
+                            ),
+                            true,
                         )
                         fileBytes = 0
                         sinceFlush = 0
                     } else if (sinceFlush >= FLUSH_EVERY) {
-                        // Without this, a kill -9 loses the buffer and the whole
-                        // point of the file sink — surviving a crash — is lost.
+                        // Redundant now that the writer auto-flushes, but kept
+                        // as a belt-and-braces flush: a caller could swap in a
+                        // non-auto-flushing writer via enableFileSink.
                         w.flush()
                         sinceFlush = 0
                     }
