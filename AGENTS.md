@@ -106,8 +106,22 @@ android layout -p
 android screen resolve --screenshot=annotated.png --string='tap #3'
 ```
 
-Device is 1080x2400. The bottom nav tabs sit at roughly y=2199, x=170 (Home),
-x=540 (More), x=903 (Log) if you need to `adb shell input tap`.
+Device is 1080x2400. The bottom nav tabs sit at y=2199, and with four items
+across 1080 each is 270 wide, so tap the **centre** of the one you want:
+
+| tab | x |
+| --- | --- |
+| Home | 135 |
+| More | 405 |
+| Overview | 675 |
+| Log | 945 |
+
+`x=540` is the seam between More and Overview and registers on neither. This
+cost a round of "the More tab is broken" that was really a mis-aimed tap.
+
+`android layout -p` dumps whichever window has focus, which is often `systemui`
+rather than our app. If the output has no `tvsopen` nodes, check focus before
+trusting the bounds.
 
 ### Expected behaviour with no scooter
 
@@ -210,7 +224,26 @@ All of these cost a real build cycle. Check for them before blaming the toolchai
 - **A `connectedDevice` foreground service needs Bluetooth permissions
   *granted*, not merely declared.** Calling `startForeground` before the runtime
   permission dialog is answered throws `SecurityException` and kills the
-  process. Degrade to a plain notification and retry once connected.
+  process. Check before starting the service; degrade in the service.
+- **`startForeground` on a channel that does not exist kills the process, and
+  `try`/`catch` cannot stop it.** The failure arrives as
+  `CannotPostForegroundServiceNotificationException: Bad notification for
+  startForeground`, posted *by the system* to the app's main thread via
+  `throwRemoteServiceException` — not thrown from your call site, so it lands
+  outside any handler around `startForeground`. This bit us because the channel
+  was only created as a side effect of `notify()`, and `notify()` had never run
+  because no connection had ever completed. `buildNotification()` now calls
+  `ensureChannel()` itself: anything that builds a notification must be able to
+  post it, and a notification that was never posted is invisible in testing
+  until the moment it kills the app.
+- **The in-app log file lags logcat.** The file sink flushes every 16 records,
+  so a just-started service can be "missing" from `files/logs/tvsride.log` while
+  `adb logcat -d | grep TVSRide/` already shows it. This produced a false "the
+  auto-connect never fires" conclusion. Check logcat before concluding that
+  something did not run.
+- **`pkill -f GradleDaemon` kills its own shell.** `pkill -f` matches the whole
+  command line, and the line running it contains the pattern. Use a bracket:
+  `pkill -f "Gradle[D]aemon"`.
 - **Icons used by this app are deprecated in Material 3** (`Article`,
   `DirectionsBike`). Use the `AutoMirrored` variants; the build is warning-clean
   by policy and these are the only warnings it produced.
