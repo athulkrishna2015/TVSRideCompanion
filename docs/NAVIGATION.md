@@ -35,8 +35,38 @@ For Google Maps the payload of interest is:
 - `EXTRA_LARGE_ICON` — the maneuver bitmap, when the provider supplies one
 - `EXTRA_BIG_TEXT` / ongoing notification text — distance and ETA
 
+### The above is wrong for Google Maps — measured, not assumed
+
+Recorded from a live navigation on an Android 15 phone, 2026-10-12:
+
+| Extra | Actual value |
+| :--- | :--- |
+| `EXTRA_TITLE` | `"550 m"` — **the distance**, not a maneuver |
+| `EXTRA_TEXT` | `"Example Road"` — the street |
+| `EXTRA_BIG_TEXT` | `""` — empty, despite being documented above as holding distance |
+| `EXTRA_SUB_TEXT` | `"6 hr 21 min · 307 km · 4:34 AM ETA"` |
+
+So the distance is in the title and nowhere else, and the ETA is a *duration
+with extra units*, not a clock. `EXTRA_LARGE_ICON` is not supplied, so
+`pictogram` resolves from the wording instead, via `ManeuverResolver`.
+
+Every consequence of getting this wrong is silent: `distanceMeters` stays at its
+`-1` sentinel, the UI falls back to its no-distance branch, and a title of
+`"550 m"` gets displayed where a turn instruction belongs. All of it still
+*looks* like a working navigation. `NavParsing` handles both the observed
+Google shape and the conventional one, and `NavParsingTest` pins both — see
+`app/src/main/java/dev/tvsopen/nav/NavParsing.kt`.
+
+One provider behaviour is worth recording on its own: **Google Maps cancels its
+own navigation notification and reposts it**, roughly 9–13 seconds apart,
+depending on whether the route is actively guiding. Clearing the HUD the instant
+a notification is removed therefore blanked the cluster mid-journey. Removal is
+debounced by 12 s and a repost cancels the pending clear — a period chosen from
+those observed gaps, not from a guess.
+
 MapMyIndia (also present in the official APK) posts its own shape; Organic Maps
-follows the Android navigation notification convention.
+follows the Android navigation notification convention. Neither has been observed
+on hardware, so both are still assumptions.
 
 The official app bundles Mappls (`com.mappls.*`) — that is the *server-side*
 turn engine and needs an API key, so it is out of scope here.
