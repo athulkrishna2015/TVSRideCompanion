@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -172,11 +173,15 @@ private fun NavCard(
  */
 @Composable
 private fun ConnectCard(connected: Boolean, stateLabel: String, onClick: () -> Unit) {
+    // Both named, neither positional: the clickable Surface overload takes
+    // `onClick` first, so a leading positional Modifier binds to it and no
+    // overload matches — which then cascades into "invocations can only happen
+    // from the context of a @Composable function" on the content lambda.
     Surface(
-        Modifier.fillMaxWidth(),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         color = LocalTilePalette.current.accent,
-        onClick = onClick,
     ) {
         Row(
             Modifier.padding(16.dp),

@@ -153,6 +153,7 @@ class MainActivity : AppCompatActivity() {
                             hud = hud,
                             connection = connection,
                             parked = parked,
+                            rideMode = rideMode,
                             findMyEnabled = findMy,
                             navMirroring = navMirroring,
                             onFindMyChange = { on ->
