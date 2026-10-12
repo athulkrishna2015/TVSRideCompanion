@@ -32,7 +32,26 @@ would not start (§1a). The app can now capture the inbound half on its own, and
 it is the first thing to try because it needs no Developer options, no Bluetooth
 cycle and no root.
 
-**With the ignition on:**
+**Getting the console into pair mode first.** This section used to say only
+"with the ignition on", from reading TVS's manual as describing pair mode as
+battery-side. It does describe it that way, but that is not the only way in,
+and it is the slower of the two:
+
+| Route | Source | Notes |
+| :--- | :--- | :--- |
+| **Ignition on, hold MODE ~5 s** | The manual's mode table has a *Long Press (5 secs) MODE Button* column; community accounts of pairing describe the same | Console shows **"BT Pair"**. Try this first — no tools, no battery access |
+| Disconnect the battery, reconnect it | The manual lists this explicitly, beside two other automatic triggers | The fallback, for variants where the button does nothing |
+
+That mode table is a two-column figure and the PDF text extraction garbles it:
+`Long Press (5 secs) MODE Button` arrives interleaved with the neighbouring
+column, which is how it stayed unrecorded for so long. The other two automatic
+triggers in that column are a blown vehicle fuse replaced, and an electric start
+on a low state of charge.
+
+The cluster advertises for a **short window** once it is in pair mode, so have
+the scan ready before you press the button.
+
+**With the cluster in pair mode:**
 
 1. Home → **Connect**. The scan filters on the SmartXonnect service UUID
    `5456534D-5647-5341-5342-454E544F5251` for 20 s.
