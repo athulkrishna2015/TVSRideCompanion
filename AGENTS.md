@@ -106,19 +106,35 @@ artifact is attached to every run, so this works for any commit — you do not
 need a tag. Only `v*` tags and manual dispatches also publish to a GitHub
 Release.
 
-**Always `adb install`, never `adb install -r`, for a CI-built APK.** Each CI
-run signs with *that runner's* debug key, so a CI APK is not upgrade-compatible
-with any other CI APK, nor with a locally-built one:
+**A CI-built APK is signed with the project key** (below), so `adb install -r`
+upgrades in place. That only became true once the keystore was created; an app
+installed from a pre-key build has a different signature and needs
+`adb uninstall` once.
+
+Verify who signed an APK with `apksigner`, **not** `keytool`:
+
+```bash
+$(ls -d ~/Android/Sdk/build-tools/*/apksigner | sort -V | tail -1) \
+  verify --print-certs app-debug.apk
+```
+
+`keytool -printcert -jarfile` prints nothing useful here. APK Signature Scheme
+v2/v3 certificates live outside `META-INF`, so the JAR-cert path simply finds no
+cert and exits quietly — which looks like a broken APK rather than a tool
+reaching for the wrong format.
+
+Expected signer, so a downloaded APK can be checked against this repo:
 
 ```
-Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.tvsopen
-signatures do not match newer version; ignoring!]
+CN=TVSRideCompanion, OU=dev.tvsopen, O=TVSRide, L=NA, ST=NA, C=IN
+SHA-256 089a702ffddf65e89aa9c29b2b289e896bf54b55b4e652977368988bfb687030
 ```
 
-That reads like a broken artifact; it is just a different debug keystore. The
-fix is `adb uninstall dev.tvsopen` first, which also wipes the log file and
-prefs. Everything in `files/logs/` is a debug artefact and is cheap to lose —
-but pull it first if a session's frames matter.
+The keystore itself is **not in the repository**. It lives in `~/tvs-signing/`
+and reaches CI only as the `TVS_KEYSTORE_B64` secret. Back it up: if it is
+lost, an installed app can never be updated again, only uninstalled, which
+discards its settings and log. `key.properties`, `*.jks` and `*.keystore` are
+gitignored as a backstop for a local build that writes them into the tree.
 
 To check the result without guessing:
 
