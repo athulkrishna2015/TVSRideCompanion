@@ -335,7 +335,14 @@ private fun DeviceRow(
                 Column(horizontalAlignment = Alignment.End) {
                     Text("${device.rssi} dBm", style = MaterialTheme.typography.bodySmall)
                     Text(
-                        if (device.isSmartXonnect) "SmartXonnect" else "not a cluster",
+                        when {
+                            device.byServiceUuid -> "SmartXonnect"
+                            // Name-only. Saying "SmartXonnect" here would be a
+                            // claim we cannot back: the service UUID was absent
+                            // from the advertisement, so this is a guess.
+                            device.byName -> "likely cluster (name only)"
+                            else -> "not a cluster"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -399,6 +406,9 @@ private fun DeviceRow(
  * and GenericDriver still streams raw frames for capture.
  */
 private val CHOICES = listOf(
+    // The owner's bike, corrected 2026-10-13 — it was previously absent and the
+    // picker defaulted to the 150, so every connection named the wrong vehicle.
+    VehicleModel.NTORQ_125_RACE,
     VehicleModel.NTORQ,
     VehicleModel.RAIDER_125,
     VehicleModel.RAIDER_180,

@@ -163,9 +163,16 @@ class RideService : android.app.Service() {
         // granted, so the foreground notification can go up properly.
         enterForeground()
         val transport = ble ?: ScooterBleService(applicationContext).also { ble = it }
-        val driver = when (model) {
-            VehicleModel.NTORQ -> NtorqDriver()
-            else -> DriverRegistry.forModel(model)
+        // Driven by `sharesNtorqProtocol()`, not by listing models here. This
+        // used to special-case `VehicleModel.NTORQ` and defer everything else to
+        // the registry, which is a second list that has to agree with the one
+        // `Nucleus` registers from — and it silently did not when the Ntorq 125
+        // Race was added, because a miss here means the generic profile and a
+        // dashboard full of `—` rather than an error. One source of truth.
+        val driver = if (model.sharesNtorqProtocol()) {
+            NtorqDriver()
+        } else {
+            DriverRegistry.forModel(model)
         }
         val b = NavigationBridge(transport, scope, driver)
         bridge = b

@@ -16,6 +16,22 @@ enum class VehicleModel(
     /** Cluster size class, used to pick sensible default layouts. */
     val display: Display = Display.STANDARD,
 ) {
+    /**
+     * The owner's own vehicle, corrected 2026-10-13.
+     *
+     * It was being shown as "Ntorq 150 (SX)" — the entry below — because the
+     * enum had no 125 variant, so every screen and the stored preference named
+     * a bike the rider does not own. The *wire protocol is unchanged*: this
+     * shares `NtorqBLEConnectionConfig` exactly as [sharesNtorqProtocol]
+     * describes, and the byte offsets were already corroborated against this
+     * cluster from a photograph of its display (`docs/NAVIGATION.md`). So this
+     * is a naming fix, not a new frame table.
+     *
+     * [display] is [Display.STANDARD] because the 125 carries a smaller TFT than
+     * the 150. Nothing reads [display] yet, so treat that as provisional — it is
+     * a label for the layout defaults that will consume it.
+     */
+    NTORQ_125_RACE("ntorq125race", "Ntorq 125 Race"),
     NTORQ("ntorq", "Ntorq 150 (SX)", Display.LARGE_TFT),
     JUPITER_110("jupiter110", "Jupiter 110"),
     JUPITER_125("jupiter125", "Jupiter 125"),
@@ -45,7 +61,8 @@ enum class VehicleModel(
      * `protocol/raider` only adds `5A54ACK`/`5A6B`/`5A9D` frames — a
      * superset, not a separate protocol. So the Ntorq driver serves Raider too.
      */
-    fun sharesNtorqProtocol(): Boolean = this == NTORQ || this == RAIDER_125 || this == RAIDER_180
+    fun sharesNtorqProtocol(): Boolean =
+        this == NTORQ || this == NTORQ_125_RACE || this == RAIDER_125 || this == RAIDER_180
 
     companion object {
         /**

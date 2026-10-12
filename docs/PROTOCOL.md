@@ -1,4 +1,4 @@
-# SmartXonnect BLE protocol — Ntorq 150 (SX)
+# SmartXonnect BLE protocol — Ntorq (125 / 150)
 
 **Status: largely UNVERIFIED for the Ntorq.** Everything below is either
 (a) transcribed from the Jupiter reverse-engineering report in the parent folder,

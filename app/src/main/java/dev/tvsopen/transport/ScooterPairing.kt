@@ -164,17 +164,35 @@ class ScooterPairing(private val context: Context) {
     }
 
     /**
-     * How to put the vehicle into pair mode, from TVS's Ntorq manual.
+     * How to put the vehicle into pair mode.
      *
-     * These are vehicle-side actions. Nothing the phone does can substitute,
-     * which is why the UI shows them rather than offering a retry button that
-     * would fail identically.
+     * Two documented routes, in the order to try them.
+     *
+     * **Long-press MODE (5 s) — try this first.** TVS's own Ntorq manual shows
+     * it: the mode table carries a *Long Press (5 secs) MODE Button* column next
+     * to the short-press one. Community sources describe the same thing from the
+     * switchgear — ignition on, hold MODE for 3–5 s, and the cluster screen
+     * reads "BT Pair". No tools, no battery access, so it is the obvious first
+     * attempt.
+     *
+     * **Battery disconnect — the fallback.** The manual also lists three
+     * conditions that drop the cluster into pair mode on their own: battery
+     * disconnected and reconnected, a blown vehicle fuse replaced, and an
+     * electric start on a low state of charge. This was the only route we knew
+     * about originally, and it still works when the button does nothing on a
+     * given variant.
+     *
+     * Neither is a phone-side action. The app can only be ready for pair mode,
+     * which is why the steps are published rather than offered as a retry
+     * button that would fail identically.
      */
     val pairModeInstructions = listOf(
-        "Turn the ignition off and wait a minute",
-        "Disconnect the battery, then reconnect it — this is what puts the " +
-            "cluster into BT pair mode",
-        "The cluster will advertise for a short window; scan during it",
+        "Turn the ignition on",
+        "Hold the MODE button on the switchgear for about 5 seconds",
+        "The cluster screen should show “BT Pair” — that is the signal to scan",
+        "The scooter appears as “TVS BT…” — pick it, pair, then connect",
+        "Still nothing? Disconnect the battery and reconnect it, which also " +
+            "forces pair mode",
     )
 
     /**

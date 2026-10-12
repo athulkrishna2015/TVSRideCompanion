@@ -41,7 +41,12 @@ data class Discovered(
     val address: String,
     val name: String?,
     val rssi: Int,
+    /** Either signal fired. Drives the SmartXonnect-only filter. */
     val isSmartXonnect: Boolean,
+    /** The service UUID was in the advertisement. The strong signal. */
+    val byServiceUuid: Boolean,
+    /** The advertised name looks like a TVS cluster. Weaker, and labelled so. */
+    val byName: Boolean,
     val lastSeenMillis: Long,
     /** Best guess from the advertised name, or UNKNOWN. A hint, not a decision. */
     val guessedModel: VehicleModel,
@@ -104,11 +109,21 @@ class ScooterScanner(private val context: Context) {
 
         val name = result.scanRecord?.deviceName
             ?: result.device?.name
+        val byName = name != null && CLUSTER_NAME_RE.containsMatchIn(name)
         val d = Discovered(
             address = addr,
             name = name,
             rssi = result.rssi,
-            isSmartXonnect = isSx,
+            // **Either signal counts.** Filtering only on the service UUID risks
+            // hiding the one device we want: an advertisement packet need not
+            // carry the service UUID even when the GATT table does, and we have
+            // never had a cluster in range to check which it does. Community
+            // reports of pairing describe the device advertising as "TVS BT…",
+            // so the name is treated as a second, weaker signal — and the UI says
+            // which one fired rather than implying certainty.
+            isSmartXonnect = isSx || byName,
+            byServiceUuid = isSx,
+            byName = byName,
             lastSeenMillis = SystemClock.elapsedRealtime(),
             guessedModel = VehicleModel.detect(name),
         )
@@ -224,6 +239,18 @@ class ScooterScanner(private val context: Context) {
         private const val TAG = "Scanner"
         private const val DEFAULT_TIMEOUT_MS = 20_000L
         private const val STALE_AFTER_MS = 8_000L
+
+        /**
+         * Advertised names of TVS clusters look like `TVS BT…`.
+         *
+         * **Inferred, not measured** — this comes from community accounts of
+         * pairing, not from a cluster seen in a scan record. It is therefore a
+         * second signal alongside the service UUID rather than a replacement for
+         * it, and the scan UI labels which one matched. If the real prefix
+         * differs this simply never fires; it cannot hide a device, only ever
+         * add a possibly-false one.
+         */
+        private val CLUSTER_NAME_RE = Regex("""\bTVS\s*BT""", RegexOption.IGNORE_CASE)
 
         // Values from android.bluetooth.le.ScanCallback, inlined so the
         // mapping stays next to the message it produces.

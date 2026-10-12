@@ -54,15 +54,20 @@ jobs:
       # assembleRelease yields an unsigned APK that cannot be installed — and a
       # debuggable APK is what lets `adb shell run-as dev.tvsopen` pull the
       # on-device log file, which is the whole debugging story for this project.
-      # Unit tests run before the APK is assembled. The protocol layer is plain
-      # arithmetic on byte arrays, so these need no device and no emulator —
-      # which is exactly why they caught the odometer double-division bug that
-      # every on-device smoke test was blind to.
-      - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
-
-      - name: Build
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      # Unit tests run in the same invocation as the assemble, before it. The
+      # protocol layer is plain arithmetic on byte arrays, so these need no
+      # device and no emulator — which is exactly why they caught the odometer
+      # double-division bug that every on-device smoke test was blind to.
+      #
+      # One invocation rather than two, and no `--no-daemon`: a second Gradle
+      # call re-pays JVM startup and configuration, and disabling the daemon
+      # means the two halves cannot share anything. Both were deliberate
+      # sacrifices to the local 2-core budget and buy nothing on an ephemeral
+      # runner that is discarded at the end of the job. The local commands in
+      # AGENTS.md still pass `--no-daemon --max-workers=2 --no-parallel`
+      # explicitly, so nothing about this machine's limits has been relaxed.
+      - name: Unit tests and build
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
       # The central invariant of this project, enforced by the build rather than
       # by a promise: no network, therefore no account, therefore no cloud.
