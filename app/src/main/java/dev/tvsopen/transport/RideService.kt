@@ -53,22 +53,27 @@ class RideService : android.app.Service() {
         Log.i(TAG, "service created (sdk ${android.os.Build.VERSION.SDK_INT})")
 
         // A `connectedDevice` foreground service needs BLUETOOTH_CONNECT or
-        // BLUETOOTH_SCAN to be *granted*, not merely declared. Starting it from
-        // a notification tap before the permission dialog is answered throws
-        // SecurityException and takes the process down, so degrade instead:
-        // post a plain notification and retry on ACTION_CONNECT.
+        // BLUETOOTH_SCAN to be *granted*, not merely declared. Starting it
+        // before the permission dialog is answered throws SecurityException
+        // here, so degrade instead of throwing.
+        //
+        // Note this catch only covers the synchronous SecurityException. A
+        // rejected *notification* is reported asynchronously by the system as a
+        // RemoteServiceException and cannot be caught here — that is why
+        // `buildNotification` creates the channel itself.
         try {
             startForeground(NOTIF_ID, buildNotification("Starting…"))
         } catch (e: SecurityException) {
-            Log.w(TAG, "cannot enter foreground yet: ${e.message}")
-            Log.w(TAG, "BLUETOOTH_CONNECT/SCAN not granted; retry after connect")
-            val nm = getSystemService(NotificationManager::class.java)
-            runCatching {
-                nm?.notify(
-                    NOTIF_ID,
-                    buildNotification("Grant Bluetooth permission to connect"),
-                )
-            }
+            Log.e(TAG, "cannot enter foreground: ${e.message}")
+            Log.e(TAG, "BLUETOOTH_CONNECT/SCAN not granted; stopping rather than idling")
+            // Stopping is the point. If we keep running after a refused
+            // startForeground, Android kills the whole app ~10s later with
+            // ForegroundServiceDidNotStartInTimeException — a crash that blames
+            // whichever Compose handler happened to start the service, rather
+            // than the missing permission. MainActivity checks first, so
+            // reaching this means we were started some other way.
+            stopSelf()
+            return
         }
     }
 
@@ -280,17 +285,37 @@ class RideService : android.app.Service() {
 
     override fun onBind(intent: Intent?) = null
 
+    /**
+     * Create the channel if it is missing.
+     *
+     * This has to be callable from `buildNotification`, not just from `notify`.
+     * `startForeground` posts to the channel too, and posting to a channel that
+     * does not exist yet fails as
+     * `CannotPostForegroundServiceNotificationException: Bad notification for
+     * startForeground` — an exception the *system* posts back to the app's main
+     * thread, so the `try`/`catch` around `startForeground` cannot catch it and
+     * the process dies. That is exactly what happened: the channel was only
+     * created as a side effect of `notify`, which nothing reached because no
+     * connection had ever completed, so the first `startForeground` in
+     * `onCreate` always faced a channel that had never been created.
+     */
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(CHANNEL) != null) return
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL, "Ride", NotificationManager.IMPORTANCE_LOW),
+        )
+    }
+
     private fun notify(text: String) {
         val nm = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Ride", NotificationManager.IMPORTANCE_LOW),
-            )
-        }
         nm.notify(NOTIF_ID, buildNotification(text))
     }
 
     private fun buildNotification(text: String): Notification {
+        // Before the builder, not after: an FGS notification is a real post.
+        ensureChannel()
         val pending = PendingIntent.getActivity(
             this,
             0,

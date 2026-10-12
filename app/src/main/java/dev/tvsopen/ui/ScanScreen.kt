@@ -18,12 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -41,7 +43,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.protocol.VehicleModel
+import dev.tvsopen.transport.BondState
 import dev.tvsopen.transport.Discovered
+import dev.tvsopen.transport.ScooterPairing
 import dev.tvsopen.transport.ScooterScanner
 
 /**
@@ -59,17 +63,24 @@ import dev.tvsopen.transport.ScooterScanner
 @Composable
 fun ScanScreen(
     scanner: ScooterScanner,
+    pairing: ScooterPairing,
     onPick: (address: String, model: VehicleModel) -> Unit,
     onBack: () -> Unit,
 ) {
     val state by scanner.state.collectAsStateWithLifecycle()
+    val bond by pairing.state.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf<String?>(null) }
     var modelChoice by remember { mutableStateOf<Map<String, VehicleModel>>(emptyMap()) }
 
-    // Stop scanning when leaving. A scan with no visible UI is the fastest way
-    // to drain the battery.
+    // Registered for this screen's lifetime only: we need bond results while it
+    // is open, and a manifest receiver would keep the process awake for the
+    // duration of a PIN dialog nobody may be looking at.
     DisposableEffect(Unit) {
-        onDispose { scanner.stop() }
+        pairing.start()
+        onDispose {
+            pairing.stop()
+            scanner.stop()
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -94,6 +105,8 @@ fun ScanScreen(
             }
         }
 
+        PairModeCard(pairing.pairModeInstructions, bond)
+
         Surface(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             shape = RoundedCornerShape(16.dp),
@@ -109,7 +122,8 @@ fun ScanScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        "Turn off if your scooter never appears",
+                        "Turn off if your scooter never appears — " +
+                            "flipping this starts a new scan",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -143,9 +157,28 @@ fun ScanScreen(
                     "Bluetooth is visible to other devices.",
             )
 
+            // The scan is time-boxed, so this is the normal resting state after
+            // any successful-but-empty run. Without a button here the only way
+            // to scan again is to back out and re-enter, which reads as a bug.
             state.devices.isEmpty() -> CentredNote(
-                "Nothing found.\n\nScan again with the ignition on. If it still " +
-                    "shows nothing, switch off \"Only SmartXonnect clusters\".",
+                text = if (state.error != null) {
+                    "The scan could not run."
+                } else {
+                    "Nothing found.\n\nScan again with the ignition on. If it " +
+                        "still shows nothing, switch off \"Only SmartXonnect " +
+                        "clusters\"."
+                },
+                action = {
+                    Button(onClick = { scanner.start(state.onlySmartXonnect) }) {
+                        Icon(
+                            Icons.Filled.Bluetooth,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Scan again")
+                    }
+                },
             )
 
             else -> LazyColumn(
@@ -159,10 +192,12 @@ fun ScanScreen(
                         device = d,
                         expanded = expanded == d.address,
                         model = chosen,
+                        bonded = pairing.isBonded(d.address),
                         onToggle = {
                             expanded = if (expanded == d.address) null else d.address
                         },
                         onModel = { modelChoice = modelChoice + (d.address to it) },
+                        onPair = { pairing.pair(d.address) },
                         onConnect = { onPick(d.address, chosen) },
                     )
                 }
@@ -171,10 +206,71 @@ fun ScanScreen(
     }
 }
 
+/**
+ * How to get the scooter into pair mode.
+ *
+ * These steps are on the *vehicle*, not the phone — TVS's manual is explicit
+ * that the cluster enters BT pair mode by itself when the battery is
+ * disconnected and reconnected, or a fuse is replaced, or the electric start is
+ * done on a low battery. No phone-side action can force it. Publishing the
+ * steps is therefore more useful than a "Pair" button that would fail
+ * identically every time: the person can check whether they have actually put
+ * the scooter in that state before retrying.
+ */
 @Composable
-private fun CentredNote(text: String) {
+private fun PairModeCard(steps: List<String>, bond: BondState) {
+    Surface(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                "First time? Put the scooter in pair mode",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.height(4.dp))
+            steps.forEach { step ->
+                Text(
+                    "• $step",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                when (bond) {
+                    is BondState.Pairing -> "Pairing…"
+                    is BondState.Paired -> "Paired"
+                    is BondState.Failed -> bond.reason
+                    BondState.Idle -> "You only do this once. After pairing, the app connects on its own."
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+/**
+ * Empty/working state for the scan list.
+ *
+ * The horizontal padding is load-bearing: without it `Text` measures against
+ * the full screen width and long lines overflow both edges rather than
+ * wrapping, which is how this looked before.
+ */
+@Composable
+private fun CentredNote(
+    text: String,
+    action: (@Composable () -> Unit)? = null,
+) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 28.dp),
+        ) {
             Icon(
                 Icons.AutoMirrored.Filled.BluetoothSearching,
                 contentDescription = null,
@@ -188,6 +284,10 @@ private fun CentredNote(text: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+            if (action != null) {
+                Spacer(Modifier.height(20.dp))
+                action()
+            }
         }
     }
 }
@@ -197,8 +297,10 @@ private fun DeviceRow(
     device: Discovered,
     expanded: Boolean,
     model: VehicleModel,
+    bonded: Boolean,
     onToggle: () -> Unit,
     onModel: (VehicleModel) -> Unit,
+    onPair: () -> Unit,
     onConnect: () -> Unit,
 ) {
     Surface(
@@ -242,6 +344,18 @@ private fun DeviceRow(
 
             if (expanded) {
                 Spacer(Modifier.height(12.dp))
+                if (!bonded) {
+                    OutlinedButton(onClick = onPair, modifier = Modifier.fillMaxWidth()) {
+                        Icon(
+                            Icons.Filled.Link,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Pair with this scooter (first time only)")
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
                 Text("Which model is this?", style = MaterialTheme.typography.labelLarge)
                 Text(
                     "Wrong model means the wrong frame table.",

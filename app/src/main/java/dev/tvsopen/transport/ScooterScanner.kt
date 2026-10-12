@@ -181,13 +181,25 @@ class ScooterScanner(private val context: Context) {
         mainHandler.postDelayed({ stop(timeoutReached = true) }, timeoutMillis)
     }
 
+    /**
+     * Flip the service-UUID filter, restarting the scan.
+     *
+     * Restarting is not only about applying the new filter to the platform.
+     * Flipping this switch means "my scooter did not show up, try a different
+     * way of looking" — so it has to run a scan even when the last one already
+     * timed out. Guarding on `wasScanning` left the switch dead in precisely the
+     * situation it was added for: someone staring at an empty list after the
+     * timeout taps it, nothing happens, and the escape hatch looks broken.
+     */
     fun setFilter(onlySmartXonnect: Boolean) {
         if (_state.value.onlySmartXonnect == onlySmartXonnect) return
-        publish()
-        // Restart so the platform applies the new filter, keeping what we found.
         val wasScanning = _state.value.scanning
         stop()
-        if (wasScanning) start(onlySmartXonnect)
+        // Unfiltered scans keep whatever was already found; a fresh filtered scan
+        // starts clean, because the old entries may not have advertised the UUID.
+        if (!wasScanning) found.clear()
+        publish()
+        start(onlySmartXonnect)
     }
 
     @SuppressLint("MissingPermission")

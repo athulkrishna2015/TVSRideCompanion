@@ -38,6 +38,7 @@ import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Session
 import dev.tvsopen.transport.RideService
+import dev.tvsopen.transport.ScooterPairing
 import dev.tvsopen.transport.ScooterScanner
 import dev.tvsopen.ui.theme.ThemePrefs
 import dev.tvsopen.ui.theme.TVSRideTheme
@@ -119,7 +120,11 @@ class MainActivity : AppCompatActivity() {
         TVSRideTheme(mode = ThemePrefs.mode, darkTheme = isSystemInDarkTheme()) {
             Scaffold(
                 bottomBar = {
-                    NavigationBar {
+                    // Hidden while the scanner is open. The scan screen is a
+                    // full-screen takeover with its own back arrow, so a live
+                    // nav bar underneath was an affordance that lied: tapping a
+                    // tab highlighted it and left you exactly where you were.
+                    if (!scanning.value) NavigationBar {
                         NavigationBarItem(
                             selected = tab == 0,
                             onClick = { tab = 0 },
@@ -154,6 +159,7 @@ class MainActivity : AppCompatActivity() {
                         // dialog would either clip or cover the nav bar.
                         ScanScreen(
                             scanner = scanner,
+                            pairing = pairing,
                             onPick = { address, model ->
                                 scanning.value = false
                                 RidePrefs.load(this@MainActivity)
@@ -228,9 +234,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Ask the ride service to do something.
+     *
+     * Guarded on the Bluetooth permissions, and the guard is not optional.
+     * `RideService` is a `connectedDevice` foreground service, which Android
+     * refuses unless `BLUETOOTH_CONNECT` or `BLUETOOTH_SCAN` is **granted**.
+     * Without this check the sequence is:
+     *
+     *   startForegroundService -> service onCreate -> startForeground throws
+     *   SecurityException -> caught and logged -> service never calls
+     *   startForeground -> ~10s later Android kills the app with
+     *   `ForegroundServiceDidNotStartInTimeException`.
+     *
+     * Five of those, observed on device. Catching the exception in the service
+     * stopped the *service* crashing but left the app to die instead, ten
+     * seconds later, with a stack trace pointing at a Compose tap handler rather
+     * than at the permission that was actually missing. Check before starting.
+     */
     private fun send(action: String) {
+        if (!hasBlePermission()) {
+            Log.w("MainActivity", "refusing to start $action: Bluetooth not granted")
+            Toast.makeText(this, "Grant Bluetooth permission first", Toast.LENGTH_LONG).show()
+            requestBlePermissions()
+            return
+        }
         runCatching { startForegroundService(Intent(this, RideService::class.java).setAction(action)) }
-            .onFailure { Toast.makeText(this, "Ride service not running", Toast.LENGTH_LONG).show() }
+            .onFailure {
+                Log.w("MainActivity", "could not start ride service: ${it.message}")
+                Toast.makeText(this, "Ride service not running", Toast.LENGTH_LONG).show()
+            }
     }
 
     /**
@@ -311,7 +344,16 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         notificationAccess = hasNotificationAccess()
+        // Once, on the first resume only. Reconnecting on every resume would
+        // fight the user for the GATT link while they are still reading the
+        // screen.
+        if (!autoConnectTried) {
+            autoConnectTried = true
+            autoConnectOnLaunch()
+        }
     }
+
+    private var autoConnectTried = false
 
     /**
      * Scan state lives on the activity, not inside AppRoot.
@@ -324,6 +366,7 @@ class MainActivity : AppCompatActivity() {
      */
     private val scanning = mutableStateOf(false)
     private val scanner: ScooterScanner by lazy { ScooterScanner(this) }
+    private val pairing: ScooterPairing by lazy { ScooterPairing(this) }
 
     private fun openScanner() {
         if (!hasBlePermission()) {
@@ -332,6 +375,23 @@ class MainActivity : AppCompatActivity() {
         }
         scanner.start()
         scanning.value = true
+    }
+
+    /**
+     * Reconnect on launch — no scan, no user action.
+     *
+     * This is the point of pairing. Once a MAC is stored the cluster need not
+     * be advertising at all: TVS's manual says it advertises only in BT pair
+     * mode, which is a battery disconnect/reconnect away. So `connectGatt` on the
+     * stored address is both faster and, most of the time, the only thing that
+     * works. Scanning on every launch would be slower and often fruitless.
+     */
+    private fun autoConnectOnLaunch() {
+        if (!hasBlePermission()) {
+            Log.i("MainActivity", "auto-connect skipped: Bluetooth not granted")
+            return
+        }
+        connectToRememberedCluster()
     }
 
     private fun hasNotificationAccess(): Boolean =

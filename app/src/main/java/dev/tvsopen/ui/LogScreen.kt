@@ -18,6 +18,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.log.Level
 import dev.tvsopen.log.Log
@@ -46,6 +49,7 @@ import dev.tvsopen.log.LogRecord
 @Composable
 fun LogScreen(modifier: Modifier = Modifier) {
 
+    val ctx = LocalContext.current
     val records by Log.records.collectAsStateWithLifecycle()
     val frameCount by Log.frameCount.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -91,15 +95,19 @@ fun LogScreen(modifier: Modifier = Modifier) {
                         Text(if (autoScroll) "Follow: on" else "Follow: off")
                     }
                     TextButton(onClick = { Log.clear() }) { Text("Clear") }
-                    Log.logFile()?.let { f ->
-                        // fileSizeBytes() flushes first; File.length() on a
-                        // buffered writer reports 0 and looks like a dead sink.
-                        TextButton(onClick = {
-                            Log.i("log", "log file: ${f.absolutePath}")
-                        }) {
-                            Text("File: ${Log.fileSizeBytes() / 1024}KB")
+                    OutlinedButton(onClick = {
+                        val out = Log.export(Log.exportDir(ctx))
+                        if (out == null) {
+                            Toast.makeText(ctx, "No log file yet", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(
+                                ctx,
+                                "Saved to ${out.absolutePath}",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            Log.i(TAG, "exported logs to ${out.absolutePath}")
                         }
-                    }
+                    }) { Text("Export") }
                 }
             }
         }
@@ -124,6 +132,8 @@ fun LogScreen(modifier: Modifier = Modifier) {
         }
     }
 }
+
+private const val TAG = "LogScreen"
 
 @Composable
 private fun LogRow(r: LogRecord) {

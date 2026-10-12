@@ -186,6 +186,46 @@ object Log {
         }
     }
 
+    /**
+     * Write a fresh copy of every log file to a single bundle, and return it.
+     *
+     * The live file is flushed first, so the bundle contains what actually
+     * happened rather than whatever the buffer still held. Rotated files are
+     * concatenated oldest-first so a session reads in order.
+     *
+     * [dir] must be app-scoped. `getExternalFilesDir` needs no storage
+     * permission and is readable by `adb pull` without root — the point being
+     * that logs should be gettable off a phone you cannot root.
+     */
+    fun export(dir: File): File? {
+        val source = logFile() ?: return null
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+            .format(Date(System.currentTimeMillis()))
+        val out = File(dir, "tvsride-$stamp.log")
+        return runCatching {
+            if (!dir.exists()) dir.mkdirs()
+            fileSizeBytes() // flush before copying
+            out.bufferedWriter().use { w ->
+                (2..FILE_KEEP)
+                    .map { File(source.parentFile, "tvsride.$it.log") }
+                    .filter { it.exists() }
+                    .sortedByDescending { it.name }
+                    .forEach { f ->
+                        w.write("===== ${f.name} (older) =====\n")
+                        f.forEachLine { w.write("$it\n") }
+                    }
+                w.write("===== ${source.name} (current) =====\n")
+                source.forEachLine { w.write("$it\n") }
+            }
+            out
+        }.getOrNull()
+    }
+
+    /** Where [export] should write. App-scoped, so no storage permission. */
+    fun exportDir(context: android.content.Context): File =
+        (context.getExternalFilesDir("logs") ?: File(context.filesDir, "logs"))
+            .also { if (!it.exists()) it.mkdirs() }
+
     fun clear() {
         synchronized(lock) {
             ring.clear()
