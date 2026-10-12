@@ -122,8 +122,9 @@ fun ScanScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        "Turn off if your scooter never appears — " +
-                            "flipping this starts a new scan",
+                        // Kept short on purpose: a three-line wrap runs the
+                        // text up against the switch and reads as clipped.
+                        "Turn off if it never appears — flipping rescans",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

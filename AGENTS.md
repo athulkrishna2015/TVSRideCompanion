@@ -78,8 +78,9 @@ That moves the cost of a typo to a CI run, which takes ~90 s. Two habits follow:
 
 ## Tests
 
-`./gradlew :app:testDebugUnitTest` — pure JVM, no device, no emulator, ~20 s.
-CI runs it before the APK build, so keep it that way.
+`:app:testDebugUnitTest` — pure JVM, no device, no emulator, ~20 s. It runs in
+CI **in the same Gradle invocation** as the assemble, before it, so a broken
+test stops the APK being built. Keep it that way.
 
 This is not ceremony. The worst bug in this codebase — odometer reading 10x low
 because `decode` and `Session` each divided by 10 — compiled clean, produced no
@@ -87,32 +88,84 @@ warning, passed every on-device smoke test, and was only findable by writing a
 test. The protocol layer is arithmetic on byte arrays, so anything that scales,
 truncates, or orders bytes belongs in `app/src/test/java/dev/tvsopen/protocol/`.
 
-## Build, install, test
+## Build: push, then take the APK from CI
 
-Toolchain (all outside the repo, none on `PATH` by default):
-
-```bash
-export JAVA_HOME=~/.local/share/mise/installs/java/21.0.2   # JDK 26 is rejected by AGP
-export ANDROID_HOME=~/Android/Sdk
-```
-
-`compileSdk`/`targetSdk` are 34 — that is the platform installed locally.
+**There is no local build.** The rider asked for this — the machine is theirs and
+in use — so the compiler is `.github/workflows/android.yml`, and a build is a
+push followed by a wait.
 
 ```bash
-# build (see CPU rules above)
-./gradlew :app:assembleDebug --no-daemon --max-workers=2 --no-parallel
-
-# install + launch in one step
-android run --apks=app/build/outputs/apk/debug/app-debug.apk
+git push origin master
+gh run list --limit 1                     # wait for 'completed  success'
+gh run download <run-id> -n app-debug -D /tmp/apk
+adb install /tmp/apk/app-debug.apk        # NOT -r, see below
 ```
 
-The `android` CLI is installed and is the better tool here — it resolves the
-launcher activity for you and does delta installs. `adb install -r` still works
-when you want the explicit form.
+A full cycle is about 90 seconds of waiting and costs the laptop nothing. An
+artifact is attached to every run, so this works for any commit — you do not
+need a tag. Only `v*` tags and manual dispatches also publish to a GitHub
+Release.
 
-**Do not pass `--debug` to `android run` unless you are attaching a debugger.**
-It launches the app with `am set-debug-app -w`, so the process sits in
-`Waiting For Debugger:` forever and every later check looks like a hang.
+**Always `adb install`, never `adb install -r`, for a CI-built APK.** Each CI
+run signs with *that runner's* debug key, so a CI APK is not upgrade-compatible
+with any other CI APK, nor with a locally-built one:
+
+```
+Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.tvsopen
+signatures do not match newer version; ignoring!]
+```
+
+That reads like a broken artifact; it is just a different debug keystore. The
+fix is `adb uninstall dev.tvsopen` first, which also wipes the log file and
+prefs. Everything in `files/logs/` is a debug artefact and is cheap to lose —
+but pull it first if a session's frames matter.
+
+To check the result without guessing:
+
+```bash
+gh run view <run-id> --log-failed | grep -E "^e: |BUILD (SUCCESSFUL|FAILED)"
+gh run list --limit 3
+```
+
+Two failure modes this workflow makes worth knowing:
+
+- **A syntax slip costs a CI round trip, not a local edit.** Check comment
+  balance before pushing: `grep -c '/\*'` vs `grep -c '\*/'` per file. A
+  duplicated `/**` nests the comment and swallows the code after it, and the
+  resulting errors point at unrelated lines far from the cause.
+- **Do not infer a build result from which tasks appear in the log.**
+  `validateSigningDebug` runs *before* `compileDebugKotlin`, so "it got that
+  far" is not evidence it compiled. Read `BUILD SUCCESSFUL|FAILED`.
+
+### Do not run Gradle locally
+
+Not even to check a syntax error, and not even when it is "just one file". A
+local build is minutes of the rider's CPU, which is the entire reason this
+workflow exists.
+
+## Install and test on the device
+
+```bash
+android run --apks=/tmp/apk/app-debug.apk     # install + launch, resolves the activity
+adb install -r /tmp/apk/app-debug.apk          # explicit form
+```
+
+The `android` CLI is installed and is the better tool — it does delta installs.
+**Do not pass `--debug`** unless you are attaching a debugger: it runs
+`am set-debug-app -w`, so the process sits in `Waiting For Debugger:` forever and
+every later check looks like a hang.
+
+The APK is debuggable on purpose. There is no signing key, so `assembleRelease`
+would be uninstallable, and `run-as` is the only way to pull the on-device log
+without root:
+
+```bash
+adb shell run-as dev.tvsopen ls -l files/logs/
+adb exec-out run-as dev.tvsopen cat files/logs/tvsride.log > session.log
+```
+
+The device enumerates intermittently and sometimes comes back under a different
+serial. Check `adb devices` before concluding a command hung.
 
 ### Smoke test without hardware
 
