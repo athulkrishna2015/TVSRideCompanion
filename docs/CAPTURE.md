@@ -25,6 +25,45 @@ Raider is bound to `NtorqBLEConnectionConfig` upstream, so a Raider works with
 the Ntorq driver as-is. Once connected, read the vehicle model frame (`0x11`,
 `VEHICLE_MODEL` at index 9) and record the value.
 
+## 0b. Try the app first — it is cheaper than the snoop log
+
+An HCI snoop (§1) gives ground truth for both directions, but on this device it
+would not start (§1a). The app can now capture the inbound half on its own, and
+it is the first thing to try because it needs no Developer options, no Bluetooth
+cycle and no root.
+
+**With the ignition on:**
+
+1. Home → **Connect**. The scan filters on the SmartXonnect service UUID
+   `5456534D-5647-5341-5342-454E544F5251` for 20 s.
+2. If nothing appears, switch off **Only SmartXonnect clusters** and scan again.
+   That is the diagnostic: it tells us the cluster is not advertising the
+   service we expect, which is a protocol finding in itself.
+3. Pick the device, choose the model, connect.
+4. Read the **Log** tab. Inbound frames appear as `IN <hex>`.
+
+What each outcome settles:
+
+| What happens | What it means |
+| :--- | :--- |
+| Device appears, labelled SmartXonnect | The service UUID is right; connect and the rest follows |
+| Device appears, "not a cluster" | It advertises something else — record its name and UUIDs |
+| Nothing appears even unfiltered | Not advertising, or not powered; try again with the ignition on |
+| Connects, then `GATT disconnected` | Link established then dropped — check the keepalive is being accepted |
+| Connects, frames arrive, values wrong | Byte offsets are wrong; the hex dump is the evidence |
+
+The app's own log file can be pulled without a debugger, because the release
+APK is debuggable:
+
+```bash
+adb exec-out run-as dev.tvsopen cat files/logs/tvsride.log > session.log
+```
+
+**This has never been run against a real cluster.** Everything the scanner does
+is verified only in that the platform accepts the scan and the UI renders. The
+first question it answers is simply whether the Ntorq advertises the UUID we
+filter on.
+
 ## 1. HCI snoop log — the highest-value capture
 
 This gives ground truth for everything inbound, and lets us confirm the

@@ -2,6 +2,31 @@
 
 Everything this project is derived from, and what each source contributed.
 
+## 0. Third-party repositories — where to get them
+
+Every repository below is pinned to an exact commit, so a reader can reproduce
+precisely what was read rather than whatever `master` happens to be today. Clone
+URLs are given because a folder name is not a citation: it says nothing about
+which upstream, which revision, or under what licence.
+
+| Repository | Clone URL | Pinned commit | Licence |
+| --- | --- | --- | :--- |
+| `overclock98/JupiterRideCompanion` | `https://github.com/overclock98/JupiterRideCompanion.git` | `47eed62aba740b278770006bc27f0822584b9de8` (2026-07-12) | CC BY-NC 4.0 |
+| `Hyundai-Kia-Connect/kia_uvo.wiki` | `https://github.com/Hyundai-Kia-Connect/kia_uvo.wiki.git` | `be3231e1a0e5c2467d6fd7cac30e894de7f11193` (2021-11-11) | see repo |
+| `aaravavi/TVS-Connect-Application-VAPT` | `https://github.com/aaravavi/TVS-Connect-Application-VAPT.git` | `e2b5bc9d3c17e5e802a4c40053ceb824c583c8f4` (2024-06-12) | CC0 1.0 |
+
+```bash
+# reproduce exactly what was read
+git clone https://github.com/overclock98/JupiterRideCompanion.git
+git -C JupiterRideCompanion checkout 47eed62aba740b278770006bc27f0822584b9de8
+```
+
+None of the three is redistributed in this repo. They are cloned into the parent
+directory and read there; only the *conclusions* are committed here, each with
+its provenance. Note that the Jupiter companion also **ships its APK**, which is
+what made it the only working reference available — that binary is someone
+else's work and is likewise not redistributed.
+
 ## 1. Local artifacts (parent folder, **not** committed here)
 
 | File | SHA-256 | Role |
@@ -41,9 +66,17 @@ an inference from a photograph or a decompilation.
 ## 2. Local documentation (parent folder)
 
 ### `JupiterRideCompanion/` — overclock98/JupiterRideCompanion
-License: **CC BY-NC 4.0** (attribution + non-commercial). Its prose and the
-arrow tables are reused here only with attribution and under the same
-non-commercial terms.
+
+```bash
+git clone https://github.com/overclock98/JupiterRideCompanion.git
+git -C JupiterRideCompanion checkout 47eed62aba740b278770006bc27f0822584b9de8   # 2026-07-12
+```
+
+License: **CC BY-NC 4.0** (attribution + non-commercial). Its prose, the arrow
+tables and the Home-screen layout are reused here only with attribution and
+under the same non-commercial terms — which is why this project carries the
+same licence. Its `JupiterRideCompanion.apk` is that project's own build and is
+**not** redistributed here.
 
 - `README.md` — feature set of the Jupiter companion app: Find-My-scooter via
   injected ping flag, button gesture mapping, TelecomManager call handling,
@@ -82,6 +115,11 @@ Button-gesture mapping and the media-features settings seen in that app are
 **not** implemented here and are not copied — scoped out. See `docs/SCOPE.md`.
 
 ### `TVS-Connect-Application-VAPT/` — aaravavi/TVS-Connect-Application-VAPT
+```bash
+git clone https://github.com/aaravavi/TVS-Connect-Application-VAPT.git
+git -C TVS-Connect-Application-VAPT checkout e2b5bc9d3c17e5e802a4c40053ceb824c583c8f4   # 2024-06-12
+```
+
 License: **CC0 1.0**. FEV LTD's pentest of TVS Connect (app v4.6.0/iOS 5.0.0).
 Covers CVE-2024-33308, CVE-2024-33309, CVE-2024-35537.
 
@@ -216,11 +254,26 @@ does not misdirect a future capture session.
 
 Kept in the repo for traceability rather than deleted.
 
-### `kia_uvo.wiki/` — fuatakgun/kia_uvo wiki
+### `kia_uvo.wiki/` — Hyundai-Kia-Connect/kia_uvo.wiki
+
+```bash
+git clone https://github.com/Hyundai-Kia-Connect/kia_uvo.wiki.git
+git -C kia_uvo.wiki checkout be3231e1a0e5c2467d6fd7cac30e894de7f11193   # 2021-11-11
+```
+
 License: repo LICENSE is CC0. Unrelated vehicle, but its **methodology** is
 directly reusable: patching an app's network-security config to trust a local
 MITM proxy, capturing traffic, and building a replacement client from the
 observed API. Methodology only — its Kia cloud targets are not applicable here.
+
+Read for: `How-to-reverse-engineer-app-traffic-on-Android-phone.md`,
+`How-to-sniff-API-via-MS-Edge.md`, `Example-Data.md`.
+
+**Attribution corrected.** An earlier draft credited this wiki to
+`fuatakgun`. The cloned repository's own `origin` is
+`Hyundai-Kia-Connect/kia_uvo.wiki`, so that is the upstream of record. The
+folder name on disk was never enough to establish it — which is the whole reason
+this file now records clone URLs and pinned commits rather than names.
 
 ## 3. Web sources
 

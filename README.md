@@ -23,24 +23,34 @@ without logging in" is enforced by the build, not promised in a README.
 | :--- | :--- |
 | Ntorq + Raider inbound | **8 frame layouts transcribed** from the official APK |
 | GATT / transport | implemented |
+| Discovery + connect | scan screen ships; **never run against a real cluster** |
 | AES-CTR handshake | **proven** — key and cipher confirmed in two independent apps |
 | Navigation HUD packets | **proven** — `0x5A 0x4E` / `0x5B 0x4F` |
 | Text sanitiser | transcribed — cluster cannot render non-ASCII |
 | Ntorq TFT specifics | **untested on hardware** — width and pictograms unconfirmed |
-| UI | Material 3 shell — **builds clean** |
+| UI | adapted Material 3, light/dark/auto — **builds clean, runs on device** |
+| Tests | 18 JVM tests over the protocol layer, run in CI |
 | APK analysis | complete for the protocol packages |
 
 The handshake, GATT and navigation layouts are cross-checked against **two**
 independent applications. Where they agree, a fact is solid; where they differ,
 both are documented rather than silently merged.
 
-### Compiles, not yet proven
+### Tested on a phone. Never connected to a scooter.
 
-`:app:assembleDebug` succeeds with zero warnings. The built manifest contains
-**no `INTERNET` permission** — the no-account claim is enforced by the build
-rather than promised in a README.
+Those are two very different claims and it is worth keeping them apart.
 
-But the app has never been installed on a device or pointed at a scooter.
+`:app:assembleDebug` succeeds with zero warnings; CI runs the unit tests and
+asserts the merged manifest contains **no `INTERNET` permission**. The app has
+been installed and driven on a real device many times — which is how the
+Overview/Log tab swap, an unreachable Ride Mode toggle, and a log sink that
+discarded every session were all found. None of them were visible to any test.
+
+What has **never happened** is a Bluetooth connection to an instrument cluster.
+Every protocol fact below is verified against a shipped APK and cross-checked
+between two apps; none of it has been confirmed against the owner's own Ntorq.
+The dashboard showing `—` is the correct rendering of "nothing received", not
+evidence that decoding works.
 
 ---
 
@@ -60,11 +70,17 @@ protocol/
   Handshake.kt        AES-CTR challenge/response
   Pictogram.kt        maneuver table + text-keyword fallback
 transport/
+  ScooterScanner.kt      BLE discovery, filtered on the SmartXonnect service
   ScooterBleService.kt   GATT, write mutex, frame stream
   RideService.kt         foreground service
+  BootReceiver.kt        re-attach after reboot, when the user opts in
 nav/
   MapsNotificationListener.kt   any maps app → NavInstruction
   NavigationBridge.kt           NavInstruction → cluster frames
+session/  process-scoped store the UI observes; the only shared state
+prefs/    ride mode, last known cluster, appearance
+log/      logger: ring buffer, rotating file sink, hex frame capture
+ui/       Compose screens (Home, Overview, More, Scan, Log) + theme
 ```
 
 A model with no driver still **connects and streams raw frames** — that is how a
@@ -78,18 +94,30 @@ Adding a model means writing one `ProtocolDriver`. The transport does not change
 
 - **Navigation on the cluster** from any maps app, no account
 - **Find my scooter** — injects the flag into the keepalive packet
-- **Live telemetry** — speed, odometer, fuel, trip, RPM, economy, range
-- **Button gestures** — the cluster button is remappable (planned)
+- **Live telemetry** — speed, odometer, fuel, trip, engine temp, service status
+- **Find and connect** — BLE scan filtered on the SmartXonnect service
 - **No cloud** — nothing leaves the phone
+
+Telemetry is limited to values the Ntorq cluster is documented to display. TVS's
+own manual enumerates every display element, and **range and fuel economy are
+not among them** — they are app or cloud figures, and this app has neither. So
+they are decoded but not shown; see [docs/NAVIGATION.md](docs/NAVIGATION.md).
 
 ---
 
 ## Build
 
-See [BUILD.md](BUILD.md) for prerequisites and the CPU-budget build command.
+```bash
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+```
 
-`gradle.properties` caps workers at 2 and disables the daemon, per
-[AGENTS.md](AGENTS.md).
+CPU budget is capped at 2 cores by `gradle.properties`; see
+[AGENTS.md](AGENTS.md) for the full rule, and [BUILD.md](docs/BUILD.md) for
+prerequisites.
+
+CI (`.github/workflows/android.yml`) runs the unit tests, asserts the merged
+manifest has **no** `INTERNET` permission, asserts the caller-ID permissions
+stay **absent**, and attaches the APK to a release on a `v*` tag.
 
 ---
 
@@ -99,9 +127,9 @@ See [BUILD.md](BUILD.md) for prerequisites and the CPU-budget build command.
 | :--- | :--- |
 | [docs/SCOPE.md](docs/SCOPE.md) | what this project is and deliberately is not |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | the BLE protocol, with per-fact provenance |
-| [docs/NAVIGATION.md](docs/NAVIGATION.md) | navigation architecture, pictogram tables |
+| [docs/NAVIGATION.md](docs/NAVIGATION.md) | navigation architecture, pictogram tables, cluster display zones |
 | [docs/UI_REFERENCE.md](docs/UI_REFERENCE.md) | which apps the UI draws on, and privacy rules |
-| [docs/BUILD.md](docs/BUILD.md) | prerequisites, CPU-capped build command, what still blocks compiling |
+| [docs/BUILD.md](docs/BUILD.md) | prerequisites, CPU-capped build command, gotchas |
 | [docs/CAPTURE.md](docs/CAPTURE.md) | what still needs a scooter, and how to get it |
 | [research/SOURCES.md](research/SOURCES.md) | every source, and what it contributed |
 | [AGENTS.md](AGENTS.md) | working rules for agents on this repo |
@@ -115,18 +143,34 @@ personal data (registration number, home location). See
 ## Sources
 
 Full attribution, licences and per-source contribution notes are in
-[research/SOURCES.md](research/SOURCES.md). In brief:
+[research/SOURCES.md](research/SOURCES.md). Every third-party repository there is
+pinned to an exact commit with a clone command, so a reader reproduces precisely
+what was read rather than whatever `master` is today.
+
+| Repository | Clone URL | Licence |
+| :--- | :--- | :--- |
+| [overclock98/JupiterRideCompanion](https://github.com/overclock98/JupiterRideCompanion) | `https://github.com/overclock98/JupiterRideCompanion.git` | CC BY-NC 4.0 |
+| [Hyundai-Kia-Connect/kia_uvo.wiki](https://github.com/Hyundai-Kia-Connect/kia_uvo.wiki) | `https://github.com/Hyundai-Kia-Connect/kia_uvo.wiki.git` | CC0 |
+| [aaravavi/TVS-Connect-Application-VAPT](https://github.com/aaravavi/TVS-Connect-Application-VAPT) | `https://github.com/aaravavi/TVS-Connect-Application-VAPT.git` | CC0 1.0 |
+
+What each contributed:
+
+- **`overclock98/JupiterRideCompanion`** — the only working third-party app
+  available. Source of the proven navigation packet layout, an independent crypto
+  cross-check, and the Home-screen layout this app adapts.
+- **`aaravavi/TVS-Connect-Application-VAPT`** — FEV LTD's pentest. Its crypto
+  finding (CVE-2024-35537) is what demonstrated the BLE "auth" key is hardcoded.
+  Background only; the server-side CVEs are unused by design, see SCOPE.
+- **`Hyundai-Kia-Connect/kia_uvo.wiki`** — an unrelated vehicle, but its
+  methodology (intercept, observe, reimplement) is the transferable part.
 
 **Local artifacts** (parent folder, not redistributed here)
-- `TVS Connect_8.14.1.apk` — the official app, primary protocol source
-- `JupiterRideCompanion.apk` — a working third-party companion app; source of
-  the *proven* nav packet layout and an independent crypto cross-check
-- `JupiterRideCompanion/` docs — **CC BY-NC 4.0**
-- `TVS-Connect-Application-VAPT/` — **CC0 1.0**; its crypto finding (CVE-2024-35537)
-  is what demonstrated the BLE "auth" key is hardcoded. The server-side CVEs are
-  unused by design, see SCOPE
-- TechEnclave thread + `kia_uvo.wiki` — methodology
-- `research/refs.txt` — supplied reference list
+
+- `TVS Connect_8.14.1.apk` — the official app, primary protocol source, cited
+  by SHA-256
+- `JupiterRideCompanion/JupiterRideCompanion.apk` — that project's own build
+- TechEnclave thread + `research/refs.txt` — supplied reference list
+- `ref/` — TVS's Ntorq 125 owner manual, gitignored for containing personal data
 
 **Web** — TVS product docs, Google Play listing, r/indianbikes,
 1013503897/jadx-headless-mcp, morluto/rea.

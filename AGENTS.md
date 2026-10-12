@@ -242,11 +242,13 @@ Two checks run in CI that are worth not breaking:
 
 ```
 protocol/    constants, per-model drivers, packet builders, pictograms
-transport/   GATT transport and the foreground ride service
+transport/   BLE scanner, GATT transport, foreground ride service, boot receiver
 nav/         notification listener (any maps app) and the HUD bridge
 session/     process-scoped store the UI observes
+prefs/       ride mode, last known cluster
 log/         logger: ring buffer, rotating file sink, hex frame capture
-ui/          Compose screens (Home, More, Log)
+ui/          Compose screens (Home, Overview, More, Scan, Log) + theme
+tools/       capture and decode scripts
 ```
 
 No Gradle daemon left running after a build. Always `--no-daemon`.
