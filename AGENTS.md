@@ -36,11 +36,45 @@ taskset -pc $(pgrep -f GradleDaemon | head -1)   # must print: 0,1
 ps -o ni,pcpu -p $(pgrep -f GradleDaemon | head -1)
 ```
 
-`gradle.properties` also sets `org.gradle.workers.max=2`,
-`org.gradle.daemon=false` and `kotlin.compiler.execution.strategy=in-process`.
+**Those flags are now mandatory, not advisory.** `gradle.properties` used to
+also set `org.gradle.workers.max=2` and `org.gradle.daemon=false`, which made
+the limit impossible to forget — and which also applied to CI, holding the
+runner to half the parallelism it had for a constraint that means nothing
+anywhere but this laptop. Those two properties were removed; the committed file
+is now CI-shaped and the limit lives only in the command line.
+
+So a bare `./gradlew :app:assembleDebug` **will saturate all four cores.** Pass
+the flags every time:
+
+```bash
+./gradlew :app:assembleDebug --no-daemon --max-workers=2 --no-parallel
+```
+
+`kotlin.compiler.execution.strategy=in-process` stays in `gradle.properties`:
+it avoids a second JVM for the Kotlin compiler daemon, which is worth having on
+both sides.
 
 Do not run more than one CPU-heavy background job at a time. Do not use a thread
 count equal to `nproc`.
+
+## Builds are CI-only
+
+The rider asked for local builds to stop, because this machine is theirs and in
+use. **CI is the compiler.** `./gradlew :app:testDebugUnitTest :app:assembleDebug
+--max-workers=2 --no-parallel --no-daemon` is what to run instead of any local
+build; it is the same 2-core budget, it just does not cost the laptop anything
+to verify.
+
+That moves the cost of a typo to a CI run, which takes ~90 s. Two habits follow:
+
+- **Check comment balance before pushing.** With no local compiler, a stray
+  `/**` is invisible until CI. A duplicated KDoc opener nests the comment and
+  swallows the code after it, and the resulting "Unresolved reference" errors
+  point at unrelated lines. `grep -c '/\*'` vs `grep -c '\*/'` per file catches
+  it in a second.
+- **Do not infer a build result from task ordering.** "It got past
+  `validateSigningDebug`, so it compiled" was wrong — that task ran before
+  `compileDebugKotlin` failed. Read the actual `BUILD SUCCESSFUL|FAILED`.
 
 ## Tests
 
