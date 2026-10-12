@@ -38,6 +38,7 @@ import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Session
 import dev.tvsopen.transport.RideService
+import dev.tvsopen.transport.ScooterScanner
 import dev.tvsopen.ui.theme.ThemePrefs
 import dev.tvsopen.ui.theme.TVSRideTheme
 
@@ -82,7 +83,7 @@ class MainActivity : AppCompatActivity() {
             AppRoot(
                 onFindMyChange = { send(it) },
                 onNavMirrorChange = { send(it) },
-                onScan = { requestBlePermissions() },
+                onScan = { openScanner() },
                 onDisconnect = { send(RideService.ACTION_DISCONNECT) },
                 onOpenNotificationAccess = { openNotificationAccess() },
                 // Re-read on every recomposition: the user grants notification
@@ -147,7 +148,21 @@ class MainActivity : AppCompatActivity() {
                 },
             ) { padding ->
                 androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
-                    if (tab == 0) {
+                    if (scanning.value) {
+                        // Full-screen takeover rather than a dialog: the scan has
+                        // a filter switch, a list and a model picker, and a
+                        // dialog would either clip or cover the nav bar.
+                        ScanScreen(
+                            scanner = scanner,
+                            onPick = { address, model ->
+                                scanning.value = false
+                                RidePrefs.load(this@MainActivity)
+                                    .updateLastConnection(address, model.name)
+                                connectTo(address, model)
+                            },
+                            onBack = { scanning.value = false },
+                        )
+                    } else if (tab == 0) {
                         HomeScreen(
                             telemetry = telemetry,
                             hud = hud,
@@ -185,7 +200,11 @@ class MainActivity : AppCompatActivity() {
                             },
                             onOpenOverview = { tab = 2 },
                             onOpenParked = { tab = 2 },
-                            onConnect = { send(RideService.ACTION_CONNECT) },
+                            // The Connect card now opens the scanner. It used to
+                            // send ACTION_CONNECT with no address, which the
+                            // service logged and ignored — the only reason a
+                            // connection could never start.
+                            onConnect = { openScanner() },
                         )
                     } else if (tab == 1) {
                         MoreScreen(
@@ -245,17 +264,17 @@ class MainActivity : AppCompatActivity() {
         val prefs = RidePrefs.load(this)
         val address = prefs.lastAddress
         if (address.isNullOrBlank()) {
-            Toast.makeText(
-                this,
-                "Bluetooth ready. No scooter remembered yet — pick one when a " +
-                    "scan screen lands.",
-                Toast.LENGTH_LONG,
-            ).show()
+            Toast.makeText(this, "No scooter chosen yet — tap Connect to scan", Toast.LENGTH_LONG)
+                .show()
             return
         }
         val model = prefs.lastModelId
             ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
             ?: VehicleModel.NTORQ
+        connectTo(address, model)
+    }
+
+    private fun connectTo(address: String, model: VehicleModel) {
         runCatching {
             startForegroundService(
                 Intent(this, RideService::class.java)
@@ -265,6 +284,18 @@ class MainActivity : AppCompatActivity() {
             )
         }.onFailure {
             Toast.makeText(this, "Could not start the ride service", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** True when both runtime BLE permissions are already granted. */
+    private fun hasBlePermission(): Boolean {
+        val needed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        return needed.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -280,6 +311,27 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         notificationAccess = hasNotificationAccess()
+    }
+
+    /**
+     * Scan state lives on the activity, not inside AppRoot.
+     *
+     * Both the Connect card and the More tab's Scan button have to open the
+     * same scanner, and the permission callback is wired in onCreate — outside
+     * AppRoot entirely. Hoisting it keeps one scanner instance for the whole
+     * activity, which also means leaving and re-entering the screen resumes the
+     * same scan instead of losing the results.
+     */
+    private val scanning = mutableStateOf(false)
+    private val scanner: ScooterScanner by lazy { ScooterScanner(this) }
+
+    private fun openScanner() {
+        if (!hasBlePermission()) {
+            requestBlePermissions()
+            return
+        }
+        scanner.start()
+        scanning.value = true
     }
 
     private fun hasNotificationAccess(): Boolean =
