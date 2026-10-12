@@ -174,6 +174,14 @@ explicit owner instruction — they alter cluster behaviour.
 
 ## This is a clean-room interoperability project
 
+**This repository is public. Never commit anything derived from the owner's
+actual location, route, device identifiers, or home map.** In practice that
+means: invent street names in tests and comments (`Example Road`), never paste a
+real nav notification or captured street into a source file, and redact the
+street and distance out of any log excerpt before it goes into an issue. The
+app's own log records the maneuver text verbatim, so an unredacted export is a
+route. `captures/README.md` says the same thing in more detail.
+
 The goal is a third-party companion app for the **user's own** TVS vehicle that
 speaks the instrument cluster's Bluetooth LE protocol directly. TVS's servers,
 accounts and cloud APIs are explicitly **out of scope** — see `docs/SCOPE.md`.

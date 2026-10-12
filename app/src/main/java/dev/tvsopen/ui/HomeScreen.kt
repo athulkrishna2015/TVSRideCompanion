@@ -430,12 +430,18 @@ private fun NavigationStrip(hud: HudState) {
         color = MaterialTheme.colorScheme.primaryContainer,
     ) {
         Column(Modifier.padding(14.dp)) {
-            Text(
-                hud.instructionTitle ?: "Navigating",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            hud.street?.let {
+            // Both fields are skipped when blank rather than defaulted. Google
+            // Maps puts the distance in the title, so the title is legitimately
+            // empty once that is moved to the distance row — rendering "?"
+            // for it, or an empty line above the street, both look broken.
+            hud.instructionTitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            hud.street?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     it,
                     style = MaterialTheme.typography.bodyMedium,

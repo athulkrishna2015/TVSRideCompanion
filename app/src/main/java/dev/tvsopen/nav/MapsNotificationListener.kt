@@ -4,7 +4,6 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import dev.tvsopen.log.Log
-import dev.tvsopen.protocol.ManeuverResolver
 import dev.tvsopen.session.Session
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,36 +76,38 @@ class MapsNotificationListener : NotificationListenerService() {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
+        val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim().orEmpty()
         val ongoing = n.isOngoing
+
+        // Google Maps does not put the distance where most providers do, so the
+        // distance is read across all four fields before deciding whether this
+        // notification is navigation at all. See NavParsing for the observed
+        // format and why the title has to be searched too.
+        val parsed = NavParsing.parse(title, text, bigText, subText)
+        val distance = parsed.distanceMeters
 
         val looksLikeNav = pkg in allowedPackages ||
             (extras.containsKey("android.app.extra.MAPS_MODE") ||
                 extras.containsKey("navigation.mode") ||
                 (ongoing && title.isNotEmpty() && (text.isNotEmpty() || bigText.isNotEmpty()) &&
-                    extractDistance(text, bigText) >= 0))
+                    distance >= 0))
 
         if (!looksLikeNav) return
 
-        val distance = extractDistance(text, bigText)
-        if (distance < 0) {
-            Log.d(TAG, "nav-shaped notification without a distance from $pkg: '$title' / '$text'")
-        }
-
         val step = NavInstruction(
-            title = title,
-            street = text.ifBlank { bigText },
-            distanceMeters = distance,
-            etaMinutes = extractEtaMinutes(bigText, text),
-            // Tier 2 resolution: the cluster icon table is closed, so fall back
-            // to the words when the provider does not give us a usable icon.
-            pictogram = ManeuverResolver.fromText("$title $text $bigText"),
+            title = parsed.maneuver,
+            street = parsed.street,
+            distanceMeters = parsed.distanceMeters,
+            etaMinutes = parsed.etaMinutes,
+            pictogram = parsed.pictogram,
             provider = pkg,
         )
 
         Log.i(
             TAG,
             "nav from $pkg: '${step.title}' / '${step.street}' " +
-                "d=${step.distanceMeters}m eta=${step.etaMinutes}m pic=${step.pictogram}",
+                "d=${step.distanceMeters}m eta=${step.etaMinutes}m pic=${step.pictogram} " +
+                "[raw title='$title' text='$text' big='$bigText' sub='$subText']",
         )
         Session.onHud {
             it.copy(
@@ -119,6 +120,10 @@ class MapsNotificationListener : NotificationListenerService() {
                 provider = step.provider,
             )
         }
+        // A repost cancels a pending "navigation ended", so a refresh that
+        // arrives as remove-then-post keeps the HUD alive.
+        pendingClear?.let { handler.removeCallbacks(it) }
+        pendingClear = null
         _instruction.value = step
         _navigating.value = true
     }
@@ -128,11 +133,28 @@ class MapsNotificationListener : NotificationListenerService() {
         // smart-cast, leaving sbn nullable at the log line.
         val removed = sbn ?: return
         if (removed.packageName !in allowedPackages) return
-        Log.i(TAG, "navigation ended (${removed.packageName})")
-        Session.onHud { it.copy(active = false) }
-        _navigating.value = false
-        _instruction.value = null
+
+        // **Debounced, deliberately.** Observed on device: Google Maps posted a
+        // navigation notification and then *cancelled it nine seconds later*
+        // while still navigating — it re-creates the notification as it
+        // refreshes. Clearing straight away blanked the cluster display for a
+        // journey that was still under way, and the rider would have watched
+        // directions vanish mid-turn.
+        //
+        // So a removal only ends navigation if nothing reposts within
+        // [CLEAR_GRACE_MS]. A repost cancels this, which is the common case and
+        // the one that used to be broken.
+        pendingClear?.let { handler.removeCallbacks(it) }
+        pendingClear = Runnable {
+            Log.i(TAG, "navigation ended (${removed.packageName})")
+            Session.onHud { it.copy(active = false) }
+            _navigating.value = false
+            _instruction.value = null
+        }.also { handler.postDelayed(it, CLEAR_GRACE_MS) }
     }
+
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingClear: Runnable? = null
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -147,6 +169,15 @@ class MapsNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "MapsNavListener"
 
+        /**
+         * How long a cancelled navigation notification is given to be replaced.
+         *
+         * Nine seconds was the gap actually observed, so this sits just above
+         * it. Long enough to survive a refresh, short enough that genuinely
+         * ending a route clears the cluster promptly.
+         */
+        private const val CLEAR_GRACE_MS = 12_000L
+
         val DEFAULT_MAPS_PACKAGES = setOf(
             "com.google.android.apps.maps",       // Google Maps
             "com.mappls.app",                     // MapMyIndia
@@ -158,40 +189,5 @@ class MapsNotificationListener : NotificationListenerService() {
             "com.transit.app.transitmaps",        // Transit
             "com.immobiletrack",
         )
-
-        /** `150 m`, `1.5 km`, `850m`, `2,3 km` — providers vary on punctuation. */
-        private val DISTANCE_RE =
-            Regex("""(\d+(?:[.,]\d+)?)\s*(m|km|mi|ft)""", RegexOption.IGNORE_CASE)
-
-        private fun extractDistance(vararg texts: String?): Int {
-            for (t in texts) {
-                if (t.isNullOrBlank()) continue
-                val m = DISTANCE_RE.find(t) ?: continue
-                val value = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: continue
-                return when (m.groupValues[2].lowercase()) {
-                    "km" -> (value * 1000).toInt()
-                    "mi" -> (value * 1609).toInt()
-                    "ft" -> (value * 0.3048).toInt()
-                    else -> value.toInt()
-                }
-            }
-            return -1
-        }
-
-        private val ETA_RE =
-            Regex("""(\d+)\s*(min|mins|minute|minutes|hr|hrs|hour|hours)""", RegexOption.IGNORE_CASE)
-
-        private fun extractEtaMinutes(vararg texts: String?): Int {
-            for (t in texts) {
-                if (t.isNullOrBlank()) continue
-                val m = ETA_RE.find(t) ?: continue
-                val n = m.groupValues[1].toIntOrNull() ?: continue
-                return when (m.groupValues[2].lowercase()) {
-                    "hr", "hrs", "hour", "hours" -> n * 60
-                    else -> n
-                }
-            }
-            return 0
-        }
     }
 }
