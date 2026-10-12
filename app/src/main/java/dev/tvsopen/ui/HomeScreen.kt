@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -67,8 +68,10 @@ fun HomeScreen(
     parked: ParkedInfo?,
     findMyEnabled: Boolean,
     navMirroring: Boolean,
+    rideMode: Boolean,
     onFindMyChange: (Boolean) -> Unit,
     onNavMirrorChange: (Boolean) -> Unit,
+    onRideModeChange: (Boolean) -> Unit,
     onOpenOverview: () -> Unit,
     onOpenParked: () -> Unit,
     onConnect: () -> Unit,
@@ -100,6 +103,12 @@ fun HomeScreen(
         }
         Spacer(Modifier.height(12.dp))
         ConnectCard(connected, connection.state.label, onConnect)
+        Spacer(Modifier.height(12.dp))
+        // Ride Mode has to stay reachable. BootReceiver reads
+        // RidePrefs.resumeOnBoot and RidePrefs.rideMode to decide whether to
+        // re-attach after a reboot, so with no toggle the resume path is dead
+        // code that can never fire.
+        RideModeCard(rideMode, connected, onRideModeChange)
 
         Spacer(Modifier.height(20.dp))
         SectionLabel("While riding")
@@ -449,4 +458,20 @@ private fun relativeTime(ms: Long): String {
         min < 60 * 24 -> "${min / 60}h"
         else -> "${min / (60 * 24)}d"
     }
+}
+
+@Composable
+private fun RideModeCard(enabled: Boolean, connected: Boolean, onChange: (Boolean) -> Unit) {
+    ActionCard(
+        background = LocalTilePalette.current.neutral,
+        icon = Icons.AutoMirrored.Filled.DirectionsBike,
+        title = "Ride Mode",
+        subtitle = if (enabled) "On \u2014 keeps the app active across a reboot"
+        else "Off (auto-enables on ride)",
+        trailing = {
+            androidx.compose.material3.Switch(
+                checked = enabled, onCheckedChange = onChange, enabled = connected,
+            )
+        },
+    )
 }

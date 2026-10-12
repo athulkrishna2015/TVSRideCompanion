@@ -164,7 +164,9 @@ object Session {
     /** Keep the open ride's distance in step with the odometer. */
     private fun trackRideDistance() {
         val log = rideLog ?: return
-        log.update(connectedDistanceKm() ?: 0.0)
+        // connectedDistanceKm() is a Telemetry member, not a Session one, so the
+        // receiver has to be spelled out.
+        log.update(_telemetry.value.connectedDistanceKm() ?: 0.0)
         _rides.value = log.rides.value
     }
 

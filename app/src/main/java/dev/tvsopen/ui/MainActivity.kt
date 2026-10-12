@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Icon
@@ -181,6 +182,9 @@ class MainActivity : AppCompatActivity() {
                                 RidePrefs.load(this@MainActivity).updateRideMode(on)
                                 Session.setRideMode(on)
                             },
+                            onOpenOverview = { tab = 3 },
+                            onOpenParked = { tab = 3 },
+                            onConnect = { send(RideService.ACTION_CONNECT) },
                         )
                     } else if (tab == 1) {
                         MoreScreen(
@@ -190,8 +194,12 @@ class MainActivity : AppCompatActivity() {
                             onScan = onScan,
                             onDisconnect = onDisconnect,
                         )
-                    } else {
+                    } else if (tab == 2) {
                         LogScreen()
+                    } else {
+                        // Tab 3 is the Overview. It was a nav item with no
+                        // destination, so tapping it showed nothing.
+                        OverviewScreen(telemetry = telemetry)
                     }
                 }
             }
