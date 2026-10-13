@@ -21,20 +21,33 @@ without logging in" is enforced by the build, not promised in a README.
 
 | Area | State |
 | :--- | :--- |
-| Ntorq + Raider inbound | **8 frame layouts transcribed** from the official APK |
-| GATT / transport | implemented |
-| Discovery + connect | scan screen ships; **never run against a real cluster** |
-| AES-CTR handshake | **proven** — key and cipher confirmed in two independent apps |
-| Navigation HUD packets | **proven** — `0x5A 0x4E` / `0x5B 0x4F` |
-| Text sanitiser | transcribed — cluster cannot render non-ASCII |
-| Ntorq TFT specifics | **untested on hardware** — width and pictograms unconfirmed |
-| UI | adapted Material 3, light/dark/auto — **builds clean, runs on device** |
-| Tests | 18 JVM tests over the protocol layer, run in CI |
+| Ntorq + Raider inbound | 8 frame layouts, **confirmed against a real cluster** |
+| GATT / transport | **working on hardware** — GATT up in ~0.4 s, MTU 65, 20-byte frames |
+| Discovery + connect | **connected to the rider's own Ntorq 125**; reconnects after a drop |
+| AES-CTR handshake | built, and **the cluster never sends a challenge** — unused on this vehicle |
+| Navigation HUD packets | **observed on the wire** — `0x5A 0x4E` and `0x5B 0x4F` reaching the cluster |
+| Caller ID / SMS | packets wired; cluster supports it per the manual; **not yet seen live** |
+| Text sanitiser | fixed on hardware — punctuation no longer becomes `X` |
+| Cluster alpha-numeric rows | **layout still unconfirmed** — see the open questions below |
+| UI | adapted Material 3, light/dark/auto, **running on device** |
+| Tests | 48 JVM tests over the protocol layer, run in CI |
 | APK analysis | complete for the protocol packages |
 
 The handshake, GATT and navigation layouts are cross-checked against **two**
 independent applications. Where they agree, a fact is solid; where they differ,
 both are documented rather than silently merged.
+
+### Screenshots
+
+Captured from the running app while connected to the cluster. No location, no
+street names, no device identifiers.
+
+| Home | Frame log |
+| :--- | :--- |
+| ![Home](docs/screenshots/home.png) | ![Log](docs/screenshots/log.png) |
+
+The Log tab is the project's evidence base: every frame in and out is hex-dumped
+with a timestamp, and **Export** writes a bundle that can be pulled without root.
 
 ### Tested on a phone. Never connected to a scooter.
 
@@ -46,11 +59,28 @@ been installed and driven on a real device many times — which is how the
 Overview/Log tab swap, an unreachable Ride Mode toggle, and a log sink that
 discarded every session were all found. None of them were visible to any test.
 
-What has **never happened** is a Bluetooth connection to an instrument cluster.
-Every protocol fact below is verified against a shipped APK and cross-checked
-between two apps; none of it has been confirmed against the owner's own Ntorq.
-The dashboard showing `—` is the correct rendering of "nothing received", not
-evidence that decoding works.
+### Connected, and what that changed
+
+A Bluetooth connection to the owner's own Ntorq 125 happened on 2026-10-13, and
+it corrected more assumptions than it confirmed:
+
+- **The cluster advertises no service UUID.** A scan filtered on the documented
+  UUID finds nothing. It has to be found by name.
+- **No pair mode and no bonding are needed**, and the cluster sends **no `9B F2`
+  challenge** — the handshake is implemented and unused on this vehicle.
+- **The transcribed frame table is partly wrong.** `0x16` arrives nearly as often
+  as the speedometer and is not in it; `0x19` is listed and never arrives.
+- **Multi-byte fields were read little-endian** while the cluster sends
+  big-endian. The odometer read 278,733 km on a bike ridden 16,593 km.
+- **Navigation mirroring had never sent a frame.** The bridge was handed a null
+  instruction on every frame, and the UI strip read a different flow, so it
+  *looked* end-to-end on the phone while having never once run over BLE.
+
+Every one of those produced a screen that looked right. That is the argument for
+reading the raw bytes rather than trusting the display.
+
+Still unconfirmed: the alpha-numeric row layout, whether the cluster renders
+`+` and `-`, and caller ID end to end.
 
 ---
 

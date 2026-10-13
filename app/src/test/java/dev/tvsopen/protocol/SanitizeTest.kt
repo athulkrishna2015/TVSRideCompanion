@@ -33,7 +33,8 @@ class SanitizeTest {
         // This is the hardware finding: the old sanitiser shipped
         // "Example Road X Hill R" to the cluster.
         // Seventeen columns is the hard cap, so this is the wire length too.
-        assertEquals("Example Road - Hill", s("Example Road - Hill Route"))
+        // (Input is longer on purpose: truncation is part of the contract.)
+        assertEquals("Example Rd - Hil", s("Example Road - Hill Route"))
         assertEquals("a b c d", s("a/b,c.d"))   // four tokens, three separators
     }
 

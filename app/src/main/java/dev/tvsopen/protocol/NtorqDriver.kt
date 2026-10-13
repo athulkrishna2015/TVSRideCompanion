@@ -33,7 +33,15 @@ data class FieldSpec(
         if (offset < 0 || offset + length > buf.size) return null
         var acc = 0L
         for (i in 0 until length) {
-            acc = acc or ((buf[offset + i].toLong() and 0xFF) shl (8 * i))
+            // **Big-endian.** This was `shl (8 * i)`, which assembles
+            // little-endian, and the cluster sends big-endian. Confirmed on
+            // hardware: the odometer bytes `02 88 2A` are 16,593 km (165,930
+            // tenths), and the dashboard was reading 278,733.0 because
+            // `0x2A8802` is those three bytes reversed. It silently corrupted
+            // every multi-byte field — odometer, trip F, ISS duration and count
+            // — and small values look plausible enough that only a bike that has
+            // actually been ridden exposes it.
+            acc = acc or ((buf[offset + i].toLong() and 0xFF) shl (8 * (length - 1 - i)))
         }
         if (signed && length < 8) {
             val signBit = 1L shl (length * 8 - 1)
