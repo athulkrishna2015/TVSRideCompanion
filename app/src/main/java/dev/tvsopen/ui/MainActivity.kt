@@ -275,7 +275,51 @@ class MainActivity : AppCompatActivity() {
      * was unreachable. There is still no scan screen, so this reconnects to the
      * last known cluster — the nearest honest thing to "Scan".
      */
-    private fun requestBlePermissions() {
+    /**
+ * Ask for caller-ID permissions, on request, never at launch.
+ *
+ * These three are the most invasive thing this app can hold — the call log and
+ * the contact list. They are deliberately **not** bundled into the Bluetooth
+ * request: a rider tapping Connect to pair a scooter should not be shown a
+ * prompt about their phonebook, and a denial of any of them must not block
+ * connecting. Failure here only costs caller ID and SMS display; navigation
+ * and telemetry keep working.
+ *
+ * Returns the ones actually granted, so the caller can say what is missing
+ * rather than guessing.
+ */
+private fun requestCallerIdPermissions(onResult: (List<String>) -> Unit) {
+    val wanted = listOf(
+        Manifest.permission.READ_PHONE_STATE,
+        Manifest.permission.READ_CALL_LOG,
+        Manifest.permission.READ_CONTACTS,
+    )
+    val missing = wanted.filter {
+        ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+    }
+    if (missing.isEmpty()) {
+        onResult(wanted)
+        return
+    }
+    callerIdLauncher.launch(missing.toTypedArray())
+}
+
+private val callerIdLauncher =
+    registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        val have = granted.filterValues { it }.keys.toList()
+        Log.i("MainActivity", "caller-ID permissions granted: $have")
+        // Denial is not fatal and must not be reported as a failure: nav and
+        // telemetry are unaffected, only the cluster's caller display is.
+        if (have.isEmpty()) {
+            Toast.makeText(
+                this,
+                "Caller ID needs Contacts and Phone access — navigation still works",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+private fun requestBlePermissions() {
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             needed += Manifest.permission.BLUETOOTH_SCAN

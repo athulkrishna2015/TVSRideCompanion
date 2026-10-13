@@ -22,6 +22,7 @@
 
 package dev.tvsopen.nav
 
+import android.app.Notification
 import dev.tvsopen.protocol.ManeuverResolver
 
 /** Result of reading one navigation notification. */
@@ -35,6 +36,65 @@ data class ParsedNav(
     val etaMinutes: Int,
     val pictogram: Int?,
 )
+
+/**
+ * What kind of notification this is, for the cluster.
+ *
+ * The Ntorq 125 shows navigation, caller ID and SMS in the same display
+ * regions, so the app has to know which it is looking at rather than treating
+ * everything as a turn-by-turn step.
+ */
+enum class ClusterNotice { NAVIGATION, INCOMING_CALL, MESSAGE, MEDIA }
+
+/** Which maps app mode is producing the navigation. */
+enum class NavMode { DRIVING, TWO_WHEELER, UNKNOWN }
+
+/**
+ * Classify a notification by package and extras.
+ *
+ * **Structural, not a package list.** Dialers and messaging apps are
+ * effectively unbounded in number and none of them share a documented extras
+ * contract, so keying on a list of packages would work only for the few
+ * installed today. The classification keys on what the platform guarantees:
+ * the call extras, and the messaging `MessagingStyle` extras.
+ *
+ * Car vs bike is also structural. Google Maps sets
+ * `EXTRA_NAVIGATION_MODE` to 2 for two-wheeler and 1 for driving, in both
+ * modes — so a bike route is detected from the same notification as a car
+ * route and needs no separate handling.
+ */
+fun classify(
+    pkg: String,
+    extras: android.os.Bundle,
+    isMapsPackage: Boolean,
+): Pair<ClusterNotice, NavMode> {
+    // Incoming call first: a dialer's notification is ongoing and has a title
+    // and text, so it would otherwise be misread as navigation.
+    if (extras.containsKey(Notification.EXTRA_INCOMING_CALL_NUMBER) ||
+        extras.containsKey("android.telecom.extra.INCOMING_CALL_EXTRAS")
+    ) {
+        return ClusterNotice.INCOMING_CALL to NavMode.UNKNOWN
+    }
+    if (isMapsPackage) {
+        val mode = when (extras.getInt(Notification.EXTRA_NAVIGATION_MODE, 0)) {
+            1 -> NavMode.DRIVING
+            2 -> NavMode.TWO_WHEELER
+            else -> NavMode.UNKNOWN
+        }
+        return ClusterNotice.NAVIGATION to mode
+    }
+    // MessagingStyle is what a messaging app sets for a conversation, and is
+    // the only reliable way to tell a message from a random app notification.
+    if (extras.getParcelable<Notification.MessagingStyle>(Notification.EXTRA_MESSAGING_STYLE) != null) {
+        return ClusterNotice.MESSAGE to NavMode.UNKNOWN
+    }
+    if (extras.containsKey(Notification.EXTRA_MEDIA_SESSION) &&
+        pkg.contains("music", ignoreCase = true)
+    ) {
+        return ClusterNotice.MEDIA to NavMode.UNKNOWN
+    }
+    return ClusterNotice.MEDIA to NavMode.UNKNOWN
+}
 
 object NavParsing {
 

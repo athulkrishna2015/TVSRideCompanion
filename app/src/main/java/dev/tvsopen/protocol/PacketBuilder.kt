@@ -273,19 +273,33 @@ object PacketBuilder {
      */
     fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
         // Collapse each emoji/symbol run to a single 'X'.
-        //
-        // The replacement used to be "@", but step 2 below rewrites every
-        // non-alphanumeric character — including '@' — to 'X', so the documented
-        // "emoji become @" never reached the wire; they arrived as 'X' anyway.
-        // Going straight to 'X' keeps the one thing that actually matters: a
-        // UTF-16 surrogate pair is two chars, so without this an emoji would
-        // eat two of the seventeen available columns.
         val symbolised = EMOJI_OR_SYMBOL.replace(text, "X")
 
+        // **Drop punctuation; do not substitute it.** This used to rewrite every
+        // non-alphanumeric character to 'X', which looked deliberate for
+        // pictograms but produced corrupt-looking street names on the cluster:
+        // "Meppayyur - Avala Rd" shipped as "Meppayyur X Avalla". A rider
+        // reading that has no way to tell an 'X' from a real letter. Dropping
+        // the dash leaves "Meppayyur  Avala Rd", which reads correctly.
+        //
+        // Separators are folded to a single space rather than deleted outright,
+        // so "a - b" does not become "a  b" and, more importantly, "NH-44"
+        // stays two tokens instead of running together.
         val filtered = buildString(symbolised.length) {
+            var lastWasSpace = false
             for (ch in symbolised) {
-                val ok = (ch in 'A'..'Z') || (ch in 'a'..'z') || (ch in '0'..'9') || ch == ' '
-                append(if (ok) ch else 'X')
+                val ok = (ch in 'A'..'Z') || (ch in 'a'..'z') || (ch in '0'..'9')
+                when {
+                    ok -> {
+                        append(ch)
+                        lastWasSpace = false
+                    }
+                    // Any separator becomes one space, never two in a row.
+                    !lastWasSpace -> {
+                        append(' ')
+                        lastWasSpace = true
+                    }
+                }
             }
         }
 
@@ -299,8 +313,12 @@ object PacketBuilder {
             truncateToBytes(filtered, maxBytes)
         }
 
-        return clamped.trim().toByteArray(Charsets.UTF_8)
+        // Collapse the double spaces that folding left behind, then trim. Done
+        // last so truncation cannot re-open a gap at the boundary.
+        return clamped.replace(SPACE_RUN, " ").trim().toByteArray(Charsets.UTF_8)
     }
+
+    private val SPACE_RUN = Regex(" +")
 
     private fun isAsciiPrintable(s: String): Boolean =
         s.all { (it in 'A'..'Z') || (it in 'a'..'z') || (it in '0'..'9') || it == ' ' }

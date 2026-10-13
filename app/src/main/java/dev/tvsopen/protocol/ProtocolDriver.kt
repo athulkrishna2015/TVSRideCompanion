@@ -58,6 +58,14 @@ interface ProtocolDriver {
     /** Plain 17-char text row for caller ID / song titles / notifications. */
     fun buildTextRow(row: Int, text: String): ByteArray?
 
+    /**
+     * Caller ID for the cluster's incoming-call display.
+     *
+     * Null when the model has no caller display. Separate from [buildTextRow]
+     * because the frame carries a call-state byte as well as text.
+     */
+    fun buildCallerInfo(number: String, name: String?, state: Int): ByteArray? = null
+
     // ---- handshake ----
 
     /**

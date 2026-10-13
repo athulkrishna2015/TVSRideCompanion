@@ -380,7 +380,22 @@ class NtorqDriver(
     override fun buildNavText(nav: NavStep): ByteArray? =
         PacketBuilder.navigationText(nav.streetName)
 
-    override fun buildTextRow(row: Int, text: String): ByteArray? = null
+    /**
+     * `0x5B 0x4C` (row 1) / `0x5B 0x63` (row 2) — caller ID and SMS text.
+     *
+     * This returned null, which meant caller ID and message display could not
+     * have worked even though `PacketBuilder.textRow` and
+     * `PacketBuilder.callerInfo` were both fully written. Row 0 is row 1.
+     */
+    override fun buildTextRow(row: Int, text: String): ByteArray? =
+        PacketBuilder.textRow(
+            if (row <= 0) PacketBuilder.OutboundId.TEXT_ROW1
+            else PacketBuilder.OutboundId.TEXT_ROW2,
+            text,
+        )
+
+    override fun buildCallerInfo(number: String, name: String?, state: Int): ByteArray? =
+        PacketBuilder.callerInfo(number, name, state)
 
     override fun buildChallengeResponse(challenge: ByteArray): ByteArray? =
         Challenge.buildResponse(challenge)
