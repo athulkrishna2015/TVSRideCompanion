@@ -51,19 +51,55 @@ class RowWidthTest {
         assertEquals(RowChars.NTORQ, "STAY SAME RD".length)
     }
 
+    /**
+     * An invented name, per the repo rule against real street names.
+     *
+     * 25 characters — long enough that [RowChars.NTORQ] cuts it well short.
+     * The expected values below are counted, not eyeballed; two earlier
+     * revisions of this file asserted them by hand and were both wrong.
+     */
+    private val longStreet = "Example Road - Hill Route"
+
     @Test
-    fun `a long street no longer loses its destination half`() {
-        // An invented name, per the repo rule against real street names.
-        val street = "Example Road - Hill Route"
-        assertTrue(street.length > RowChars.NTORQ)
+    fun `a long street is cut at the row width`() {
+        assertTrue(longStreet.length > RowChars.NTORQ)
 
-        // Truncation cuts mid-word and drops the destination half — which is why
-        // the bridge scrolls instead of calling take().
-        assertEquals("Example Rd - ", street.take(RowChars.NTORQ))
+        // "Example Road" is exactly the 12 characters that fit. The separator and
+        // the destination half are lost — which is why the bridge scrolls rather
+        // than relying on take().
+        assertEquals("Example Road", longStreet.take(RowChars.NTORQ))
+        assertEquals(RowChars.NTORQ, longStreet.take(RowChars.NTORQ).length)
+    }
 
-        // What scrolling must recover, so the two are pinned against each other:
-        // the tail has to be non-empty or there is nothing to scroll to.
-        assertTrue("the tail must survive somewhere", street.drop(RowChars.NTORQ).isNotBlank())
+    @Test
+    fun `the part truncation drops is exactly what scrolling recovers`() {
+        // Pinned as its own assertion because the two halves have to agree: if
+        // scrolling ever showed the head and never the tail, this would still
+        // pass while the destination stayed invisible.
+        assertEquals(" - Hill Route", longStreet.drop(RowChars.NTORQ))
+        assertTrue(longStreet.drop(RowChars.NTORQ).isNotBlank())
+    }
+
+    @Test
+    fun `what is dropped is exactly the overflow`() {
+        // Expressed as a relationship rather than a hand-counted length, because
+        // three earlier revisions of this file got the count wrong and each one
+        // cost a CI round trip. take() + drop() reassembling the original is the
+        // property that actually matters and cannot drift when a name changes.
+        for (name in listOf("Hill View Rd xyz", "Example Road - Hill Route", "NH-44")) {
+            assertEquals(
+                "take and drop must reassemble '$name'",
+                name,
+                name.take(RowChars.NTORQ) + name.drop(RowChars.NTORQ),
+            )
+            assertEquals(
+                "take must never exceed the row for '$name'",
+                minOf(name.length, RowChars.NTORQ),
+                name.take(RowChars.NTORQ).length,
+            )
+        }
+        assertEquals("Hill View Rd", "Hill View Rd xyz".take(RowChars.NTORQ))
+        assertEquals(" xyz", "Hill View Rd xyz".drop(RowChars.NTORQ))
     }
 
     @Test
@@ -81,15 +117,28 @@ class RowWidthTest {
     fun `displayLine defaults to the Ntorq width`() {
         val step = NavInstruction(
             title = "Turn left",
-            street = "Example Road - Hill Route",
+            street = longStreet,
             distanceMeters = 550,
             pictogram = null,
             provider = "test",
         )
-        // take() keeps the trailing space; sanitize() collapses and trims it
-        // later, so the raw display line is the one asserted here.
-        assertEquals("Example Rd - ", step.displayLine())
+        assertEquals("Example Road", step.displayLine())
         assertEquals(RowChars.NTORQ, step.displayLine().length)
+    }
+
+    @Test
+    fun `displayLine uses the Jupiter width only when asked`() {
+        val step = NavInstruction(
+            title = "Turn left",
+            street = longStreet,
+            distanceMeters = 550,
+            pictogram = null,
+            provider = "test",
+        )
+        val ntorq = step.displayLine()
+        val jupiter = step.displayLine(maxChars = RowChars.JUPITER)
+        assertEquals(RowChars.JUPITER, jupiter.length)
+        assertTrue("the Jupiter row must show more", jupiter.length > ntorq.length)
     }
 
     @Test
