@@ -15,11 +15,17 @@ class SanitizeTest {
 
     private fun s(text: String) = String(PacketBuilder.sanitize(text), Charsets.UTF_8)
 
-    /** The printable run of a built frame, before zero padding and the 0xFF. */
+    /**
+     * The text a built frame carries.
+     *
+     * Starts at index 2: every frame is `0x5B <id>` then text, so reading from
+     * index 0 picks up the two header bytes as characters.
+     */
     private fun textOf(frame: ByteArray): String {
-        val end = frame.indexOfFirst { it == 0.toByte() || it == 0xFF.toByte() }
-            .let { if (it < 0) frame.size else it }
-        return String(frame.copyOfRange(0, end), Charsets.UTF_8).trim()
+        val body = frame.copyOfRange(2, frame.size)
+        val end = body.indexOfFirst { it == 0.toByte() || it == 0xFF.toByte() }
+            .let { if (it < 0) body.size else it }
+        return String(body.copyOfRange(0, end), Charsets.UTF_8).trim()
     }
 
     @Test
