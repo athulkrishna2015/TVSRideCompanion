@@ -120,6 +120,14 @@ class MainActivity : AppCompatActivity() {
         // The toggle stays, because someone may want the cluster left alone.
         var navMirroring by rememberSaveable { mutableStateOf(true) }
 
+        val telemetry by Session.telemetry.collectAsStateWithLifecycle()
+        val hud by Session.hud.collectAsStateWithLifecycle()
+        val connection by Session.connection.collectAsStateWithLifecycle()
+
+        // Everything the UI shows comes from the process-scoped Session, which
+        // the BLE service and the notification listener both write into. The
+        // activity only observes.
+
         // Start the mirror once a connection exists, because it defaults on.
         //
         // Without this the default was cosmetic: the switch showed "on" while
@@ -133,17 +141,14 @@ class MainActivity : AppCompatActivity() {
         // a bridge it cannot write to would log a dropped write per tick, which is
         // exactly the spam that was just fixed.
         //
-        // Everything the UI shows comes from the process-scoped Session, which
-        // the BLE service and the notification listener both write into. The
-        // activity only observes.
+        // Declared *after* `connection` on purpose: an earlier version sat above
+        // the collect calls and would not compile, because a local val cannot be
+        // read before its declaration.
         LaunchedEffect(connection.state) {
             if (navMirroring && connection.state == ConnectionState.CONNECTED) {
                 onNavMirrorChange(RideService.ACTION_START_NAV)
             }
         }
-        val telemetry by Session.telemetry.collectAsStateWithLifecycle()
-        val hud by Session.hud.collectAsStateWithLifecycle()
-        val connection by Session.connection.collectAsStateWithLifecycle()
         val parked by Session.parked.collectAsStateWithLifecycle()
         val rideMode by Session.rideMode.collectAsStateWithLifecycle()
 
