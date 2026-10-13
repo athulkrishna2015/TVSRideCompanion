@@ -2,8 +2,8 @@
 // on every frame the rider sees.
 //
 // The bug these cover was found on hardware, not by reading the code: live
-// navigation sent "Meppayyur - Avala Rd" to the cluster and the cluster received
-// "Meppayyur X Avalla". Substituting a letter for a separator is not a cosmetic
+// navigation sent "Example Road - Hill Route" to the cluster and the cluster received
+// "Example Road X Hill R". Substituting a letter for a separator is not a cosmetic
 // problem on a 17-character display — a rider cannot tell an 'X' from a real one.
 
 package dev.tvsopen.protocol
@@ -31,9 +31,9 @@ class SanitizeTest {
     @Test
     fun `punctuation is kept or folded, never replaced with a letter`() {
         // This is the hardware finding: the old sanitiser shipped
-        // "Meppayyur X Avalla" to the cluster.
+        // "Example Road X Hill R" to the cluster.
         // Seventeen columns is the hard cap, so this is the wire length too.
-        assertEquals("Meppayyur - Avala", s("Meppayyur - Avala Rd"))
+        assertEquals("Example Road - Hill", s("Example Road - Hill Route"))
         assertEquals("a b c d", s("a/b,c.d"))   // four tokens, three separators
     }
 
@@ -58,7 +58,7 @@ class SanitizeTest {
 
     @Test
     fun `letters and digits survive`() {
-        assertEquals("Meppayyur Rd 12", s("Meppayyur Rd 12"))
+        assertEquals("Example Rd Rd 12", s("Example Rd Rd 12"))
     }
 
     @Test

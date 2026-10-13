@@ -254,6 +254,67 @@ Outbound, the only thing we sent was the keepalive, exactly every 2.0 s:
 5B 4A 04 02 00 00 00 02 00 00 00 04 00 00 00 00 00 00 00 FF
 ```
 
+### 4c. Navigation mirroring — the first frames that reached the cluster
+
+Measured 2026-10-13 with a live route. Outbound navigation was observed on the
+wire for the first time:
+
+```
+5A 4E 00 00 99 01 00 00 00 07 01 01 00 00 00 00 00 00 00 FF
+5A 4E 26 02 9B 01 26 02 00 07 01 01 00 00 00 00 00 00 00 FF
+5B 4F "toward Example Rd"     (ASCII, 17 bytes)
+5B 4F "ETA 411m X 550m"
+```
+
+`5A 4E` carries the control state — distance and ETA — and `5B 4F` carries the
+text row. They alternate on a short interval so the display shows the street and
+the metrics in turn.
+
+Two things were broken before this, and both produced a screen that looked right:
+
+- **The bridge was never given an instruction.** It read its own `_hud` flow,
+  populated only by `onInstruction()`, which was called through
+  `MapsNotificationListenerRef.current` — an object declared and never assigned
+  anywhere in the codebase. The UI strip reads `Session.hud` directly and never
+  went through the bridge, so navigation mirroring looked end-to-end on the
+  phone while having never once run over BLE.
+- **The sanitiser corrupted street names.** Every non-alphanumeric character was
+  rewritten to `X`, so a hyphenated road reached the cluster with an `X` where
+  the dash was, and the rider cannot tell an `X` from a real letter. Now `+` and
+  `-` are kept and other punctuation folds to a single space. Emoji still
+  collapse to `X`: for a pictogram an unknown glyph genuinely is an `X`, and
+  dropping it would close the gap between two words.
+
+**Unverified:** whether the cluster renders `+` and `-` at all. Both are ASCII
+printable and very likely renderable, but that needs eyes on the dash next time.
+`NH-44` is kept as `NH-44` rather than folded to `NH 44`, on the grounds that
+the second is a different road name.
+
+### 4d. Caller ID and SMS
+
+The Ntorq 125 manual lists **"CALLER ID and SMS notification on speedometer"** as
+a documented feature, with a green smart-connect LED for an incoming call or
+message. `PacketBuilder.textRow` (`0x5B 0x4C` row 1, `0x5B 0x63` row 2) and
+`PacketBuilder.callerInfo` (`0x5B 0x43`) were both written but unreachable:
+`NtorqDriver.buildTextRow` returned `null` and the driver interface had no
+`buildCallerInfo` at all. Both are wired now.
+
+Notifications are classified **structurally** — on the Telecom call extras and on
+`MessagingStyle` — rather than by package, because dialer and messaging apps are
+effectively unbounded in number and share no documented extras contract.
+
+Car and bike mode need no separate path: Google Maps puts the instruction,
+street and distance in the same title/text/sub fields whichever mode is
+routing, so mirroring is mode-independent. A `navigation.mode` extra is read
+defensively and purely for information — it is community-documented rather than
+public API, and **nothing gates on it**, precisely because it is unverified.
+
+`ANSWER_PHONE_CALLS` and `CALL_PHONE` are deliberately **not** requested. Both
+are hard restricted from Android 10: only the app the user has set as the default
+phone handler can hold them, so a third-party app is denied instantly. Answering
+a call from a cluster button would first mean becoming the default dialer. CI
+asserts their continued absence so they are not added on a hunch.
+
 ### 4b. Discovery and handshake — measured, and both assumptions were wrong
 
 - **The cluster advertises no service UUID.** `5456534D-…` is absent from its
