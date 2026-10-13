@@ -64,56 +64,21 @@ class NavigationBridge(
     /** 0x4E or 0x49; whichever the cluster accepts. Default 0x4E. */
     var navigationDataId: Int = OutboundId.NAVIGATION_CONTROL
 
-    /** Text row capacity on this cluster. Jupiter: 17. Ntorq TFT: unknown. */
     /**
-     * Characters per navigation line on this cluster.
-     *
-     * 12, not the 17 the payload implies — TVS's manual documents `DISTANCE
-     * REM` for `DISTANCE REMAINING` and `STAY SAME RD` for `STAY SAME ROAD`, both
-     * cut at 12, and nothing it shows is longer. Set from [RowChars.NTORQ] when
-     * the bridge is built for an Ntorq.
+     * Line 1 width on this cluster. The Ntorq has 10 chars on line 1 and
+     * 12 on line 2; this property is retained for the legacy one-line path.
      */
     var textRowChars: Int = RowChars.NTORQ
+
+    /** Ntorq second-line width, which is where the street/distance row goes. */
+    var secondTextRowChars: Int = RowChars.NTORQ_LINE_2
+
+    /** Ntorq first-line width, which is where the maneuver goes. */
+    var firstTextRowChars: Int = RowChars.NTORQ_LINE_1
 
     var controlIntervalMs: Long = 1500
     var textSwapIntervalMs: Long = 3000
 
-    /**
-     * Send both navigation lines at once instead of alternating one.
-     *
-     * Off by default. `0x5B 0x50` and the control frame's row-count byte are
-     * transcribed, not measured — no capture has shown a second line rendering on
-     * this cluster — while the single-row alternating path is known to reach the
-     * display. Turning this on without the scooter available would trade a
-     * working display for an unverified one.
-     */
-    var twoRowNav: Boolean = false
-
-    /**
-     * Let the **cluster** scroll a payload longer than its own row.
-     *
-     * The manual documents that the cluster scrolls long text itself, so
-     * sending the whole street name and letting it do the work is the better
-     * display if it is true. Off by default: the documentation describes the
-     * behaviour but nothing here has observed it, and the app-side window in
-     * [Scroll] is the path that is known to produce a displayable 12 characters.
-     *
-     * With this off the app sends successive windows instead, which is why the
-     * scroller exists at all.
-     */
-    var scrollNav: Boolean = false
-
-    /** How long each scrolling window stays up, in ms. */
-    var scrollTickMs: Long = 1200
-
-    /**
-     * Extra characters fetched beyond the row so there is something to scroll.
-     *
-     * A long name is truncated to `width + lookahead` before scrolling rather
-     * than in full: a 40-character destination is not a 40-character scroll on a
-     * 12-cell row, it is three seconds of waiting to read past the useful part.
-     */
-    var scrollLookahead: Int = 12
     var pingIntervalMs: Long = 2000
 
     private var findMy = false
@@ -153,56 +118,14 @@ class NavigationBridge(
         if (controlJob?.isActive == true) return
         var showingMetrics = false
 
-        // One scroller per source string, recreated when the step changes.
-        //
-        // Keyed by content rather than index: a new turn-by-turn step replaces
-        // the whole string, and carrying the offset across would resume
-        // mid-word on a street whose name shares no characters with the last.
-        var streetScroll = Scroll("", textRowChars)
-        var metricsScroll = Scroll("", textRowChars)
-
         controlJob = scope.launch {
             _hud.value = _hud.value.copy(active = true, navigationDataId = navigationDataId)
             while (isActive) {
                 val step = _hud.value.instruction
                 if (step != null) {
                     val nav = step.toNavStep()
-                    val fullStreet = step.displayLine(textRowChars + scrollLookahead)
-                    val fullMetrics = step.metricsLine(textRowChars)
-
-                    // Long street names scroll rather than lose their tail.
-                    //
-                    // The row is 12 characters and Indian street names rarely
-                    // fit. Truncating showed "Example Rd -" and dropped the half
-                    // naming the destination, which is the half that matters.
-                    //
-                    // [scrollNav] decides who does the scrolling. When the
-                    // cluster's own scrolling is trusted it gets the full string
-                    // and the row walks itself; otherwise the app walks a window
-                    // across the row, which is the displayable-certain path and
-                    // the default while the scooter is unavailable.
-                    if (streetScroll.full != fullStreet) streetScroll = Scroll(fullStreet, textRowChars)
-                    if (metricsScroll.full != fullMetrics) metricsScroll = Scroll(fullMetrics, textRowChars)
-
-                    val street = if (streetScroll.scrolls) {
-                        if (scrollNav) fullStreet.take(textRowChars)
-                        else streetScroll.current()
-                    } else {
-                        fullStreet
-                    }
-                    val metrics = if (metricsScroll.scrolls) {
-                        if (scrollNav) fullMetrics.take(textRowChars)
-                        else metricsScroll.current()
-                    } else {
-                        fullMetrics
-                    }
-                    // Advance after showing, so this tick renders the window the
-                    // scroller is already on. holdTicks is the dwell: two ticks
-                    // at each end, one through the middle.
-                    val hold = maxOf(streetScroll.holdTicks(), metricsScroll.holdTicks())
-                    repeat(hold - 1) { delay(scrollTickMs) }
-                    streetScroll.advance()
-                    metricsScroll.advance()
+                    val street = step.displayLine(secondTextRowChars)
+                    val fullMetrics = step.metricsLine(firstTextRowChars)
 
                     // Two lines when the driver has a second row, else alternate.
                     //
@@ -214,13 +137,12 @@ class NavigationBridge(
                     // how many lines are populated — so with both set they can be
                     // shown together.
                     //
-                    // UNVERIFIED on this cluster: byte 10's meaning is from the
-                    // Jupiter report, and no capture has shown `0x50` on the
-                    // wire. So the second row is only sent when there is a
-                    // distinct second line to show, and [twoRowNav] falls back
-                    // to the old alternating behaviour, which is known to work.
-                    val twoRows = twoRowNav &&
-                        driver.buildNavTextSecondary(nav.copy(streetName = street)) != null &&
+                    // The rider confirmed asymmetric physical rows. The second
+                    // data ID and control row count remain inherited from the
+                    // protocol transcription; their display behavior still
+                    // needs a live console capture.
+                    val metrics = fullMetrics
+                    val twoRows = driver.buildNavTextSecondary(nav.copy(streetName = street)) != null &&
                         street.isNotBlank() && metrics.isNotBlank()
 
                     val control = nav.copy(rows = if (twoRows) 2 else 1)
@@ -235,10 +157,13 @@ class NavigationBridge(
                     }
 
                     if (twoRows) {
-                        driver.buildNavText(nav.copy(streetName = street))?.let { ble.write(it) }
-                        driver.buildNavTextSecondary(
-                            nav.copy(streetName = metrics),
-                        )?.let { ble.write(it) }
+                        // The Ntorq's two lines have separate capacities: line 1
+                        // is 10 characters, line 2 is 12. The current packet API
+                        // routes the primary row through 0x4F and secondary
+                        // through 0x50; physical row assignment still needs a
+                        // console capture, but no longer shares one width.
+                        driver.buildNavText(nav.copy(streetName = metrics))?.let { ble.write(it) }
+                        driver.buildNavTextSecondary(nav.copy(streetName = street))?.let { ble.write(it) }
                     } else {
                         val line = if (showingMetrics) metrics else street
                         driver.buildNavText(nav.copy(streetName = line))?.let { ble.write(it) }
@@ -278,74 +203,14 @@ class NavigationBridge(
      * `10Km 700m` for a multi-kilometre distance, plain metres below that. The
      * old `1.2km` style appeared nowhere in the documentation.
      *
-     * Returns the **full** string, deliberately not truncated. [Scroll] does the
-     * cutting, because this line routinely exceeds a 12-cell row and the rest of
-     * it is worth showing.
+     * Returns the whole source value; the caller applies the 10-character
+     * maneuver-line capacity before it is encoded.
      */
     private fun NavInstruction.metricsLine(max: Int): String {
         val d = if (distanceMeters >= 1000)
             "${distanceMeters / 1000}Km ${distanceMeters % 1000}m"
         else "${distanceMeters}m"
         return if (etaMinutes > 0) "ETA ${etaMinutes}m $d" else d
-    }
-
-    /**
-     * A window that walks a long string across the row and back.
-     *
-     * The row is 12 characters. An Indian street name rarely fits —
-     * "Example Road - Hill Route" is 23, and "Hill View Residency" is longer
-     * still — so
-     * truncating showed `"Example Rd -"` and dropped the half that says where you
-     * are going. The cluster scrolls long text itself, so the app should hand it
-     * the whole string and let it do that.
-     *
-     * Scrolling is done **app-side** rather than by sending successive windows,
-     * and that is the honest part: whether the cluster scrolls a payload longer
-     * than its own row is not established — [scrollNav] is therefore off until
-     * the scooter is available. The windowing here is the fallback that is known
-     * to be displayable, and it is what runs by default.
-     *
-     * Pauses at each end rather than wrapping immediately, so a word is readable
-     * before it leaves.
-     */
-    private class Scroll(
-        val full: String,
-        private val width: Int,
-    ) {
-        private var offset = 0
-
-        /** True when the text is wider than the row and actually needs moving. */
-        val scrolls: Boolean get() = full.length > width
-
-        /** The window to show now. Does not advance; call [advance] for that. */
-        fun current(): String =
-            if (!scrolls) full
-            else full.substring(offset, (offset + width).coerceAtMost(full.length))
-
-        /**
-         * Move one character along, then back.
-         *
-         * Bounces rather than wrapping: reaching the far end returns through the
-         * same text rather than jumping back to the start, so the name is read
-         * once, continuously. The caller holds each window for a display tick
-         * (or two, see [holdTicks]), which is the dwell time.
-         */
-        fun advance() {
-            if (!scrolls) return
-            val maxOffset = full.length - width
-            offset = if (offset >= maxOffset) 0 else offset + 1
-        }
-
-        /**
-         * Ticks to hold this window before moving on.
-         *
-         * 2 at each end so the first and last characters are readable before the
-         * text starts moving, 1 through the middle where context is enough.
-         */
-        fun holdTicks(): Int =
-            if (!scrolls) 1
-            else if (offset == 0 || offset >= full.length - width) 2
-            else 1
     }
 
     companion object {

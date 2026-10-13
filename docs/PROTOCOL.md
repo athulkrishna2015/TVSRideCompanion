@@ -183,6 +183,7 @@ find-my) or is the official minimal packet enough?
 
 ## 4. Inbound telemetry `DataID`s
 
+# Inbound telemetry `DataID`
 Dispatch is by `byteArray[1]` — `IncomingFrameIdentifier.identify()` indexes the
 data-id byte and looks it up in a per-model map. For Ntorq,
 `NtorqFrameIdentifier.getFrameConfig()` returns exactly:
@@ -518,6 +519,23 @@ navigation street line.
 | `0x5B 0x63` | message text row 2 (`DATA_ID_MESSAGE2 = 99`) |
 | `0x5B 0x4F` | navigation text (`DATA_ID_NAVIGATIONDATA1 = 79`) |
 | `0x5B 0x50` | navigation text 2 (`DATA_ID_NAVIGATIONDATA2 = 80`) |
+
+### Rider-name frame — observed shape, unresolved ID
+
+The official `com.tvsm.connect` 2.13.0 `sendInitialData()` calls
+`BluetoothUtil.createRiderNameArray(profileName)` and passes the returned bytes
+to the normal encrypted GATT sender. The helper constructs:
+
+```
+5B <DATA_ID_NAME> <UTF-8 name, max 17 chars> <zero padding> FF
+```
+
+This confirms that the console greeting can be updated from the phone and that
+the name has a 17-character wire limit. **The numeric value of
+`DATA_ID_NAME` is not recovered by the decompiler**, however: the class field is
+present, but its initializer did not appear in the parsed/decompiled source.
+Until that byte is recovered or measured, the app's rider-name editor stores the
+value locally and explicitly does not send a packet. No ID should be guessed.
 
 All are 20 bytes: 2-byte header, 17-byte payload, `0xFF` terminator, **no
 checksum**.

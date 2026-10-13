@@ -54,7 +54,23 @@ data class Discovered(
 
 data class ScanState(
     val scanning: Boolean = false,
-    val onlySmartXonnect: Boolean = true,
+
+    /**
+     * Whether to restrict the scan to clusters advertising the service UUID.
+     *
+     * **Default off**, and this is a measured finding rather than a preference.
+     * The filter maps to a `ScanFilter.setServiceUuid(...)`, which the platform
+     * applies to the *advertisement packet*. This cluster advertises **no
+     * service UUID at all** — that is why a UUID-filtered scan of the rider's
+     * own Ntorq finds nothing at all, and why the app has to find it by name
+     * (`TVSBT…`).
+     *
+     * Defaulting this on therefore made the scan screen find no clusters, on the
+     * one vehicle that is known to work. The cost of off is a longer result list
+     * containing non-clusters, which `publish()` sorts past by putting
+     * SmartXonnect devices first.
+     */
+    val onlySmartXonnect: Boolean = false,
     val devices: List<Discovered> = emptyList(),
     /** Set when the scan could not start at all — usually a missing permission. */
     val error: String? = null,
@@ -147,7 +163,10 @@ class ScooterScanner(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun start(onlySmartXonnect: Boolean = true, timeoutMillis: Long = DEFAULT_TIMEOUT_MS) {
+    fun start(
+        onlySmartXonnect: Boolean = _state.value.onlySmartXonnect,
+        timeoutMillis: Long = DEFAULT_TIMEOUT_MS,
+    ) {
         if (_state.value.scanning) return
         val scanner: BluetoothLeScanner? = runCatching {
             bluetoothManager?.adapter?.bluetoothLeScanner
@@ -161,7 +180,12 @@ class ScooterScanner(private val context: Context) {
         }
 
         found.clear()
-        _state.value = ScanState(scanning = true, onlySmartXonnect = onlySmartXonnect)
+        _state.value = _state.value.copy(
+            scanning = true,
+            onlySmartXonnect = onlySmartXonnect,
+            devices = emptyList(),
+            error = null,
+        )
 
         val filters = if (onlySmartXonnect) {
             // ParcelUuid wraps a UUID, not a string; Gatt.SERVICE is the string

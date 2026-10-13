@@ -38,11 +38,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.protocol.VehicleModel
+import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.transport.BondState
 import dev.tvsopen.transport.Discovered
 import dev.tvsopen.transport.ScooterPairing
@@ -64,12 +66,34 @@ import dev.tvsopen.transport.ScooterScanner
 fun ScanScreen(
     scanner: ScooterScanner,
     pairing: ScooterPairing,
+    lastModelId: String?,
     onPick: (address: String, model: VehicleModel) -> Unit,
     onBack: () -> Unit,
 ) {
     val state by scanner.state.collectAsStateWithLifecycle()
     val bond by pairing.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf<String?>(null) }
+
+    // Default to the rider's own model rather than whatever the advertised name
+    // happens to decode to.
+    //
+    // `guessedModel` reads the BLE name, and this cluster advertises `TVSBT…`
+    // with no model in it — so the guess was UNKNOWN, and connecting with that
+    // selects a driver with no frame table, no nav and no caller ID. The screen
+    // then looks like it worked while silently decoding nothing. The model is a
+    // choice the rider makes, so preselecting the one this app was built against
+    // is strictly better than preselecting UNKNOWN.
+    //
+    // A row the rider explicitly changes still wins: [modelChoice] is only the
+    // fallback, so an override is never overwritten by a later discovery.
+    val defaultModel = remember(lastModelId) {
+        lastModelId?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
+            ?: VehicleModel.NTORQ
+    }
+    var onlySmartXonnect by remember {
+        mutableStateOf(RidePrefs.load(context).onlySmartXonnect)
+    }
     var modelChoice by remember { mutableStateOf<Map<String, VehicleModel>>(emptyMap()) }
 
     // Registered for this screen's lifetime only: we need bond results while it
@@ -130,8 +154,12 @@ fun ScanScreen(
                     )
                 }
                 Switch(
-                    checked = state.onlySmartXonnect,
-                    onCheckedChange = scanner::setFilter,
+                    checked = onlySmartXonnect,
+                    onCheckedChange = { enabled ->
+                        onlySmartXonnect = enabled
+                        RidePrefs.load(context).onlySmartXonnect = enabled
+                        scanner.setFilter(enabled)
+                    },
                 )
             }
         }
@@ -170,7 +198,7 @@ fun ScanScreen(
                         "clusters\"."
                 },
                 action = {
-                    Button(onClick = { scanner.start(state.onlySmartXonnect) }) {
+                    Button(onClick = { scanner.start(onlySmartXonnect) }) {
                         Icon(
                             Icons.Filled.Bluetooth,
                             contentDescription = null,
@@ -188,7 +216,17 @@ fun ScanScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(state.devices, key = { it.address }) { d ->
-                    val chosen = modelChoice[d.address] ?: d.guessedModel
+                    // Explicit choice, then the default model, and only then the
+                    // name-based guess — which for this cluster is UNKNOWN.
+                    var savedChoice by remember(d.address) {
+                        mutableStateOf(
+                            RidePrefs.load(context).selectedModel(d.address)
+                            ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
+                        )
+                    }
+                    val chosen = modelChoice[d.address]
+                        ?: savedChoice
+                        ?: if (d.isSmartXonnect) defaultModel else d.guessedModel
                     DeviceRow(
                         device = d,
                         expanded = expanded == d.address,
@@ -197,7 +235,11 @@ fun ScanScreen(
                         onToggle = {
                             expanded = if (expanded == d.address) null else d.address
                         },
-                        onModel = { modelChoice = modelChoice + (d.address to it) },
+                        onModel = {
+                            modelChoice = modelChoice + (d.address to it)
+                            savedChoice = it
+                            RidePrefs.load(context).updateSelectedModel(d.address, it.name)
+                        },
                         onPair = { pairing.pair(d.address) },
                         onConnect = { onPick(d.address, chosen) },
                     )

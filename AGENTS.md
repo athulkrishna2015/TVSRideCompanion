@@ -378,6 +378,38 @@ were wrong. A live cluster is worth more than a year of reading an APK.
   and show the number.
 - **Bike mode**, never exercised on hardware.
 
+### Current first-run and reconnect behavior
+
+This is the intended defaults contract. Keep the tests in
+`FirstLaunchDefaultsTest.kt` aligned with it:
+
+- First launch requests runtime Bluetooth, notification-posting and caller-ID
+  permissions in one prompt sequence. Notification-listener access is a Settings
+  toggle, so the app points the user there separately. Declining optional
+  caller-ID permissions must not block Bluetooth or navigation.
+- With no remembered address, permission completion opens the scanner. With a
+  remembered address, the app reconnects directly on launch; never scan first.
+- Scan defaults to **Only SmartXonnect off**, because this Ntorq advertises no
+  service UUID. The toggle persists; a deliberate user choice must survive
+  leaving and reopening Scan.
+- A new SmartXonnect result defaults to **Ntorq 125** (or the last selected
+  model). The name-only guess is `UNKNOWN`, which connects with no useful driver.
+  Per-address model overrides are persisted and must survive rediscovery.
+- Navigation mirroring defaults on. Its toggle remains available to turn it off.
+
+The More screen includes a developer-facing rider-name editor. It currently
+stores the value locally only. **Do not send it over BLE** until the numeric
+`DATA_ID_NAME` is recovered from the official artifact: packet shape is observed
+in `createRiderNameArray`, but the ID's literal remains unresolved. The UI must
+say that it has not updated the console. Keep `RiderNameFrameTest` as a shape /
+length test; do not add a test with a guessed outbound ID.
+
+Ntorq display rows are asymmetric: **10 characters on line 1, 12 on line 2**,
+confirmed by the rider; the manual independently shows line-2 strings clipped
+to 12. Keep `RowChars.NTORQ_LINE_1` and `NTORQ_LINE_2` distinct. The 17-byte wire
+payload does not imply a 17-character physical row. A hardware check of wrap /
+scroll behavior remains impossible while the scooter battery is flat.
+
 ## This is a clean-room interoperability project
 
 **This repository is public. Never commit anything derived from the owner's

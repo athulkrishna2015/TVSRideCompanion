@@ -25,6 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +61,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun MoreScreen(
     connection: dev.tvsopen.session.ConnectionState1,
+    riderName: String?,
+    onRiderNameChange: (String?) -> Unit,
     notificationAccessGranted: Boolean,
     onOpenNotificationAccess: () -> Unit,
     onScan: () -> Unit,
@@ -83,6 +86,9 @@ fun MoreScreen(
         }
 
         item { AppearanceCard() }
+
+        item { RiderNameCard(name = riderName, onNameChange = onRiderNameChange) }
+
 
         item {
             Text("Connection", style = MaterialTheme.typography.titleMedium,
@@ -222,6 +228,46 @@ fun MoreScreen(
         item { Spacer(Modifier.height(8.dp)) }
     }
 }
+
+@Composable
+private fun RiderNameCard(name: String?, onNameChange: (String?) -> Unit) {
+    var editing by remember(name) { mutableStateOf(name.orEmpty()) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Console greeting", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Saved on this phone only. The rider-name packet ID is not verified yet, so this does not update the console.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = editing,
+                onValueChange = { if (it.length <= 17) editing = it },
+                label = { Text("Rider name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = { Text("${editing.length}/17") },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    val trimmed = editing.trim().takeIf { it.isNotEmpty() }
+                    onNameChange(trimmed)
+                    editing = trimmed.orEmpty()
+                }) { Text("Save") }
+                OutlinedButton(onClick = {
+                    editing = ""
+                    onNameChange(null)
+                }) { Text("Clear") }
+            }
+            Text(
+                if (name.isNullOrBlank()) "No local name saved"
+                else "Saved locally: $name",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
 
 /**
  * Doze exemption.

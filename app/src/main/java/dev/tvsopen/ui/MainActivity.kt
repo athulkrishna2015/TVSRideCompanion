@@ -56,14 +56,92 @@ class MainActivity : AppCompatActivity() {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-            if (granted.values.all { it }) {
-                // Previously this only toasted and dropped the grant. Now that
-                // permission is in hand, finish the job the button asked for.
-                connectToRememberedCluster()
-            } else {
-                Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_LONG).show()
+            // Whatever was granted or refused, the first-run set is now answered.
+            // Recording it here rather than only when everything is granted means a
+            // rider who declines the phone permissions is not asked again on every
+            // launch, and one who accepts is asked for the rest.
+            val wasFirstRun = isFirstRun
+            if (wasFirstRun) markFirstRunComplete()
+
+            val denied = granted.filterValues { !it }.keys
+            if (denied.isNotEmpty()) {
+                Log.i("MainActivity", "declined: ${denied.joinToString()}")
+            }
+
+            // Connect if the permissions needed for BLE were granted, even if
+            // the optional phone/contact grants were declined. The initial
+            // implementation required every requested permission, which made
+            // declining caller-ID permissions prevent scooter connection.
+            if (hasBlePermission()) {
+                if (RidePrefs.load(this).lastAddress.isNullOrBlank()) openScanner()
+                else connectToRememberedCluster()
             }
         }
+
+    /**
+     * Whether this is the first launch, so every permission can be asked at once.
+     *
+     * Recorded **after** the permission dialog returns rather than before, so a
+     * launch that is killed mid-dialog asks again next time instead of
+     * recording a set of permissions that were never actually answered.
+     */
+    private val isFirstRun: Boolean
+        get() = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_FIRST_RUN, true)
+
+    private fun markFirstRunComplete() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_FIRST_RUN, false).apply()
+    }
+
+    /**
+     * Everything the app can need, requested in one go on first launch.
+     *
+     * Three groups, and the grouping is why this is a single prompt sequence
+     * rather than one dialog per feature:
+     *
+     * 1. Bluetooth — without it nothing works.
+     * 2. Notification posting (Android 13+) — runtime permission for the
+     *    connection foreground-service notice. Notification *listener access*
+     *    for maps nav is a separate Settings toggle; Android cannot grant that
+     *    through this dialog.
+     * 3. Contacts, phone state, call log — caller ID only.
+     *
+     * Asking once, up front, is better than the alternative this replaces: a
+     * rider granted Bluetooth, connected successfully, started a route, and saw
+     * nothing on the cluster, with no indication that a permission was missing.
+     */
+    private fun requestAllPermissionsOnFirstRun() {
+        val missing = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            missing += Manifest.permission.BLUETOOTH_SCAN
+            missing += Manifest.permission.BLUETOOTH_CONNECT
+        } else {
+            missing += Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            missing += Manifest.permission.POST_NOTIFICATIONS
+        }
+        // Caller ID. Denying these costs only the cluster's caller display, and
+        // the navigation mirror works without them.
+        missing += Manifest.permission.READ_PHONE_STATE
+        missing += Manifest.permission.READ_CONTACTS
+        missing += Manifest.permission.READ_CALL_LOG
+
+        // Request CALL_PHONE only when it is declared (it is intentionally not:
+        // Android restricts it to the default dialer). READ_PHONE_STATE,
+        // READ_CONTACTS and READ_CALL_LOG are all runtime-grantable.
+
+        val needed = missing.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (needed.isEmpty()) {
+            markFirstRunComplete()
+            if (RidePrefs.load(this).lastAddress.isNullOrBlank()) openScanner()
+            else connectToRememberedCluster()
+            return
+        }
+        Log.i("MainActivity", "first run: requesting ${needed.size} permissions")
+        permissionLauncher.launch(needed.toTypedArray())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -118,7 +196,9 @@ class MainActivity : AppCompatActivity() {
         // and there is no cloud, account or network call involved.
         //
         // The toggle stays, because someone may want the cluster left alone.
-        var navMirroring by rememberSaveable { mutableStateOf(true) }
+        var navMirroring by rememberSaveable {
+            mutableStateOf(RidePrefs.load(this@MainActivity).navigationMirroring)
+        }
 
         val telemetry by Session.telemetry.collectAsStateWithLifecycle()
         val hud by Session.hud.collectAsStateWithLifecycle()
@@ -144,9 +224,11 @@ class MainActivity : AppCompatActivity() {
         // Declared *after* `connection` on purpose: an earlier version sat above
         // the collect calls and would not compile, because a local val cannot be
         // read before its declaration.
-        LaunchedEffect(connection.state) {
+        LaunchedEffect(connection.state, navMirroring) {
             if (navMirroring && connection.state == ConnectionState.CONNECTED) {
                 onNavMirrorChange(RideService.ACTION_START_NAV)
+            } else if (!navMirroring && connection.state == ConnectionState.CONNECTED) {
+                onNavMirrorChange(RideService.ACTION_STOP_NAV)
             }
         }
         val parked by Session.parked.collectAsStateWithLifecycle()
@@ -195,8 +277,11 @@ class MainActivity : AppCompatActivity() {
                         ScanScreen(
                             scanner = scanner,
                             pairing = pairing,
+                            lastModelId = RidePrefs.load(this@MainActivity).lastModelId,
                             onPick = { address, model ->
                                 scanning.value = false
+                                RidePrefs.load(this@MainActivity)
+                                    .updateSelectedModel(address, model.name)
                                 RidePrefs.load(this@MainActivity)
                                     .updateLastConnection(address, model.name)
                                 connectTo(address, model)
@@ -225,6 +310,7 @@ class MainActivity : AppCompatActivity() {
                             },
                             onNavMirrorChange = { on ->
                                 navMirroring = on
+                                RidePrefs.load(this@MainActivity).navigationMirroring = on
                                 onNavMirrorChange(
                                     if (on) RideService.ACTION_START_NAV
                                     else RideService.ACTION_STOP_NAV,
@@ -250,6 +336,10 @@ class MainActivity : AppCompatActivity() {
                     } else if (tab == 1) {
                         MoreScreen(
                             connection = connection,
+                            riderName = RidePrefs.load(this@MainActivity).riderName,
+                            onRiderNameChange = { name ->
+                                RidePrefs.load(this@MainActivity).riderName = name
+                            },
                             notificationAccessGranted = hasNotificationAccess,
                             onOpenNotificationAccess = onOpenNotificationAccess,
                             onScan = onScan,
@@ -354,7 +444,7 @@ private val callerIdLauncher =
         }
     }
 
-private fun requestBlePermissions() {
+    private fun requestBlePermissions() {
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             needed += Manifest.permission.BLUETOOTH_SCAN
@@ -423,12 +513,30 @@ private fun requestBlePermissions() {
     override fun onResume() {
         super.onResume()
         notificationAccess = hasNotificationAccess()
+        if (isFirstRun && hasBlePermission()) {
+            // BLE may already have been granted from the system permission
+            // manager before this activity's first resume. Still ask for the
+            // remaining first-run permissions once.
+            if (!autoConnectTried) {
+                autoConnectTried = true
+                requestAllPermissionsOnFirstRun()
+            }
+            return
+        }
         // Once, on the first resume only. Reconnecting on every resume would
         // fight the user for the GATT link while they are still reading the
         // screen.
         if (!autoConnectTried) {
             autoConnectTried = true
-            autoConnectOnLaunch()
+            if (isFirstRun) {
+                // First launch: ask for everything at once, then connect. The
+                // permission result handler is what performs the connect, so this
+                // deliberately does not also call autoConnectOnLaunch — doing both
+                // would start two foreground services for the same cluster.
+                requestAllPermissionsOnFirstRun()
+            } else {
+                autoConnectOnLaunch()
+            }
         }
     }
 
@@ -457,19 +565,38 @@ private fun requestBlePermissions() {
     }
 
     /**
-     * Reconnect on launch — no scan, no user action.
+     * Reconnect to the last scooter without scanning, on every launch.
      *
-     * This is the point of pairing. Once a MAC is stored the cluster need not
-     * be advertising at all: TVS's manual says it advertises only in BT pair
-     * mode, which is a battery disconnect/reconnect away. So `connectGatt` on the
-     * stored address is both faster and, most of the time, the only thing that
-     * works. Scanning on every launch would be slower and often fruitless.
+     * The whole point of storing [RidePrefs.lastAddress]. Scanning on each launch
+     * would be slower, and on this cluster actively fruitless: it advertises no
+     * service UUID, so a UUID-filtered scan finds nothing, and finding it by name
+     * means a name that could in principle match something else.
+     *
+     * The stored address is the only thing that identifies a cluster, so this is
+     * also the only path that can reconnect to *your* scooter rather than to
+     * whichever cluster happens to be nearest.
+     *
+     * Failures are silent by design. The cluster is often simply not there — the
+     * ignition is off, or the battery is flat — and a toast on every launch would
+     * be noise. [RideService] owns the retry and the state the UI shows.
      */
     private fun autoConnectOnLaunch() {
         if (!hasBlePermission()) {
             Log.i("MainActivity", "auto-connect skipped: Bluetooth not granted")
             return
         }
+        val prefs = RidePrefs.load(this)
+        if (prefs.lastAddress.isNullOrBlank()) {
+            // Genuinely first run, or never connected. Say so once, because
+            // otherwise the Home screen just shows "Disconnected" with no
+            // explanation of why nothing is happening.
+            Log.i("MainActivity", "auto-connect skipped: no scooter stored yet")
+            return
+        }
+        val model = prefs.lastModelId
+            ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
+            ?: VehicleModel.NTORQ
+        Log.i("MainActivity", "auto-connecting to ${model.displayName}")
         connectToRememberedCluster()
     }
 
@@ -483,5 +610,10 @@ private fun requestBlePermissions() {
             .onFailure {
                 Toast.makeText(this, "Open notification access from system settings", Toast.LENGTH_LONG).show()
             }
+    }
+
+    private companion object {
+        const val PREFS = "tvsride"
+        const val KEY_FIRST_RUN = "first_run_complete"
     }
 }

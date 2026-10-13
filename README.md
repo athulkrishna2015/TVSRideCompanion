@@ -126,19 +126,34 @@ A first launch now works end to end without touching a switch:
   with no model in it, so the name-based guess resolves to `UNKNOWN`, which
   selects a driver with no frame table, no navigation and no caller ID — a
   connection that looks successful while decoding nothing.
+- **First run asks for the permission set up front.** Bluetooth and optional
+  caller-ID permissions are requested together; notification access is a
+  separate Settings toggle because Android does not grant it through a runtime
+  permission dialog. Declining caller-ID access does not block BLE/navigation.
+- **The scan filter and chosen model are remembered.** The default filter is
+  off; a user's filter toggle and per-scooter model selection are persisted so
+  reopening Scan does not silently reset either one.
 
-### The rider name is deliberately not implemented
+### Rider name: editable locally; cluster write still gated
+
+This is intentionally a development control, not a finished console feature.
+The More screen says **Saved on this phone only** and that no console update is
+sent until its ID is verified.
 
 TVS's manual documents the cluster greeting you as `HELLO RIDER`, or your name
-if one is set. This app stores a name and knows the 12-character limit, but
-**does not send it**: the outbound packet has not been located in the official
-app, where `U399popUpRidenameEdit` exists only as a layout binding with no
-sender reachable from the BLE layer.
+if one is set. The More screen has a **Console greeting** editor. It saves to
+`RidePrefs.riderName` and survives restarts, but it is labelled **phone only**:
+the name frame's shape and sender are visible in the official APK, while the
+numeric `DATA_ID_NAME` value is unresolved. The editor deliberately does not
+send a guessed packet, and saving the name does not claim to update the console.
 
-Writing a guessed packet would be worse than omitting the feature — the same
-mistake as the fuel clamp, where a plausible invented mapping produced a full
-tank on an empty one. `RidePrefs.riderName` holds the value, so when the packet
-is found this becomes one function rather than a new feature.
+The official 2.13.0 sender invokes `BluetoothUtil.createRiderNameArray()` during
+initial connection, which builds a 20-byte UTF-8 name frame with a 17-character
+limit, zero padding and `0xFF` terminator. The method references
+`DATA_ID_NAME`, but the decompiler does not expose its literal value; the
+separate `SampleGattAttributes` constant initializer was not recovered. Until
+that byte is verified, no name frame is sent. A guessed packet would repeat the
+fuel clamp mistake: plausible-looking, silently wrong data on a real console.
 
 ---
 

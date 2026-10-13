@@ -56,12 +56,52 @@ class RidePrefs private constructor(private val ctx: Context) {
             .apply()
     }
 
+    /** Explicit user's selection from the scan row; survives later rediscovery. */
+    fun updateSelectedModel(address: String, modelId: String) {
+        sp.edit().putString(modelKey(address), modelId).apply()
+    }
+
+    fun selectedModel(address: String): String? = sp.getString(modelKey(address), null)
+
+    /** Scan preference; default is unfiltered because the Ntorq advertises no UUID. */
+    var onlySmartXonnect: Boolean
+        get() = sp.getBoolean(KEY_ONLY_SMART_XONNECT, false)
+        set(value) { sp.edit().putBoolean(KEY_ONLY_SMART_XONNECT, value).apply() }
+
+    /** Navigation mirroring is the product default; preserve an explicit opt-out. */
+    var navigationMirroring: Boolean
+        get() = sp.getBoolean(KEY_NAVIGATION_MIRRORING, true)
+        set(value) { sp.edit().putBoolean(KEY_NAVIGATION_MIRRORING, value).apply() }
+
+    /** Local profile name; UI can edit it without sending an unverified packet. */
+    var riderName: String?
+        get() = sp.getString(KEY_RIDER_NAME, null)
+        set(value) {
+            val trimmed = value?.trim()?.takeIf { it.isNotEmpty() }
+            sp.edit().apply {
+                if (trimmed == null) remove(KEY_RIDER_NAME) else putString(KEY_RIDER_NAME, trimmed)
+            }.apply()
+        }
+
+    /** Explicit user's selection from the scan row; survives later rediscovery. */
+    fun updateSelectedModel(address: String, modelId: String) {
+        sp.edit().putString(modelKey(address), modelId).apply()
+    }
+
+    fun selectedModel(address: String): String? = sp.getString(modelKey(address), null)
+
     companion object {
         private const val NAME = "tvsride"
         private const val KEY_RIDE_MODE = "ride_mode"
         private const val KEY_RESUME_BOOT = "resume_on_boot"
         private const val KEY_LAST_ADDRESS = "last_address"
         private const val KEY_LAST_MODEL = "last_model"
+        private const val KEY_RIDER_NAME = "rider_name"
+        private const val KEY_ONLY_SMART_XONNECT = "only_smart_xonnect"
+        private const val KEY_NAVIGATION_MIRRORING = "navigation_mirroring"
+        private const val KEY_SELECTED_MODEL_PREFIX = "selected_model_"
+
+        private fun modelKey(address: String) = "$KEY_SELECTED_MODEL_PREFIX$address"
 
         @Volatile
         private var instance: RidePrefs? = null
