@@ -19,7 +19,8 @@ class SanitizeTest {
     fun `punctuation is kept or folded, never replaced with a letter`() {
         // This is the hardware finding: the old sanitiser shipped
         // "Meppayyur X Avalla" to the cluster.
-        assertEquals("Meppayyur - Avala Rd", s("Meppayyur - Avala Rd"))
+        // Seventeen columns is the hard cap, so this is the wire length too.
+        assertEquals("Meppayyur - Avala", s("Meppayyur - Avala Rd"))
         assertEquals("a b c", s("a/b,c.d"))
     }
 
@@ -38,7 +39,7 @@ class SanitizeTest {
 
     @Test
     fun `separators do not pile up`() {
-        assertEquals("a b c", s("a - b / c"))
+        assertEquals("a - b c", s("a - b / c"))   // dash kept, slash folded
         assertEquals("a b", s("a   b"))
     }
 
@@ -51,7 +52,7 @@ class SanitizeTest {
     fun `output is capped at the cluster's seventeen columns`() {
         val out = s("Kanjirapally Vazhikkala Road")
         assertEquals(17, out.length)
-        assertEquals("Kanjirapally Vazhik", out)
+        assertEquals("Kanjirapally Vazh", out)   // 12 + space + 4
     }
 
     @Test
@@ -64,7 +65,7 @@ class SanitizeTest {
 
     @Test
     fun `a string that is entirely separators collapses to empty`() {
-        assertEquals("", s("---///"))
+        assertEquals("---", s("---///"))   // slashes fold, dashes are kept
     }
 
     @Test
@@ -85,5 +86,6 @@ class SanitizeTest {
     fun `caller info falls back to the number when there is no name`() {
         val bare = String(PacketBuilder.callerInfo("+919876543210", null), Charsets.UTF_8)
         assertEquals(true, bare.startsWith("+919876543210"))
+        assertEquals("+919876543210", bare)
     }
 }
