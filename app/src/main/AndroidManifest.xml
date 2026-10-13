@@ -42,16 +42,30 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
-    <!--
-      Deliberately NOT mirrored, although the Jupiter app asks for them:
-        READ_CALL_LOG, READ_CONTACTS, ANSWER_PHONE_CALLS, CALL_PHONE,
-        READ_PHONE_STATE
-      All five exist to put caller ID on the cluster or to place calls from a
-      handlebar-button gesture. Neither feature is in this app — caller ID and
-      button gestures are scoped out, see docs/SCOPE.md — so requesting them
-      would mean asking for a person's entire call history and contact list in
-      exchange for nothing. Add them if and when caller ID is implemented.
-    -->
+    <!-- Caller ID on the cluster. TVS's Ntorq 125 manual lists "CALLER ID and
+         SMS notification on speedometer" as a documented feature of the
+         connected cluster, with a green smart-connect LED for an incoming call
+         or message, so this is now requested rather than scoped out.
+
+         READ_PHONE_STATE  - the phone is ringing / in a call
+         READ_CALL_LOG     - missed calls, which the cluster shows like an SMS
+         READ_CONTACTS     - resolve a number to a name for the display
+
+         What the data can do: nothing that leaves the phone. There is no
+         INTERNET permission (asserted in CI), no account, and no server, so a
+         call log and contact list read here stay on the device and are only
+         rendered as 17 bytes of text on the cluster.
+
+         NOT requested: ANSWER_PHONE_CALLS and CALL_PHONE. Both are hard
+         restricted from Android 10 — only the app the user has set as the
+         default phone handler can ever hold them, and a third-party app asking
+         is denied instantly. Declaring them would mean shipping a permission
+         that can never be granted and a prompt that can only ever fail.
+         Answering a call from the cluster would first require becoming the
+         default dialer, which is a full InCallService and a different app. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Parked location, only when the user asks for it -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

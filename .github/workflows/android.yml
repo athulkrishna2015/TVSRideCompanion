@@ -128,21 +128,32 @@ jobs:
           done
           echo "OK: expected BLE permissions present"
 
-      # Guard the exclusions noted in the manifest. Those five exist for caller
-      # ID and button gestures, neither of which is implemented, so granting
-      # them means taking a call log and a contact list for nothing. If you add
-      # caller ID, delete this step in the same commit that adds the permissions.
-      - name: Assert caller-ID permissions are absent
+      # Caller ID is implemented, so READ_CALL_LOG, READ_CONTACTS and
+      # READ_PHONE_STATE are now requested deliberately — the previous step
+      # asserted they were *absent*, which was the right guard while caller ID
+      # was scoped out and would have failed this build. Read the manifest note
+      # before removing any of these three: each grants access to the call log
+      # or the contact list, which is only acceptable because the app declares
+      # no INTERNET permission and therefore has nowhere to send them.
+      #
+      # ANSWER_PHONE_CALLS and CALL_PHONE are still absent and must stay so:
+      # both are hard restricted to the default dialer, so a third-party app can
+      # never be granted them and declaring them would be a prompt that can only
+      # fail.
+      - name: Assert caller-ID permissions are requested, and dialer-only ones are not
         run: |
           set -euo pipefail
-          for p in READ_CALL_LOG READ_CONTACTS ANSWER_PHONE_CALLS CALL_PHONE \
-                   READ_PHONE_STATE; do
+          for p in READ_CALL_LOG READ_CONTACTS READ_PHONE_STATE; do
+            grep -q "android.permission.$p" permissions.txt || {
+              echo "::error::$p missing — caller ID needs it"; exit 1; }
+          done
+          for p in ANSWER_PHONE_CALLS CALL_PHONE; do
             if grep -q "android.permission.$p" permissions.txt; then
-              echo "::error::$p present — read the manifest note before granting it"
+              echo "::error::$p present — ungrantable outside the default dialer"
               exit 1
             fi
           done
-          echo "OK: no caller-ID permissions"
+          echo "OK: caller-ID permissions present, dialer-only permissions absent"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
