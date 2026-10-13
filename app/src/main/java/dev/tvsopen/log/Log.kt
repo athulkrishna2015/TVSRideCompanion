@@ -110,8 +110,14 @@ object Log {
      */
     private const val UI_RECORD_CAP = 500
 
-    /** Consecutive identical frames between tally lines in [frame]. */
-    private const val REPEAT_REPORT_EVERY = 50
+    /** Full dumps kept per distinct payload before it is counted instead. */
+    private const val FRAME_FIRST_N = 3
+
+    /** Occurrences between tally lines for an already-counted payload. */
+    private const val FRAME_TALLY_EVERY = 200
+
+    /** Ceiling on remembered payloads, so a long ride cannot grow this forever. */
+    private const val FRAME_SIG_CAP = 256
 
     /** Records between explicit flushes, so a crash keeps what was written. */
     private const val FLUSH_EVERY = 16
@@ -126,8 +132,8 @@ object Log {
     private val ring = ArrayDeque<LogRecord>(RING_CAPACITY)
 
     private var lastPublishAt = 0L
-    private var lastFrameSig = 0
-    private var frameRepeats = 0
+
+    private val frameCounts = HashMap<Int, Int>()
     private val lock = Any()
 
     private val _records = MutableStateFlow<List<LogRecord>>(emptyList())
@@ -252,6 +258,9 @@ object Log {
     fun clear() {
         synchronized(lock) {
             ring.clear()
+            // Payloads seen before the clear must not suppress the first dumps
+            // after it, or clearing the log would still open mid-stream.
+            frameCounts.clear()
             _records.value = emptyList()
             _frameCount.value = 0L
         }
@@ -342,7 +351,7 @@ object Log {
      * line.
      *
      * The cadence is not lost: a tally line is emitted every
-     * [REPEAT_REPORT_EVERY] repeats, timestamped like any other record, so the
+     * [FRAME_TALLY_EVERY] repeats, timestamped like any other record, so the
      * spacing stays derivable, and the final tally is flushed the moment the
      * payload changes. Only the redundancy goes.
      */
@@ -352,25 +361,25 @@ object Log {
         // contentHashCode compares content, not identity, so this is a genuine
         // payload test; a collision would only merge two already-identical lines.
         val sig = 31 * direction.hashCode() + bytes.contentHashCode()
+        val seen: Int
         synchronized(lock) {
-            if (sig == lastFrameSig) {
-                frameRepeats++
-                if (frameRepeats % REPEAT_REPORT_EVERY == 0) {
-                    log(
-                        Level.DEBUG, "BLE",
-                        "$direction … identical to previous, x$frameRepeats",
-                    )
-                }
-                return
+            // **Per payload, not per run.** A first attempt collapsed only
+            // *consecutive* repeats, which is nearly useless here: the cluster
+            // interleaves 0x18, 0x10, 0x16, 0x11 in rotation, so no two
+            // adjacent frames are ever alike and the collapse almost never
+            // fired. Counting each distinct payload instead turns 125 copies of
+            // one frame into a handful of lines, and still logs every *change*,
+            // because a changed payload is a different signature and starts its
+            // own count.
+            seen = (frameCounts[sig] ?: 0) + 1
+            if (frameCounts.size > FRAME_SIG_CAP) frameCounts.clear()
+            frameCounts[sig] = seen
+        }
+        if (seen > FRAME_FIRST_N) {
+            if (seen % FRAME_TALLY_EVERY == 0) {
+                log(Level.DEBUG, "BLE", "$direction … unchanged, x$seen")
             }
-            if (frameRepeats > 1) {
-                log(
-                    Level.DEBUG, "BLE",
-                    "$direction … previous frame repeated x$frameRepeats",
-                )
-            }
-            lastFrameSig = sig
-            frameRepeats = 1
+            return
         }
         log(Level.DEBUG, "BLE", "$direction ${hex(bytes)} (${bytes.size} bytes)")
     }

@@ -10,7 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import dev.tvsopen.R
 import dev.tvsopen.log.Log
-import dev.tvsopen.nav.MapsNotificationListener
+import dev.tvsopen.nav.NavInstruction
 import dev.tvsopen.nav.NavigationBridge
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.DashState
@@ -210,9 +210,28 @@ class RideService : android.app.Service() {
 
         linkJob = scope.launch {
             // One for the bridge (nav state)…
+            //
+            // Driven by `Session.hud`, not by BLE frames. It used to be a
+            // `transport.frames.collect` that re-read the instruction on every
+            // frame through `MapsNotificationListenerRef` — and that ref was
+            // never assigned anywhere, so the bridge was handed `null` every
+            // time. Navigation mirroring therefore sent **nothing at all**, and
+            // looked fine because the UI strip reads `Session.hud` itself and
+            // never went through the bridge. Sampling navigation on the BLE
+            // clock was wrong twice over: it couples two unrelated rates, and it
+            // means a nav step waits for the next frame to be forwarded.
             launch {
-                transport.frames.collect { frame ->
-                    b.onInstruction(MapsNotificationListenerRef.current?.instruction?.value)
+                Session.hud.collect { hud ->
+                    b.onInstruction(
+                        NavInstruction(
+                            title = hud.instructionTitle.orEmpty(),
+                            street = hud.street.orEmpty(),
+                            distanceMeters = hud.distanceMeters,
+                            etaMinutes = hud.etaMinutes,
+                            pictogram = hud.pictogramId,
+                            provider = hud.provider.orEmpty(),
+                        ).takeIf { hud.active },
+                    )
                 }
             }
             // …one decoding telemetry into the UI session, answering the
@@ -364,8 +383,9 @@ class RideService : android.app.Service() {
     }
 }
 
-/** Lets the service reach the listener without leaking it through the Intent. */
-object MapsNotificationListenerRef {
-    @Volatile
-    var current: MapsNotificationListener? = null
-}
+/**
+ * Removed. It was the reason navigation mirroring never sent a frame: the
+ * bridge read `current` on every BLE frame, and nothing ever assigned it, so
+ * the instruction was always null. The bridge now collects `Session.hud`, which
+ * is the same data the listener already writes.
+ */
