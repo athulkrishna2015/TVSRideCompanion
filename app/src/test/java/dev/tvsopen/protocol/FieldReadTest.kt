@@ -38,14 +38,21 @@ class FieldReadTest {
         // Guards the regression explicitly rather than only the correct value:
         // if this ever equals the odometer again, the endianness is wrong.
         val littleEndian = (0x2A shl 16) or (0x88 shl 8) or 0x02
-        assertEquals(2_787_330L, littleEndian)
+        // .toLong() so this picks assertEquals(long, long) rather than the
+        // Object overload, where a Long and an Int never compare equal.
+        assertEquals(2_787_330L, littleEndian.toLong())
         assertEquals(278_733.0, littleEndian / 10.0, 0.001)
     }
 
     @Test
     fun `single byte fields are unaffected`() {
+        // Byte positions in the frame above: idx 1 = 0x10, idx 2 = 0x00,
+        // idx 10 = 0x09, idx 11 = 0x50. Single-byte reads are unaffected by
+        // the endianness fix, which is exactly why they are checked.
+        assertEquals(0x10L, read(FieldSpec(Field.DATA_ID, 1)))
         assertEquals(0L, read(FieldSpec(Field.SPEED, 2)))
-        assertEquals(0x09L, read(FieldSpec(Field.TOP_SPEED, 9)))
+        assertEquals(0x09L, read(FieldSpec(Field.TOP_SPEED, 10)))
+        assertEquals(0x50L, read(FieldSpec(Field.AVERAGE_SPEED, 11)))
     }
 
     @Test

@@ -29,6 +29,21 @@ class ProtocolTest {
         return f
     }
 
+    /**
+     * Big-endian fixture writer.
+     *
+     * Added with the endianness fix. `setLE` below wrote the *test's* idea of
+     * byte order into the frame and then read it back with the reader, so the
+     * two agreed by construction and the wrong assumption could never be
+     * caught. The cluster's real frame settles it: `5A 10 00 02 88 2A …` is
+     * 16,593 km big-endian, which the rider confirmed against the dash.
+     */
+    private fun ByteArray.setBE(offset: Int, value: Int, length: Int) {
+        for (i in 0 until length) {
+            this[offset + i] = ((value shr (8 * (length - 1 - i))) and 0xFF).toByte()
+        }
+    }
+
     private fun ByteArray.setLE(offset: Int, value: Int, length: Int) {
         for (i in 0 until length) {
             this[offset + i] = ((value shr (8 * i)) and 0xFF).toByte()
@@ -37,8 +52,9 @@ class ProtocolTest {
 
     @Test
     fun `decode leaves values raw`() {
-        // 30980 tenths of a km == 3098.0 km.
-        val raw = frame(0x10) { it.setLE(3, 30980, 3) }
+        // 30980 tenths of a km == 3098.0 km, written big-endian as the cluster
+        // does.
+        val raw = frame(0x10) { it.setBE(3, 30980, 3) }
 
         val decoded = NtorqFrames.SM1.decode(raw)
         assertTrue("frame should decode", decoded != null)
@@ -50,7 +66,7 @@ class ProtocolTest {
 
     @Test
     fun `odometer is divided exactly once at the presentation layer`() {
-        val raw = frame(0x10) { it.setLE(3, 30980, 3) }
+        val raw = frame(0x10) { it.setBE(3, 30980, 3) }
         val decoded = NtorqFrames.SM1.decode(raw)!!
 
         val once = decoded.field(Field.ODOMETER)!! / 10.0
@@ -60,8 +76,11 @@ class ProtocolTest {
     }
 
     @Test
-    fun `multi-byte fields are little-endian`() {
-        val raw = frame(0x10) { it.setLE(17, 0x1234, 2) }
+    fun `multi-byte fields are big-endian`() {
+        // Was asserted little-endian, on the strength of a fixture writer that
+        // encoded the same assumption. Reading 02 88 2A as 2A 88 02 turned a
+        // 16,593 km odometer into 278,733 km on the dashboard.
+        val raw = frame(0x10) { it.setBE(17, 0x1234, 2) }
         val decoded = NtorqFrames.SM1.decode(raw)!!
         assertEquals(0x1234L, decoded.field(Field.ENGINE_RPM))
     }
