@@ -290,8 +290,12 @@ private fun FuelGauge(bars: Int?) {
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                if (bars == null) "No reading yet"
-                else "$filled of ${Telemetry.FUEL_BAR_MAX} bars",
+                // Three states, not two: a real level, no frame at all yet, and
+                // a frame whose value is outside the six-bar gauge and so cannot
+                // be a bar count. Collapsing the third into the second would
+                // report a level the cluster never sent.
+                if (bars != null) "$filled of ${Telemetry.FUEL_BAR_MAX} bars"
+                else "No usable reading",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

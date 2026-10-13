@@ -223,12 +223,23 @@ object Session {
             0x10 -> cur.copy(
                 speedKmh = frame.field(Field.SPEED)?.toInt() ?: cur.speedKmh,
                 odometerKm = scaled(Field.ODOMETER, 10.0) ?: cur.odometerKm,
-                // Fuel is the low nibble of that byte. The Ntorq 125 cluster gauge has SIX
-                // bars per TVS's own manual, not five, and it explicitly tells
-                // riders not to derive mileage from it.
-                fuelBars = (frame.field(Field.FUEL_LEVEL)?.toInt()?.and(0x0F))
-                    ?.let { if (it > Telemetry.FUEL_BAR_MAX) Telemetry.FUEL_BAR_MAX else it }
-                    ?: cur.fuelBars,
+                // Fuel is the low nibble of index 6 — that is exactly what the
+                // official app does (NtorqSpeedOMeter1.getFuelLevel takes the last
+                // hex character), and this app matches it. The decode is right;
+                // the bar interpretation is not.
+                //
+                // The cluster's own gauge has SIX bars per TVS's manual, and the
+                // raw value transmitted while the dash was photographed reading
+                // FUEL EMPTY was 7. A six-bar gauge cannot represent 7, so 7 is
+                // not a bar count. Clamping it to 6 — what this used to do —
+                // displayed a FULL tank on an empty one.
+                //
+                // So an out-of-range value is dropped rather than clamped, and
+                // the gauge says so. A genuine 0..6 still renders normally.
+                // Note the absence of `?: cur.fuelBars`: a rejected reading has
+                // to clear the previous one, not leave a stale level on screen.
+                fuelBars = frame.field(Field.FUEL_LEVEL)?.toInt()?.and(0x0F)
+                    ?.takeIf { it in 0..Telemetry.FUEL_BAR_MAX },
                 averageSpeedKmh = frame.field(Field.AVERAGE_SPEED)?.toInt() ?: cur.averageSpeedKmh,
                 tripStatus = frame.field(Field.TRIP_STATUS)?.toInt() ?: cur.tripStatus,
                 topSpeedKmh = frame.field(Field.TOP_SPEED)?.toInt() ?: cur.topSpeedKmh,
