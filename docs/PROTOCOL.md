@@ -187,6 +187,10 @@ Dispatch is by `byteArray[1]` — `IncomingFrameIdentifier.identify()` indexes t
 data-id byte and looks it up in a per-model map. For Ntorq,
 `NtorqFrameIdentifier.getFrameConfig()` returns exactly:
 
+> **This table did not match the hardware.** §4a records what the owner's
+> cluster actually sent: `0x16` arrives constantly and is absent here, and
+> `0x19` never arrives despite being listed. Read §4a before trusting this.
+
 ```
  16 (0x10) -> SPEEDOMETER_DATA_5A_10_FRAME -> NtorqSpeedOMeter1
  17 (0x11) -> SPEEDOMETER_DATA_5A_11_FRAME -> NtorqSpeedOMeter2
@@ -201,6 +205,65 @@ data-id byte and looks it up in a per-model map. For Ntorq,
 Note `0x54` is the **ACK** here and `0x6B` carries the music command — the
 inverse of what the Jupiter report's table implies. Transcribed in
 `NtorqDriver.kt` with byte offsets and scaling factors.
+
+### 4a. Measured on the owner's Ntorq 125 — 2026-10-13
+
+First successful connection, ~2 minutes, 501 inbound frames. The table above is
+transcribed from the APK; this is what the cluster **actually emitted**. They do
+not match.
+
+| Sent | Count | In our table? |
+| :--- | --- | :--- |
+| `5A 10` | 132 | yes — speed, odometer, fuel |
+| `5A 11` | 75 | yes — vehicle state, version at idx 7 |
+| `5A 16` | **136** | **no — not in the frame identifier map at all** |
+| `5A 18` | 143 | yes — engine diagnostics |
+| `5B 42` | 6 | **no — carries the cluster's own BLE address at idx 7–12** |
+
+Two findings, both of which change the picture:
+
+- **`0x16` (22) is the second most common frame and we have no table for it.**
+  The identifier map above lists `0x10`, `0x11`, `0x19`, `0x18`, `0x37`, `0x6B`,
+  `0x29`, `0x54` — not `0x16`. A frame we decoded nothing from was arriving
+  nearly as often as the speedometer. Its layout is unknown.
+- **`0x19` never appeared at all**, despite being in the table and carrying the
+  documented economy and distance-to-empty fields. Either it is only emitted in
+  states we did not visit, or the identifier map is not what the Ntorq 125
+  actually uses.
+
+**Every frame is exactly 20 bytes and ends `0xFF`.** A few all-zero 20-byte
+frames arrive at connect time, before real telemetry starts — worth knowing so
+they are not mistaken for decode failures.
+
+Field values seen, for a stationary cluster with the ignition on:
+
+```
+5A 10 00 02 88 2A 02 00 00 00 09 50 00 …   idx 3-5 odometer, idx 9-10 = 09:50
+5A 11 00 00 05 00 00 12 00 A3 20 00 …       idx 7 = 0x12
+5A 16 00 00 00 00 00 03 28 00 45 00 00 00 96 09 …
+5A 18 00 00 00 64 64 20 48 00 00 7C 00 …   idx 5,6 = 0x64, idx 11 = 0x7C
+```
+
+`5A 10` idx 9–10 reading `09 50` matched the wall-clock time of the capture to
+the minute, which suggests that pair is a cluster clock. That is an inference
+from one coincidence, not a confirmed field.
+
+Outbound, the only thing we sent was the keepalive, exactly every 2.0 s:
+
+```
+5B 4A 04 02 00 00 00 02 00 00 00 04 00 00 00 00 00 00 00 FF
+```
+
+### 4b. Discovery and handshake — measured, and both assumptions were wrong
+
+- **The cluster advertises no service UUID.** `5456534D-…` is absent from its
+  advertisement packet, so the default "only SmartXonnect clusters" scan filter
+  finds nothing and the device must be found by name. It advertises as
+  `TVSBT<digits>`, which is what the name-based fallback in `ScooterScanner`
+  matches. Without that fallback the cluster is invisible to a filtered scan —
+  it has to be connected to before the UUID can appear in the GATT table.
+- **No pairing mode was needed**, and **no `9B F2` challenge was ever sent**.
+  The handshake in §2 is built and wired, but this cluster does not use it.
 
 `BtData.isValidFrame()` accepts only start bytes `0x9B` and `0x5A` inbound.
 

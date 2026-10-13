@@ -27,6 +27,56 @@ the Ntorq driver as-is. Once connected, read the vehicle model frame (`0x11`,
 
 ## 0b. Try the app first — it is cheaper than the snoop log
 
+**This is settled. It worked.** The first connection succeeded on 2026-10-13
+without pair mode, without bonding, and without an HCI snoop. Everything below
+is what the hardware actually did; the snoop log in §1 remains unavailable and
+is no longer on the critical path.
+
+### What actually happened
+
+| Step | Outcome |
+| :--- | :--- |
+| Ignition on, **no pair mode, no bonding** | Cluster appeared in an unfiltered scan as `TVSBT<digits>` |
+| "Only SmartXonnect clusters" **on** (the default) | **Nothing.** The cluster advertises no service UUID |
+| Selected Ntorq 125 Race, Connect | GATT up in ~0.4 s, MTU 65, 20-byte frames streaming |
+| Ignored the UI toggles | Battery and other values appeared on the cluster |
+| Toggled a few UI switches | App could not reconnect afterwards — **a bug, now fixed** |
+
+Two corrections to the plan this document used to give:
+
+- **Pair mode is not needed.** The button-press and battery-disconnect routes
+  below are both unnecessary for this vehicle. Keep them only as a fallback for
+  a variant that does not advertise unprompted.
+- **Always scan unfiltered.** Filtering on the service UUID cannot work,
+  because the UUID is not in the advertisement — see `docs/PROTOCOL.md` §4b.
+
+### Reconnect was broken and is now fixed
+
+The rider's report — "after changing some toggles the app stopped connecting" —
+was a real defect, not a symptom of the toggles:
+
+```
+09:53:02.419 W/ScooterBle: GATT disconnected (status=8)
+09:53:27.747 W/RideService: connect not started: link already active
+09:53:51.661 W/RideService: connect not started: link already active
+```
+
+`onConnectionStateChange` cleared the characteristic on disconnect but never
+released the GATT client, and `connect()` refuses while one is held. A single
+dropped link therefore made the app unable to reconnect for the life of the
+process. Fixed in `ScooterBleService.closeGatt()`.
+
+### Still unexplained: the link drops after ~2 minutes
+
+The cluster hung up with **status 8** about 2 min 10 s in, while we were
+sending the `5B 4A` keepalive every 2.0 s — so an idle timeout looks unlikely,
+but the cause is unknown. Status 147 (connection timeout) is what a *failed*
+attempt returns, which is a different thing.
+
+Whether the cluster is awake matters more than anything else here: with the
+ignition off it does not respond at all, and auto-connect correctly times out
+after 30 s. Turn the ignition on before a capture session.
+
 An HCI snoop (§1) gives ground truth for both directions, but on this device it
 would not start (§1a). The app can now capture the inbound half on its own, and
 it is the first thing to try because it needs no Developer options, no Bluetooth
