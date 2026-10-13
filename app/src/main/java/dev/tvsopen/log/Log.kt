@@ -91,8 +91,27 @@ object Log {
      * never be published at all, so a freshly launched app showed "0 records"
      * while logcat plainly had lines. Hence the `ring.size <= PUBLISH_EVERY`
      * term — the head of the log is always current, the tail is sampled.
+     *
+     * **Time-boxed as well, because a modulo is the wrong clock here.** The
+     * record rate is wildly uneven: minutes of nothing, then ~250 frames a
+     * minute. Counting every 8 records republished the ring — copying up to
+     * [RING_CAPACITY] entries each time — about 31 times a second during a
+     * burst. That is the UI freeze. [PUBLISH_MIN_MS] caps it by wall clock
+     * however fast frames arrive.
      */
     private const val PUBLISH_EVERY = 8
+
+    /** Floor between two UI publishes, however many records arrive. */
+    private const val PUBLISH_MIN_MS = 250L
+
+    /**
+     * How much of the ring the UI is handed. The ring itself stays full for
+     * export; the screen never needs four thousand rows to be useful.
+     */
+    private const val UI_RECORD_CAP = 500
+
+    /** Consecutive identical frames between tally lines in [frame]. */
+    private const val REPEAT_REPORT_EVERY = 50
 
     /** Records between explicit flushes, so a crash keeps what was written. */
     private const val FLUSH_EVERY = 16
@@ -105,6 +124,10 @@ object Log {
     var captureFrames: Boolean = true
 
     private val ring = ArrayDeque<LogRecord>(RING_CAPACITY)
+
+    private var lastPublishAt = 0L
+    private var lastFrameSig = 0
+    private var frameRepeats = 0
     private val lock = Any()
 
     private val _records = MutableStateFlow<List<LogRecord>>(emptyList())
@@ -250,13 +273,17 @@ object Log {
         synchronized(lock) {
             if (ring.size >= RING_CAPACITY) ring.pollFirst()
             ring.addLast(record)
-            // Publish a copy for the UI. Throttled, but the head of the ring is
-            // always published so a short startup log is not invisible.
+            // Publish a copy for the UI. Throttled by record count *and* wall
+            // clock: the count alone lets a frame burst publish 30 times a
+            // second, and the head-of-log rule is kept so a short startup log is
+            // never invisible.
+            val now = record.atMillis
             if (level >= Level.WARN ||
                 ring.size <= PUBLISH_EVERY ||
-                ring.size % PUBLISH_EVERY == 0
+                now - lastPublishAt >= PUBLISH_MIN_MS
             ) {
-                _records.value = ring.toList()
+                lastPublishAt = now
+                _records.value = snapshot()
             }
             writer?.let { w ->
                 try {
@@ -306,11 +333,67 @@ object Log {
      * dump is three characters per byte ("XX "), so a 20-byte frame was logged
      * as 29 bytes. Counting the array is exact, and formatting is still skipped
      * entirely when capture is off.
+     *
+     * **Consecutive identical payloads are collapsed.** The cluster streams
+     * `0x10`/`0x11`/`0x16`/`0x18` on a fixed cadence, and a two-minute session
+     * produced 501 lines of which ~130 were byte-for-byte repeats of the frame
+     * above. A riding session would fill the ring and rotate the log files
+     * inside a minute, and each repeat also paid for a hex format and a logcat
+     * line.
+     *
+     * The cadence is not lost: a tally line is emitted every
+     * [REPEAT_REPORT_EVERY] repeats, timestamped like any other record, so the
+     * spacing stays derivable, and the final tally is flushed the moment the
+     * payload changes. Only the redundancy goes.
      */
     fun frame(direction: String, bytes: ByteArray, atMillis: Long = System.currentTimeMillis()) {
         _frameCount.value = _frameCount.value + 1
         if (!captureFrames) return
+        // contentHashCode compares content, not identity, so this is a genuine
+        // payload test; a collision would only merge two already-identical lines.
+        val sig = 31 * direction.hashCode() + bytes.contentHashCode()
+        synchronized(lock) {
+            if (sig == lastFrameSig) {
+                frameRepeats++
+                if (frameRepeats % REPEAT_REPORT_EVERY == 0) {
+                    log(
+                        Level.DEBUG, "BLE",
+                        "$direction … identical to previous, x$frameRepeats",
+                    )
+                }
+                return
+            }
+            if (frameRepeats > 1) {
+                log(
+                    Level.DEBUG, "BLE",
+                    "$direction … previous frame repeated x$frameRepeats",
+                )
+            }
+            lastFrameSig = sig
+            frameRepeats = 1
+        }
         log(Level.DEBUG, "BLE", "$direction ${hex(bytes)} (${bytes.size} bytes)")
+    }
+
+    /**
+     * The tail of the ring, bounded, for the UI.
+     *
+     * `ring.toList()` would copy every one of the [RING_CAPACITY] entries on
+     * each publish even though the screen only ever shows the recent ones.
+     * Copies out only the window the UI uses.
+     *
+     * Call under [lock].
+     */
+    private fun snapshot(): List<LogRecord> {
+        val n = minOf(ring.size, UI_RECORD_CAP)
+        if (n == ring.size) return ring.toList()
+        val out = ArrayList<LogRecord>(n)
+        var i = ring.size - n
+        while (i < ring.size) {
+            out.add(ring[i])
+            i++
+        }
+        return out
     }
 
     /** `5B 4A 03 00 …` — uppercase, space separated, two digits per byte. */
