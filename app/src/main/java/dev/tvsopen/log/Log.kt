@@ -378,22 +378,22 @@ object Log {
     /**
      * The tail of the ring, bounded, for the UI.
      *
-     * `ring.toList()` would copy every one of the [RING_CAPACITY] entries on
-     * each publish even though the screen only ever shows the recent ones.
-     * Copies out only the window the UI uses.
+     * The ring holds [RING_CAPACITY] entries but the screen only ever shows the
+     * recent ones, so the published list is capped at [UI_RECORD_CAP]. Export
+     * still reads the whole ring.
+     *
+     * `takeLast` on a copy rather than an indexed walk: `kotlin.collections.
+     * ArrayDeque` has no `get(Int)`, and an indexed loop does not compile
+     * against it.
      *
      * Call under [lock].
      */
     private fun snapshot(): List<LogRecord> {
-        val n = minOf(ring.size, UI_RECORD_CAP)
-        if (n == ring.size) return ring.toList()
-        val out = ArrayList<LogRecord>(n)
-        var i = ring.size - n
-        while (i < ring.size) {
-            out.add(ring[i])
-            i++
-        }
-        return out
+        val all = ring.toList()
+        if (all.size <= UI_RECORD_CAP) return all
+        // Copy the window rather than returning subList's view, which would
+        // keep the full 4000-record backing list alive for the sake of 500 rows.
+        return ArrayList(all.subList(all.size - UI_RECORD_CAP, all.size))
     }
 
     /** `5B 4A 03 00 …` — uppercase, space separated, two digits per byte. */
