@@ -360,6 +360,35 @@ Worth noting the magnitude of the failure: it produced a number. A field that
 decoded to `null`, or to a value outside any plausible range, would have been
 caught the first time anyone looked at it.
 
+### Unresolved: byte 6 of `0x10` is not behaving like a fuel level
+
+Byte 6 is transcribed as `FUEL_LEVEL` and the app reads its low nibble as a bar
+count. Across **772 captured `5A 10` frames** spanning three sessions, it takes
+exactly **two** values:
+
+| Value | Low nibble | Occurrences |
+| :--- | :--- | :--- |
+| `0x02` | 2 | 396 |
+| `0x07` | 7 | 376 |
+
+Three things about that do not fit a fuel level:
+
+- **It never varies with riding.** The odometer is constant at 16,593.0 km across
+  all 772 frames — the bike never moved during capture — so there is no evidence
+  it tracks anything dynamic at all.
+- **It changes exactly once, at frame 132, in every session.** A level that
+  moves between two fixed values at a fixed frame offset and then stops is more
+  like a state flag than a measurement.
+- **It contradicts the cluster.** The dash was photographed showing
+  `FUEL EMPTY`, while byte 6 read `0x07` — which the low-nibble mapping renders as
+  a **full** tank. Those cannot both be true.
+
+The `lower nibble = bars, upper nibble = reserve` split is inherited from the
+Jupiter table and may simply not apply to the Ntorq, or index 6 may not be fuel
+at all. **Unverified.** Treat the app's fuel gauge as unconfirmed until it can be
+compared against a known tank level; the raw byte is logged so the mapping can be
+revised without recapturing.
+
 Jupiter and Ntorq share `SpeedOMeter1` offsets almost exactly; they differ at
 index 12 (`LOCATION_TAG` on both) and in the trip-meter width (3 bytes on
 Ntorq, 3 on Jupiter SM1). The `jupiter/` package also contains
