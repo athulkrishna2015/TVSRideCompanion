@@ -183,7 +183,7 @@ find-my) or is the official minimal packet enough?
 
 ## 4. Inbound telemetry `DataID`s
 
-# Inbound telemetry `DataID`
+### Inbound telemetry `DataID`
 Dispatch is by `byteArray[1]` — `IncomingFrameIdentifier.identify()` indexes the
 data-id byte and looks it up in a per-model map. For Ntorq,
 `NtorqFrameIdentifier.getFrameConfig()` returns exactly:
@@ -206,6 +206,117 @@ data-id byte and looks it up in a per-model map. For Ntorq,
 Note `0x54` is the **ACK** here and `0x6B` carries the music command — the
 inverse of what the Jupiter report's table implies. Transcribed in
 `NtorqDriver.kt` with byte offsets and scaling factors.
+
+### Protocol Packet ID Reference (0x00 — 0xFF)
+
+The Ntorq protocol uses a single data-id byte (`byteArray[1]`) inside 20-byte
+frames. Byte [1] is the packet ID and determines the whole payload layout.
+The ID space has three namespaces:
+
+- **Inbound / data-id bytes** — cluster → phone telemetry (0x10–0x19, 0x29,
+  0x37, 0x54, 0x6B, 0x9D).
+- **Outbound / mobile-data packet IDs** — phone → cluster commands (0x37, 0x43,
+  0x49, 0x4A, 0x4C, 0x4E, 0x4F, 0x50, 0x52, 0x53, 0x5D, 0x61, 0x63, 0x65,
+  0xF1, 0xF2).
+- **Start bytes** — frame markers (0x5A / 0x5B outbound, 0x9A / 0x9B inbound).
+
+### Outbound packet IDs (phone → cluster)
+
+All outbound telemetry commands travel in 20-byte mobile-data frames shaped like
+
+    0x5B  <data-id>  <17-byte payload>  0xFF
+
+except the challenge frames, which use a different start byte. The IDs below
+are copied verbatim from `com.tvs.bluetooth.core.utils.BluetoothConstants` in
+the official TVS Connect APK (v8.14.1 / `com.tvsm.connect` 2.13.0), and from the
+companion app's `dev.tvsopen.protocol.OutboundId`.
+
+| ID   | Name                         | Purpose                          | Source                                    |
+| ---- | ---------------------------- | -------------------------------- | ----------------------------------------- |
+| 0x4A | MOBILE_DATA                  | Keepalive / "mobile data" packet | BluetoothConstants (`DATA_ID_4A`)         |
+| 0x43 | CALLER                       | Caller ID text                   | BluetoothConstants (`DATA_ID_CALLER_43`)  |
+| 0x4C | TEXT_ROW1                    | Message row 1                    | BluetoothConstants (`DATA_ID_4C`)         |
+| 0x4E | NAVIGATION_CONTROL           | Navigation control (distance/ETA) | BluetoothConstants (`DATA_ID_0x4E`-ish)   |
+| 0x4F | NAVIGATION_TEXT              | Navigation street text row 1     | BluetoothConstants (`DATA_ID_0x4F`-ish)   |
+| 0x50 | NAVIGATION_TEXT_ALT          | Navigation street text row 2     | BluetoothConstants (`DATA_ID_50`)         |
+| 0x52 | VEHICLE_MODE                 | Ride / vehicle mode control      | OutboundId / BluetoothConstants           |
+| 0x53 | SMS                          | SMS / notification text          | BluetoothConstants (`DATA_ID_SMS_53`)     |
+| 0x5D | CLIMATE                      | Climate control                  | BluetoothConstants (`DATA_ID_CLIMATE_5D`) |
+| 0x61 | ALBUM_NAME                   | Album name                       | BluetoothConstants (`ALBUM_NAME_PACKET`)  |
+| 0x63 | TEXT_ROW2 / ARTIST_NAME      | Message row 2 / artist name      | BluetoothConstants (`ARTIST_NAME_PACKET`) |
+| 0x65 | ARTIST_NAME_NEW              | **Artist name — updated packet** | BluetoothConstants (`ARTIST_NAME_PACKET_65`) |
+| 0xF1 | CHALLENGE_RESPONSE           | Handshake response (AES-CTR)     | BluetoothConstants (`DATA_ID_F1`)         |
+| 0xF2 | CHALLENGE                    | Handshake request                | BluetoothConstants (`DATA_ID_F2`)         |
+
+### The `0x65` artist-name packet
+
+The official app ships **two** artist-name packet IDs and the newer one has the
+value this table documents:
+
+- `ALBUM_NAME_PACKET = 97` (0x61) — album name
+- `ARTIST_NAME_PACKET = 99` (0x63) — artist name (first layout)
+- `ARTIST_NAME_PACKET_65 = 101` (0x65) — **artist name, updated layout**
+- `ARTIST_NAME_PACKET_NEW_VERSION = 101` (0x65) — renamed alias of 101
+
+The companion app exposes `OutboundId.ARTIST_NAME_NEW = 0x65` (same value, 101
+decimal) as the packet ID for artist-name updates. This is the most recent
+artifact of the app's telemetry family: album → artist → artist (new version),
+each with a distinct data-id byte.
+
+### Companion-app builders
+
+| Builder                      | ID used | Shape                                  |
+| ---------------------------- | ------- | -------------------------------------- |
+| `PacketBuilder.mobileData()` | 0x4A    | 20-byte keepalive, no checksum         |
+| `PacketBuilder.navigation()` | 0x4E    | 0x5A 0x4E <distance/ETA> 0xFF          |
+| `PacketBuilder.textRow()`    | 0x4C/0x63 | 0x5B <ID> <17 chars> 0xFF          |
+| `PacketBuilder.navigationText()` | 0x4F/0x50 | 0x5B <ID> <17 chars> 0xFF      |
+| `PacketBuilder.callerInfo()` | 0x43    | 0x5B 0x43 <name/number> 0xFF           |
+| `PacketBuilder.calibration()` | 0x37  | 0x9B 0x37 <cmd/id/data> checksum 0xFF  |
+
+The challenge pair (0xF1 / 0xF2) builds from `BlePacketsProvider.byteArrayForUnLock` /
+`byteArrayForUnlock` and uses the non-standard start byte 0x9A / 0x9B.
+
+### Inbound telemetry data IDs (cluster → phone)
+
+| ID   | Name / Class                        | Meaning                              |
+| ---- | ----------------------------------- | ------------------------------------ |
+| 0x10 | SPEEDOMETER_DATA_5A_10_FRAME        | Speed, odometer, fuel (most common)  |
+| 0x11 | SPEEDOMETER_DATA_5A_11_FRAME        | Vehicle state, firmware version      |
+| 0x12 | SPEEDOMETER_DATA_5A_12_FRAME        | Second cluster variant               |
+| 0x13 | SPEEDOMETER_DATA_5A_13_FRAME        | Second cluster variant               |
+| 0x14 | SPEEDOMETER_DATA_5A_14_FRAME        | Second cluster variant               |
+| 0x15 | SPEEDOMETER_DATA_5A_15_FRAME        | Second cluster variant               |
+| 0x16 | *(unmapped)*                        | **Observed constantly, layout unknown** |
+| 0x18 | SPEEDOMETER_DATA_5A_18_FRAME        | Engine diagnostics                   |
+| 0x19 | SPEEDOMETER_DATA_5A_19_FRAME        | Economy / distance to empty (unseen) |
+| 0x23 | *(unmapped)*                        | —                                    |
+| 0x29 | WIFI_PASSWORD_5A_29_FRAME           | Wi-Fi / SmartXonnect config          |
+| 0x37 | SPEEDOMETER_DATA_5A_37_FRAME        | Calibration-response / ACK class     |
+| 0x43 | —                                   | (inbound alias of CALLER in constants) |
+| 0x54 | SPEEDOMETER_DATA_5A_54_FRAME        | ACK acknowledgment variant           |
+| 0x6B | MUSIC_FRAME                         | Music control (play/pause/next)      |
+| 0x6D | *(unmapped)*                        | —                                    |
+| 0x7D | —                                   | From companion frame-identifier map  |
+| 0x9D | *(unmapped)*                        | —                                    |
+| 0xF2 | —                                   | (inbound alias of CHALLENGE in constants) |
+
+> Note `0x54` is the **ACK** here and `0x6B` carries the music command — the
+> inverse of what the Jupiter report's table implies. Transcribed in
+> `NtorqDriver.kt` with byte offsets and scaling factors.
+
+All multi-byte fields are **big-endian**, confirmed by the vendor's own
+`DataParser.extractValue`, which concatenates the bytes into a hex string and
+parses it — the first byte is most significant.
+
+### Frame start bytes
+
+| Byte | Direction | Use                                     |
+| ---- | --------- | --------------------------------------- |
+| 0x5A | outbound  | Navigation / calibration / short frames |
+| 0x5B | outbound  | Mobile-data (keepalive), text rows      |
+| 0x9A | inbound   | Challenge response (0xF1) from cluster  |
+| 0x9B | inbound   | Challenge / unknown inbound frames      |
 
 ### 4a. Measured on the owner's Ntorq 125 — 2026-10-13
 
