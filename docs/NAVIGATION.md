@@ -137,25 +137,50 @@ The dashboard's tile set is therefore generated from `ui/ClusterTiles.kt`, where
 every entry cites a manual reference. Adding a tile needs a cluster element,
 not just a byte offset we can decode.
 
-### The text area is bigger than the Jupiter's
+### The row is 12 characters, not 17 — from TVS's own manual
 
-The bottom of the display shows **three** text rows, each rendering roughly
-9-10 characters in the all-segments-on pattern. The Jupiter reference
-implementation targets a **single 17-character row**.
+The Jupiter reference implementation targets a single 17-character row, and the
+protocol's text payload is 17 bytes. Neither carries over. The Ntorq 125 manual
+renders every navigation string the cluster can produce, and **none exceeds 12
+characters**:
 
-That is a genuine divergence, not a detail:
+| Displayed | Chars |
+| :--- | ---: |
+| `AFTER 900m` | 10 |
+| `TAKE RIGHT` | 10 |
+| `10Km 700m` | 9 |
+| `STAY SAME RD` | 12 |
+| `DISTANCE REM` | 12 |
+| `TAKE U-TURN` | 11 |
+| `MOBILE DATA` | 11 |
+| `YOU ARRIVED` | 11 |
+| `RE-ROUTING` | 10 |
 
-- The 17-byte text payload (`0x5B 0x4F` / `0x4C` / `0x63`) is proven for the
-  Jupiter.
-- This cluster has a visibly larger, multi-row text region.
-- Whether it accepts the same payload across three rows, wants a row-selecting
-  byte, or wants a longer payload, is **unknown**.
+Two of those are exactly 12 **and are truncations**:
 
-`0x5B 0x63` is 99 — `ARTIST_NAME_PACKET` upstream — and may be the row-selecting
-mechanism for exactly this.
+- `DISTANCE REMAINING` → `DISTANCE REM`
+- `STAY SAME ROAD` → `STAY SAME RD`
 
-**Do not assume 17 characters on this cluster.** Capture and count; see
-`docs/CAPTURE.md` §3.
+A renderer that cuts a 16-character string to 12 and never once exceeds 12 is
+not displaying a 17-cell row and happening to be careful. TVS's own UI
+truncates at **12**, which is the row width.
+
+This retires the "three rows of 9-10 characters" reading of the
+all-segments-on photograph, which counted lit cells rather than character cells
+and is why it looked ambiguous.
+
+`RowChars.NTORQ = 12` in `MapsNotificationListener.kt` is where this is
+implemented, with the manual page cited. The 17-byte payload is still sent —
+the extra bytes are zero-padded and the terminator stays at index 19 — because
+that is the frame shape the cluster expects; only the *characters* are limited.
+
+Two consequences worth having:
+
+- A street name is cut at 12, so `"Meppayyur - Avalla"` (17) became
+  `"Meppayyur -"` — the destination half was being lost off the end.
+- The `+` and `-` that `sanitize()` now preserves both **appear in TVS's own
+  rendered strings** (`TAKE U-TURN`, `10Km 700m`), which is the first direct
+  evidence that the cluster renders them.
 
 ## Packet layouts (proven)
 

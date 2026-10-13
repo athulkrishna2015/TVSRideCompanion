@@ -378,7 +378,18 @@ class NtorqDriver(
      * fields the Jupiter report documents; it is opt-in because the official
      * app writes zeros in that region.
      */
-    override fun buildPing(state: DashState): ByteArray? = PacketBuilder.mobileData(state)
+    /**
+     * The keepalive, now carrying the clock.
+     *
+     * `PacketBuilder.mobileData` wrote zeros at [6..9] and [12..14] where the
+     * official app puts hour, minute, second, AM/PM and the date. A ping every
+     * two seconds that says "the time is 00:00:00" is a clock instruction, so
+     * the cluster's own time was overwritten with nonsense and the dash showed
+     * the wrong time while every other part of the app looked healthy.
+     *
+     * [Keepalive] carries the layout transcribed from the official sender.
+     */
+    override fun buildPing(state: DashState): ByteArray? = Keepalive.build(state)
 
     /** `0x5A 0x4E` — proven layout, see [PacketBuilder.navigationControl]. */
     override fun buildNavControl(nav: NavStep): ByteArray? =

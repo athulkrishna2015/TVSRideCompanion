@@ -113,6 +113,9 @@ class ProtocolTest {
 
     @Test
     fun `mobile data has no checksum and the documented layout`() {
+        // Header, terminator and the zero tail, which are unchanged. The clock
+        // bytes are no longer zero and are covered by KeepaliveClockTest; this
+        // test keeps the parts of the frame that did not move honest.
         val p = PacketBuilder.mobileData(
             DashState(0L, batteryBars = 3, signalBars = 2, networkCode = 0x04),
         )
@@ -123,8 +126,28 @@ class ProtocolTest {
         assertEquals(3, p[3].toInt())   // battery
         assertEquals(0x02, p[7].toInt())
         assertEquals(0xFF.toByte(), p[19])
-        // The official builder writes zeros at 12..18 and never a checksum.
-        for (i in 12..18) assertEquals("byte $i", 0, p[i].toInt())
+        // [15..18] stay zero and there is never a checksum. [12..14] used to be
+        // asserted zero too, which is what let the missing clock through: the
+        // assertion was true, and the bug was that it should not have been.
+        for (i in 15..18) assertEquals("byte $i", 0, p[i].toInt())
+    }
+
+    @Test
+    fun `the keepalive the driver sends carries the clock`() {
+        // The builder above is the superseded layout, kept for the bytes that
+        // did not change. This is what actually goes over the air, and it must
+        // not be the zero-clock one.
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        cal.clear()
+        cal.set(2026, 9, 13, 13, 35, 19)
+        val p = Keepalive.build(DashState(0L), calendar = cal)
+        assertEquals(1, p[6].toInt())    // 1 PM, 12-hour
+        assertEquals(35, p[7].toInt())   // minute
+        assertEquals(19, p[8].toInt())   // second
+        assertEquals(1, p[9].toInt())    // PM
+        assertEquals(13, p[12].toInt())  // day
+        assertEquals(10, p[13].toInt())  // month
+        assertEquals(26, p[14].toInt())  // year mod 100
     }
 
     @Test

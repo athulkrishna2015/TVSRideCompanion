@@ -24,8 +24,20 @@ data class NavInstruction(
     val pictogram: Int?,
     val provider: String,
 ) {
-    /** Best single line for a 17-character cluster display. */
-    fun displayLine(maxChars: Int = 17): String {
+    /**
+     * Best single line for this cluster's display.
+     *
+     * Width is [RowChars.NTORQ], **not** the 17 the Jupiter payload implies.
+     * TVS's own manual renders `DISTANCE REMAINING` as `DISTANCE REM` and
+     * `STAY SAME ROAD` as `STAY SAME RD` — both cut at 12 — and no string it
+     * documents is longer. A renderer that truncates at 12 and never exceeds it
+     * is displaying a 12-cell row.
+     *
+     * The 17-byte payload is still sent; the bytes beyond 12 are zero-padded and
+     * the `0xFF` terminator stays at index 19, because that is the frame shape
+     * the cluster expects. Only the character count changed.
+     */
+    fun displayLine(maxChars: Int = RowChars.NTORQ): String {
         val combined = listOf(street, title)
             .firstOrNull { it.isNotBlank() } ?: "Navigating"
         return combined.take(maxChars)
@@ -190,4 +202,32 @@ class MapsNotificationListener : NotificationListenerService() {
             "com.immobiletrack",
         )
     }
+}
+/**
+ * How many characters the cluster's alpha-numeric row actually shows.
+ *
+ * The protocol's text payload is 17 bytes and the Jupiter app fills all 17, which
+ * is where the original assumption came from. TVS's Ntorq 125 manual documents
+ * what this cluster renders, and every one of its examples is 12 characters or
+ * fewer — including two that are visibly cut:
+ *
+ * - `DISTANCE REMAINING` -> `DISTANCE REM`
+ * - `STAY SAME ROAD` -> `STAY SAME RD`
+ *
+ * That is a 12-cell row. Sending 17 characters means the tail is either
+ * clipped on the cluster or never read, and `"Meppayyur - Avalla"` lost its
+ * destination half every time.
+ */
+object RowChars {
+    /** Documented Ntorq 125 row width. See `docs/NAVIGATION.md`. */
+    const val NTORQ = 12
+
+    /**
+     * The Jupiter's row, kept for the Jupiter driver.
+     *
+     * The 17-byte payload is the frame shape both clusters accept; only the
+     * usable characters differ, so this changes how much text is *sent*, never
+     * how the frame is laid out.
+     */
+    const val JUPITER = 17
 }

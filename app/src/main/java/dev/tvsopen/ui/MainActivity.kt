@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,7 @@ import dev.tvsopen.log.Log
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Session
+import dev.tvsopen.transport.ConnectionState
 import dev.tvsopen.transport.RideService
 import dev.tvsopen.transport.ScooterPairing
 import dev.tvsopen.transport.ScooterScanner
@@ -106,11 +108,39 @@ class MainActivity : AppCompatActivity() {
     ) {
         var tab by rememberSaveable { mutableStateOf(0) }
         var findMy by rememberSaveable { mutableStateOf(false) }
-        var navMirroring by rememberSaveable { mutableStateOf(false) }
+        // On by default: mirroring is the app's reason to exist.
+        //
+        // It was false, so a rider who installed this, granted notification
+        // access, started a route and looked at the cluster saw nothing — with no
+        // indication that a switch existed to turn on. Asking for a feature
+        // twice is the wrong default when enabling it is free: the bridge does
+        // nothing until a maps app actually posts a navigation notification,
+        // and there is no cloud, account or network call involved.
+        //
+        // The toggle stays, because someone may want the cluster left alone.
+        var navMirroring by rememberSaveable { mutableStateOf(true) }
 
-        // Everything the UI shows comes from the process-scoped Session, which the
-        // BLE service and the notification listener both write into. The
+        // Start the mirror once a connection exists, because it defaults on.
+        //
+        // Without this the default was cosmetic: the switch showed "on" while
+        // nothing had been sent to the service, so the cluster showed no turn
+        // instructions and there was no reason visible for it.
+        //
+        // Keyed on the connection state, so it fires on the transition to
+        // CONNECTED and not on every recomposition. `startNavigation` returns
+        // early if the bridge is already running, and the action is idempotent.
+        // Deliberately not fired while disconnected — asking the service to start
+        // a bridge it cannot write to would log a dropped write per tick, which is
+        // exactly the spam that was just fixed.
+        //
+        // Everything the UI shows comes from the process-scoped Session, which
+        // the BLE service and the notification listener both write into. The
         // activity only observes.
+        LaunchedEffect(connection.state) {
+            if (navMirroring && connection.state == ConnectionState.CONNECTED) {
+                onNavMirrorChange(RideService.ACTION_START_NAV)
+            }
+        }
         val telemetry by Session.telemetry.collectAsStateWithLifecycle()
         val hud by Session.hud.collectAsStateWithLifecycle()
         val connection by Session.connection.collectAsStateWithLifecycle()
