@@ -332,10 +332,33 @@ asserts their continued absence so they are not added on a hunch.
 
 | Data ID | Offset | Field | Scaling |
 | :--- | :--- | :--- | :--- |
-| `0x10` | 3–5 | Odometer | uint24, ÷ 10 → km |
+| `0x10` | 3–5 | Odometer | uint24 **big-endian**, ÷ 10 → km |
 | `0x10` | 6 | Fuel | lower nibble bars; upper nibble reserve |
 | `0x19` | 8 | Economy | km/L |
 | `0x19` | 11–12 | Distance to empty | |
+
+### Byte order is big-endian, and the evidence is a photo of the dash
+
+Every multi-byte field is **big-endian**. Measured frame:
+
+```
+5A 10 00 02 88 2A 02 00 00 00 09 50 00 00 00 00 00 00 00 FF
+         ^^^^^^^ odometer, indices 3–5
+```
+
+`0x02882A` = 165,930 → **16,593.0 km**, which is the figure on the cluster.
+Read little-endian the same three bytes give `0x2A8802` = 2,787,330 → 278,733.0,
+a factor of 16.8 too large, on a bike that has done 16,593 km.
+
+This was wrong in the first implementation, which assembled with `shl (8 * i)`.
+The unit tests did not catch it because the *fixture writer* used the same
+little-endian helper the reader did, so the two agreed by construction. A test
+built from its own encoder cannot detect a shared assumption; only the bytes off
+the wire can. It now asserts both the correct value and the wrong one.
+
+Worth noting the magnitude of the failure: it produced a number. A field that
+decoded to `null`, or to a value outside any plausible range, would have been
+caught the first time anyone looked at it.
 
 Jupiter and Ntorq share `SpeedOMeter1` offsets almost exactly; they differ at
 index 12 (`LOCATION_TAG` on both) and in the trip-meter width (3 bytes on

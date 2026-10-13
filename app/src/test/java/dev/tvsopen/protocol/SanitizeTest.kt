@@ -34,7 +34,12 @@ class SanitizeTest {
         // "Example Road X Hill R" to the cluster.
         // Seventeen columns is the hard cap, so this is the wire length too.
         // (Input is longer on purpose: truncation is part of the contract.)
-        assertEquals("Example Rd - Hil", s("Example Road - Hill Route"))
+        //
+        // The cut lands mid-word and the hyphen survives inside it, which is the
+        // whole point: "Example Road - Hi" still reads as Example Road, whereas
+        // the old "Example Road X Hill R" turned a separator into a letter and
+        // split the place name into two unrelated words.
+        assertEquals("Example Road - Hi", s("Example Road - Hill Route"))
         assertEquals("a b c d", s("a/b,c.d"))   // four tokens, three separators
     }
 
