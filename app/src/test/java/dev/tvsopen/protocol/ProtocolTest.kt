@@ -164,14 +164,16 @@ class ProtocolTest {
     }
 
     @Test
-    fun `sanitiser keeps alphanumerics and flattens the rest`() {
+    fun `sanitiser keeps alphanumerics, keeps +-, and folds the rest`() {
         assertEquals(
             "Turn right NH44",
             PacketBuilder.sanitize("Turn right NH44").decodeToString(),
         )
         // Each emoji collapses to exactly one 'X', not one per UTF-16 unit.
         assertEquals("XX TURN", PacketBuilder.sanitize("🚦⚠ TURN").decodeToString())
-        assertEquals("X", PacketBuilder.sanitize("—").decodeToString())
+        // An em dash is a separator, so it folds to a space and trims away
+        // rather than becoming an "X". Emoji above still become X.
+        assertEquals("", PacketBuilder.sanitize("\u2014").decodeToString())
     }
 
     @Test

@@ -271,30 +271,39 @@ object PacketBuilder {
      * routinely mixed-script, so step 2 is what keeps "NH-44 தென்" from turning
      * into mojibake on the dash.
      */
-    fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
-        // Collapse each emoji/symbol run to a single 'X'.
+    // Punctuation to fold to a space: appositive dash, slash, comma, full stop
+        // and the rest. All render as a gap, and a gap reads correctly where an
+        // 'X' read as corruption.
+        //
+        // '-' and '+' are deliberately **kept**, not folded. '-' separates the
+        // two halves of "NH-44" and folding it gives "NH 44", which is a
+        // different road name; and dropping '+' from "+919876543210" silently
+        // turns an international number into a local one, which is exactly
+        // wrong for caller ID. Both are ASCII printable and very likely
+        // renderable, though that is **unverified on the cluster** — worth
+        // confirming on the next live session.
+        private const val KEPT_PUNCTUATION = "+-"
+
+        // Run of anything that folds to a space.
+        private val SPACE_RUN = Regex(" +")
+
+        fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
+        // Collapse each emoji/symbol run to a single 'X'. Still 'X' rather than
+        // dropped: for a pictogram an unknown glyph genuinely *is* an X, and a
+        // dropped emoji would silently close the gap between two words.
         val symbolised = EMOJI_OR_SYMBOL.replace(text, "X")
 
-        // **Drop punctuation; do not substitute it.** This used to rewrite every
-        // non-alphanumeric character to 'X', which looked deliberate for
-        // pictograms but produced corrupt-looking street names on the cluster:
-        // "Meppayyur - Avala Rd" shipped as "Meppayyur X Avalla". A rider
-        // reading that has no way to tell an 'X' from a real letter. Dropping
-        // the dash leaves "Meppayyur  Avala Rd", which reads correctly.
-        //
-        // Separators are folded to a single space rather than deleted outright,
-        // so "a - b" does not become "a  b" and, more importantly, "NH-44"
-        // stays two tokens instead of running together.
         val filtered = buildString(symbolised.length) {
             var lastWasSpace = false
             for (ch in symbolised) {
-                val ok = (ch in 'A'..'Z') || (ch in 'a'..'z') || (ch in '0'..'9')
+                val ok = (ch in 'A'..'Z') || (ch in 'a'..'z') ||
+                    (ch in '0'..'9') || ch in KEPT_PUNCTUATION
                 when {
                     ok -> {
                         append(ch)
                         lastWasSpace = false
                     }
-                    // Any separator becomes one space, never two in a row.
+                    // Any other separator becomes one space, never two in a row.
                     !lastWasSpace -> {
                         append(' ')
                         lastWasSpace = true
@@ -313,12 +322,8 @@ object PacketBuilder {
             truncateToBytes(filtered, maxBytes)
         }
 
-        // Collapse the double spaces that folding left behind, then trim. Done
-        // last so truncation cannot re-open a gap at the boundary.
         return clamped.replace(SPACE_RUN, " ").trim().toByteArray(Charsets.UTF_8)
     }
-
-    private val SPACE_RUN = Regex(" +")
 
     private fun isAsciiPrintable(s: String): Boolean =
         s.all { (it in 'A'..'Z') || (it in 'a'..'z') || (it in '0'..'9') || it == ' ' }

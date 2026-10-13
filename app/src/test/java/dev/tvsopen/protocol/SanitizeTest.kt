@@ -16,14 +16,24 @@ class SanitizeTest {
     private fun s(text: String) = String(PacketBuilder.sanitize(text), Charsets.UTF_8)
 
     @Test
-    fun `punctuation is dropped rather than replaced`() {
-        assertEquals("Meppayyur Avala Rd", s("Meppayyur - Avala Rd"))
+    fun `punctuation is kept or folded, never replaced with a letter`() {
+        // This is the hardware finding: the old sanitiser shipped
+        // "Meppayyur X Avalla" to the cluster.
+        assertEquals("Meppayyur - Avala Rd", s("Meppayyur - Avala Rd"))
+        assertEquals("a b c", s("a/b,c.d"))
     }
 
     @Test
     fun `a hyphen keeps two tokens`() {
-        // Deleting outright would produce "NH44", which is a different string.
-        assertEquals("NH 44", s("NH-44"))
+        // Folding it would give "NH 44", a different road name.
+        assertEquals("NH-44", s("NH-44"))
+    }
+
+    @Test
+    fun `a phone number keeps its plus`() {
+        // Dropping '+' turns an international number into a local one, which
+        // is precisely wrong for caller ID.
+        assertEquals("+919876543210", s("+919876543210"))
     }
 
     @Test
