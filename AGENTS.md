@@ -243,15 +243,48 @@ The logger (`dev.tvsopen.log.Log`) is the evidence base for the whole project:
 every BLE frame in and out is hex-dumped with a timestamp, kept in a 4000-entry
 in-memory ring and mirrored to a rotating file.
 
+**The canonical on-device log file, and where the pulled copies live:**
+
+| | Path |
+| :--- | :--- |
+| On device | `/data/data/dev.tvsopen/files/logs/tvsride.log` |
+| Pulled, whole day 2026-10-13 | `~/ntorq-capture/device/tvsride.log` |
+| Pulled, per-session | `~/ntorq-capture/session{,2,3}.log` |
+| Screenshots (contain personal data) | `~/shots/`, `~/ntorq-capture/` |
+| Cluster photos | `ref/1791877874784` — **gitignored, do not commit** |
+
+The whole-day file is 12,237 lines / 910 KB and covers `01:04` to `13:20`. All
+four of those locations hold **the rider's street name and the cluster MAC** and
+are deliberately outside the repo. `~/ntorq-capture/` is the one to read when
+reconstructing a session.
+
 ```bash
 # live in the app: third tab
 # off the device — works because the released APK is debuggable:
 adb shell run-as dev.tvsopen ls -l files/logs/
-adb exec-out run-as dev.tvsopen cat files/logs/tvsride.log > session.log
+adb exec-out run-as dev.tvsopen cat files/logs/tvsride.log > ~/ntorq-capture/device/tvsride.log
 ```
 
 Rotation keeps three files: `tvsride.log`, `tvsride.2.log`, `tvsride.3.log`,
 each capped at 2 MB.
+
+**Parse the log with a proper frame parser, not `awk` on whitespace.** A naive
+split re-anchors mid-frame and produces byte histograms full of odometer bytes,
+which reads exactly like a fuel field behaving strangely. It cost a false
+"fuel level that changes at frame 132" conclusion:
+
+```bash
+python3 - <<'PY'
+import re, glob, collections
+hist = collections.Counter()
+for path in sorted(glob.glob("~/ntorq-capture/*.log")):
+    for m in re.finditer(r'\b5[Aa]\s*([0-9A-Fa-f]{2})((?:\s+[0-9A-Fa-f]{2}){6,})',
+                         open(path, errors="ignore").read()):
+        b = [int(x, 16) for x in m.group(2).split()]
+        hist[(int(m.group(1), 16), len(b))] += 1
+print(hist)
+PY
+```
 
 Two rules learned the hard way, both about the same thing:
 
@@ -265,6 +298,11 @@ Two rules learned the hard way, both about the same thing:
 
 ## Testing against real hardware
 
+**As of 2026-10-13 the rider's scooter is out of service — its battery is flat
+and it will not turn over. Do not plan on hardware verification.** The phone
+stays available; the cluster does not. Everything below is for whenever it
+comes back, and should be read as deferred rather than pending.
+
 Do not assume. When a scooter is in range:
 
 1. Confirm the GATT service is `5456534D-5647-5341-5342-454E544F5251`.
@@ -274,6 +312,38 @@ Do not assume. When a scooter is in range:
 
 Never write calibration frames or calibration ids to a cluster without
 explicit owner instruction — they alter cluster behaviour.
+
+### What the hardware pass changed, and what it left open
+
+Worth keeping, because every item was believed settled beforehand and several
+were wrong. A live cluster is worth more than a year of reading an APK.
+
+**Disproved by connecting:**
+
+- The cluster advertises **no service UUID**. A scan filtered on the documented
+  UUID finds nothing; it has to be found by name (`TVSBT…`).
+- **No pair mode, no bonding, and no `9B F2` challenge** on this vehicle. The
+  handshake is implemented and unused.
+- The transcribed frame table was **partly wrong**: `0x16` arrives about as
+  often as the speedometer and is not in it; `0x19` is listed and never arrives.
+- **Multi-byte fields were read little-endian.** Now confirmed big-endian in the
+  vendor's own `DataParser`, so this is settled twice over.
+- **Navigation mirroring had never sent a frame.** `MapsNotificationListenerRef`
+  was declared and never assigned, so the bridge was handed `null` on every
+  frame while the phone-side UI looked correct end to end.
+- **Fuel was displaying a full tank on an empty one** — `min(value, 6)` on a raw
+  7. Out-of-range values are dropped now.
+
+**Still open, and each needs the scooter, not more code:**
+
+- **Fuel scale.** One capture with fuel in the tank is the second anchor; two
+  points fix the mapping.
+- **Cluster alpha-numeric layout.** `FUEL EMPTY` fits 10 characters on one row,
+  so the assumed 17 is likely too long. Needs someone to read the dash during a
+  live route.
+- **Caller ID and SMS**, end to end: an incoming call should light the green LED
+  and show the number.
+- **Bike mode**, never exercised on hardware.
 
 ## This is a clean-room interoperability project
 

@@ -360,6 +360,44 @@ Worth noting the magnitude of the failure: it produced a number. A field that
 decoded to `null`, or to a value outside any plausible range, would have been
 caught the first time anyone looked at it.
 
+### The byte order is confirmed in the official parser, not inferred
+
+The endianness above was originally settled by comparing the dashboard with the
+captured bytes. That is good evidence, and it is now corroborated by the vendor's
+own code — `DataParser.extractValue`:
+
+```java
+byte[] bytes = extractByteArray(start, length);
+for (byte b : bytes) sb.append(String.format("%02X", b));
+return Integer.parseInt(sb.toString(), 16);
+```
+
+Bytes are appended **in order** and the whole string is parsed as one hex
+number, so the first byte is the most significant. That is big-endian, stated by
+the implementation rather than deduced from a photograph.
+
+The same class settles the offsets. `@ParsingMeta` marks are **1-based**
+(`START_BYTE` at 1, `END_BYTE` at 20), and every one maps onto our 0-based index
+after subtracting one:
+
+| Vendor | length | Ours | Field |
+| :--- | :--- | :--- | :--- |
+| 1 | 1 | 0 | START_BYTE |
+| 3 | 1 | 2 | SPEED |
+| 4 | 3 | 3–5 | ODOMETER |
+| 7 | 1 | 6 | FUEL_LEVEL |
+| 15 | 3 | 14–16 | TRIP_F_METER |
+| 18 | 2 | 17–18 | ENGINE_RPM |
+| 20 | 1 | 19 | END_BYTE |
+
+And the scaling is the vendor's too — `getOdometer()` is literally
+`return this.odometer / 10;`.
+
+`getFuelLevel()` is the same story: it takes `Integer.toHexString(byte)`, keeps
+the **last** character, and parses it as a hex digit. That is the low nibble,
+which is what this app does. So the decode is correct; see the fuel section below
+for why the gauge still could not be trusted.
+
 ### Unresolved: byte 6 of `0x10` is not behaving like a fuel level
 
 Byte 6 is transcribed as `FUEL_LEVEL` and the app reads its low nibble as a bar
@@ -383,11 +421,42 @@ Three things about that do not fit a fuel level:
   `FUEL EMPTY`, while byte 6 read `0x07` — which the low-nibble mapping renders as
   a **full** tank. Those cannot both be true.
 
-The `lower nibble = bars, upper nibble = reserve` split is inherited from the
-Jupiter table and may simply not apply to the Ntorq, or index 6 may not be fuel
-at all. **Unverified.** Treat the app's fuel gauge as unconfirmed until it can be
-compared against a known tank level; the raw byte is logged so the mapping can be
-revised without recapturing.
+#### What the official app does, and why it does not settle this
+
+`NtorqSpeedOMeter1.getFuelLevel()`:
+
+```java
+String hex = Integer.toHexString(this.fuelLevel);
+char last = /* final character of hex */;
+return Character.digit(last, 16);
+```
+
+The last hex character of the byte is its **low nibble** — which is what this
+app already did. So the decode was never the problem, and the vendor's own code
+would produce the same 7. The disagreement is between the *phone's* reading and
+the *cluster's own gauge*, and the cluster is not reading a fuel sender through
+this app.
+
+One more thing ruled out: `0x11` index 2 is **not** a fuel level either. In the
+official class it is `fuelSensorFailure`, a fault flag, and it reads `0x00` — no
+fault — while the tank is empty. Reading it as a level would have produced the
+opposite error.
+
+#### The fix: reject what the gauge cannot represent
+
+The gauge has six bars. The value transmitted while the cluster said
+`FUEL EMPTY` was **7**, which six bars cannot express. The app used to clamp
+`min(value, 6)`, which turned that into "6 of 6 — full" on an empty tank.
+
+Out-of-range values are now **dropped**, and the gauge reads *No usable reading*
+instead of inventing a level. A genuine `0..6` still renders normally. This does
+not make the gauge correct — it makes it stop being confidently wrong, which is
+the only honest position until a capture with a part-full tank exists.
+
+**To close this out**, one capture with fuel in the tank is all that is needed:
+the raw byte at that moment gives the second anchor, and two points fix the
+scale. Without it, any mapping is a guess wearing a decimal point.
+
 
 Jupiter and Ntorq share `SpeedOMeter1` offsets almost exactly; they differ at
 index 12 (`LOCATION_TAG` on both) and in the trip-meter width (3 bytes on
