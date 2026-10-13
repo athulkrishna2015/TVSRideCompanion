@@ -83,13 +83,6 @@ class RidePrefs private constructor(private val ctx: Context) {
             }.apply()
         }
 
-    /** Explicit user's selection from the scan row; survives later rediscovery. */
-    fun updateSelectedModel(address: String, modelId: String) {
-        sp.edit().putString(modelKey(address), modelId).apply()
-    }
-
-    fun selectedModel(address: String): String? = sp.getString(modelKey(address), null)
-
     companion object {
         private const val NAME = "tvsride"
         private const val KEY_RIDE_MODE = "ride_mode"
