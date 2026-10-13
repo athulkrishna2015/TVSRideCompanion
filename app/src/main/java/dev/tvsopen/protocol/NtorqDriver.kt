@@ -389,8 +389,7 @@ class NtorqDriver(
      */
     override fun buildTextRow(row: Int, text: String): ByteArray? =
         PacketBuilder.textRow(
-            if (row <= 0) PacketBuilder.OutboundId.TEXT_ROW1
-            else PacketBuilder.OutboundId.TEXT_ROW2,
+            if (row <= 0) OutboundId.TEXT_ROW1 else OutboundId.TEXT_ROW2,
             text,
         )
 

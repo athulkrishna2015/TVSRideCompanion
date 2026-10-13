@@ -59,7 +59,7 @@ class SanitizeTest {
 
     @Test
     fun `text rows and caller info are built and terminated`() {
-        val row = PacketBuilder.textRow(PacketBuilder.OutboundId.TEXT_ROW1, "Hello")
+        val row = PacketBuilder.textRow(OutboundId.TEXT_ROW1, "Hello")
         assertEquals(20, row.size)
         assertEquals(0x5B.toByte(), row[0])
         assertEquals(0x4C.toByte(), row[1])

@@ -22,7 +22,6 @@
 
 package dev.tvsopen.nav
 
-import android.app.Notification
 import dev.tvsopen.protocol.ManeuverResolver
 
 /** Result of reading one navigation notification. */
@@ -64,37 +63,64 @@ enum class NavMode { DRIVING, TWO_WHEELER, UNKNOWN }
  * route and needs no separate handling.
  */
 fun classify(
-    pkg: String,
     extras: android.os.Bundle,
     isMapsPackage: Boolean,
 ): Pair<ClusterNotice, NavMode> {
-    // Incoming call first: a dialer's notification is ongoing and has a title
-    // and text, so it would otherwise be misread as navigation.
-    if (extras.containsKey(Notification.EXTRA_INCOMING_CALL_NUMBER) ||
-        extras.containsKey("android.telecom.extra.INCOMING_CALL_EXTRAS")
+    // Incoming call first: a dialer's notification is ongoing with a title and
+    // text, so without this it is misread as navigation.
+    //
+    // Keyed on the literals, not on `Notification` constants, because the ones
+    // that would fit are not public API — `EXTRA_INCOMING_CALL_NUMBER` and
+    // friends do not resolve against the SDK, and Telecom uses these string
+    // keys on the notification it posts for an incoming call.
+    if (extras.containsKey(EXTRA_INCOMING_CALL_EXTRAS) ||
+        extras.containsKey(EXTRA_INCOMING_CALL_ADDRESS)
     ) {
         return ClusterNotice.INCOMING_CALL to NavMode.UNKNOWN
     }
     if (isMapsPackage) {
-        val mode = when (extras.getInt(Notification.EXTRA_NAVIGATION_MODE, 0)) {
-            1 -> NavMode.DRIVING
-            2 -> NavMode.TWO_WHEELER
-            else -> NavMode.UNKNOWN
-        }
-        return ClusterNotice.NAVIGATION to mode
+        return ClusterNotice.NAVIGATION to readNavMode(extras)
     }
     // MessagingStyle is what a messaging app sets for a conversation, and is
     // the only reliable way to tell a message from a random app notification.
-    if (extras.getParcelable<Notification.MessagingStyle>(Notification.EXTRA_MESSAGING_STYLE) != null) {
+    // Read as Parcelable rather than cast: MessagingStyle is not reified from
+    // a Bundle generically and the cast does not typecheck.
+    @Suppress("DEPRECATION")
+    if (extras.getParcelable<android.os.Parcelable>(EXTRA_MESSAGING_STYLE) != null) {
         return ClusterNotice.MESSAGE to NavMode.UNKNOWN
-    }
-    if (extras.containsKey(Notification.EXTRA_MEDIA_SESSION) &&
-        pkg.contains("music", ignoreCase = true)
-    ) {
-        return ClusterNotice.MEDIA to NavMode.UNKNOWN
     }
     return ClusterNotice.MEDIA to NavMode.UNKNOWN
 }
+
+/**
+ * Driving or two-wheeler, from the maps app's own extra.
+ *
+ * **Unverified.** This key is community-documented rather than public API, and
+ * has not yet been observed on the device. It is read defensively and is
+ * informational only — nothing gates on it, because the navigation content is
+ * mode-independent: the instruction, street and distance arrive in the same
+ * title/text/sub fields whether Maps is routing a car or a bike, so mirroring
+ * works in both modes regardless of what this returns.
+ */
+private fun readNavMode(extras: android.os.Bundle): NavMode {
+    val raw = extras.get(EXTRA_NAVIGATION_MODE)
+    val n = when (raw) {
+        is Int -> raw
+        // Maps has shipped this as both an int and a string across versions.
+        is String -> raw.toIntOrNull()
+        else -> null
+    } ?: return NavMode.UNKNOWN
+    return when (n) {
+        1 -> NavMode.DRIVING
+        2 -> NavMode.TWO_WHEELER
+        else -> NavMode.UNKNOWN
+    }
+}
+
+private const val EXTRA_INCOMING_CALL_EXTRAS = "android.telecom.extra.INCOMING_CALL_EXTRAS"
+private const val EXTRA_INCOMING_CALL_ADDRESS = "android.telecom.extra.INCOMING_CALL_ADDRESS"
+private const val EXTRA_MESSAGING_STYLE = "android.messaging.style"
+private const val EXTRA_NAVIGATION_MODE = "navigation.mode"
 
 object NavParsing {
 
