@@ -219,11 +219,9 @@ fun ScanScreen(
                     // Explicit choice, then the default model, and only then the
                     // name-based guess — which for this cluster is UNKNOWN.
                     val savedChoice = remember(d.address) {
-                        mutableStateOf(
-                            RidePrefs.load(context).selectedModel(d.address)
+                        RidePrefs.load(context).selectedModel(d.address)
                             ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
-                        )
-                    }.value
+                    }
                     val chosen = modelChoice[d.address]
                         ?: savedChoice
                         ?: if (d.isSmartXonnect) defaultModel else d.guessedModel
@@ -237,7 +235,6 @@ fun ScanScreen(
                         },
                         onModel = {
                             modelChoice = modelChoice + (d.address to it)
-                            savedChoice = it
                             RidePrefs.load(context).updateSelectedModel(d.address, it.name)
                         },
                         onPair = { pairing.pair(d.address) },
