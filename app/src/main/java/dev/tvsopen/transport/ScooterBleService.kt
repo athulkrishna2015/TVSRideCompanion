@@ -84,6 +84,11 @@ class ScooterBleService(private val context: Context) {
     val lastFrameAt: StateFlow<Long> = _lastFrameAt.asStateFlow()
 
     private val writeLock = Mutex()
+    // Written on the binder thread by the GATT callback and read on a coroutine
+    // by connect/write, so the visibility guarantee is not optional: without it
+    // a reconnect can read a stale non-null and refuse, which is exactly the
+    // failure this class had.
+    @Volatile
     private var gatt: BluetoothGatt? = null
     private var writeChar: BluetoothGattCharacteristic? = null
 
@@ -124,14 +129,32 @@ class ScooterBleService(private val context: Context) {
         // non-suspend caller could not use it. Waiting here also guarantees no
         // write is in flight when the GATT client is closed.
         writeLock.withLock {
-            gatt?.run {
-                disconnect()
-                close()
-            }
-            gatt = null
+            gatt?.let { closeGatt(it) }
             writeChar = null
         }
         _state.value = ConnectionState.DISCONNECTED
+    }
+
+    /**
+     * Close a GATT client and drop our reference to it.
+     *
+     * `close()` is what releases the client registration; without it the client
+     * leaks and stays in `gatt`. That matters because `connect()` treats a
+     * non-null `gatt` as "already connected" and refuses — so a single dropped
+     * link left the app unable to reconnect for the life of the process, and
+     * the only recovery was force-stopping it. Observed on hardware: the cluster
+     * dropped with status 8 after ~2 minutes, and every later Connect was
+     * refused with "link already active".
+     *
+     * Called from the binder callback as well as from [disconnect], so the
+     * identity check matters — a stale callback must not clear a newer client.
+     */
+    @SuppressLint("MissingPermission")
+    private fun closeGatt(g: BluetoothGatt) {
+        writeChar = null
+        runCatching { g.close() }
+            .onFailure { Log.w(TAG, "gatt close: ${it.message}") }
+        if (gatt === g) gatt = null
     }
 
     /**
@@ -212,8 +235,12 @@ class ScooterBleService(private val context: Context) {
 
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.w(TAG, "GATT disconnected (status=$status)")
-                    writeChar = null
                     _state.value = ConnectionState.DISCONNECTED
+                    // Must release the client here, not just clear the
+                    // characteristic: `connect()` bails out while `gatt` is
+                    // non-null, so leaving a dead client in place made every
+                    // subsequent reconnect a silent no-op. See [closeGatt].
+                    closeGatt(g)
                 }
             }
         }

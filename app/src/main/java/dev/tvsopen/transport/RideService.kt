@@ -191,8 +191,17 @@ class RideService : android.app.Service() {
             false
         }
         if (!started) {
-            val reason = if (transport.adapter == null) "no Bluetooth adapter"
-            else "link already active or address rejected"
+            // The three causes need saying apart. "link already active or
+            // address rejected" was two unrelated failures in one string, and
+            // the dead-link one — a GATT client left over from a previous
+            // session — looked like a transient no-op rather than the reason the
+            // app could not reconnect all day.
+            val alreadyUp = Session.connection.value.state == ConnectionState.CONNECTED
+            val reason = when {
+                transport.adapter == null -> "no Bluetooth adapter"
+                alreadyUp -> "already connected"
+                else -> "address rejected, or a stale GATT client is still held"
+            }
             Log.w(TAG, "connect not started: $reason")
             notify("Could not start connection ($reason)")
             Session.onConnection(ConnectionState.DISCONNECTED, model, address)
