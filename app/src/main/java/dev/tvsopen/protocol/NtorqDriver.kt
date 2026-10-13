@@ -389,6 +389,22 @@ class NtorqDriver(
         PacketBuilder.navigationText(nav.streetName)
 
     /**
+     * `0x5B 0x50` — the second navigation line.
+     *
+     * `NAVIGATION_TEXT_ALT` is a separate data id from `NAVIGATION_TEXT`, not a
+     * second use of `0x4F`. Both carry 17 sanitised bytes, zero-padded, `0xFF`
+     * terminated, no checksum.
+     *
+     * The cluster decides how many lines are in use from byte 10 of the `0x4E`
+     * control frame, so the bridge sends this alongside a control frame with
+     * `rows = 2`. Until that is seen rendering, the bridge still alternates, and
+     * this is only sent when a second line has content — see
+     * `NavigationBridge.startNavigation`.
+     */
+    override fun buildNavTextSecondary(nav: NavStep): ByteArray? =
+        PacketBuilder.navigationText(nav.streetName, OutboundId.NAVIGATION_TEXT_ALT)
+
+    /**
      * `0x5B 0x4C` (row 1) / `0x5B 0x63` (row 2) — caller ID and SMS text.
      *
      * This returned null, which meant caller ID and message display could not

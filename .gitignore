@@ -32,11 +32,17 @@ jadx*/
 ref/
 wrapper.log
 
-# Local build transcripts. Machine noise, and they differ on every run, so they
-# make the history unreviewable. The interesting evidence belongs in log/ and
-# docs/, not in a redirect of stdout. Root-scoped so a deliberate capture
-# elsewhere in the tree is not silently swallowed.
+# Local build transcripts and scratch output. Machine noise, and they differ on
+# every run, so they make the history unreviewable. The interesting evidence
+# belongs in log/ and docs/, not in a redirect of stdout. Root-scoped so a
+# deliberate capture elsewhere in the tree is not silently swallowed.
 /*.log
+
+# Moved-off root clutter. Twenty build*.log files accumulated in the repo root
+# before this existed; they belong under one directory, out of the way, and
+# never in history.
+.local/
+.kotlin/
 
 # Decompiled vendor code (see research/vendor/README.md). Expensive to
 # regenerate — hours of CPU on a 2-core budget — so it is kept on disk but

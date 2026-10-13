@@ -373,10 +373,14 @@ object PacketBuilder {
      *
      * Text is passed through [sanitize]; the cluster rejects non-ASCII glyphs.
      */
-    fun navigationText(text: String): ByteArray {
+    /**
+     * One navigation text line. `0x5B 0x4F` by default, `0x5B 0x50` for the
+     * second line via [dataId].
+     */
+    fun navigationText(text: String, dataId: Int = OutboundId.NAVIGATION_TEXT): ByteArray {
         val b = ByteArray(MOBILE_DATA_SIZE)
         b[0] = StartId.B5.toByte()
-        b[1] = OutboundId.NAVIGATION_TEXT.toByte()
+        b[1] = dataId.toByte()
         val bytes = sanitize(text)
         // 20 - 3: two header bytes and the 0xFF terminator.
         val n = minOf(bytes.size, b.size - 3)

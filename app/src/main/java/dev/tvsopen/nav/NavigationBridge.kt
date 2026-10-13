@@ -69,6 +69,17 @@ class NavigationBridge(
 
     var controlIntervalMs: Long = 1500
     var textSwapIntervalMs: Long = 3000
+
+    /**
+     * Send both navigation lines at once instead of alternating one.
+     *
+     * Off by default. `0x5B 0x50` and the control frame's row-count byte are
+     * transcribed, not measured — no capture has shown a second line rendering on
+     * this cluster — while the single-row alternating path is known to reach the
+     * display. Turning this on without the scooter available would trade a
+     * working display for an unverified one.
+     */
+    var twoRowNav: Boolean = false
     var pingIntervalMs: Long = 2000
 
     private var findMy = false
@@ -114,7 +125,30 @@ class NavigationBridge(
                 val step = _hud.value.instruction
                 if (step != null) {
                     val nav = step.toNavStep()
-                    driver.buildNavControl(nav)?.let { frame ->
+                    val street = step.displayLine(textRowChars)
+                    val metrics = step.metricsLine(textRowChars)
+
+                    // Two lines when the driver has a second row, else alternate.
+                    //
+                    // Alternating was the only option while the cluster had one
+                    // line: street, then ETA, every 3 s, so the rider never saw
+                    // both at once and had to wait for the one they wanted.
+                    // `0x5B 0x50` is a distinct data id rather than a second use
+                    // of `0x4F`, and the control frame's byte 10 tells the cluster
+                    // how many lines are populated — so with both set they can be
+                    // shown together.
+                    //
+                    // UNVERIFIED on this cluster: byte 10's meaning is from the
+                    // Jupiter report, and no capture has shown `0x50` on the
+                    // wire. So the second row is only sent when there is a
+                    // distinct second line to show, and [twoRowNav] falls back
+                    // to the old alternating behaviour, which is known to work.
+                    val twoRows = twoRowNav &&
+                        driver.buildNavTextSecondary(nav.copy(streetName = street)) != null &&
+                        street.isNotBlank() && metrics.isNotBlank()
+
+                    val control = nav.copy(rows = if (twoRows) 2 else 1)
+                    driver.buildNavControl(control)?.let { frame ->
                         if (ble.write(frame)) {
                             _hud.value = _hud.value.copy(
                                 framesSent = _hud.value.framesSent + 1, lastError = null,
@@ -124,18 +158,16 @@ class NavigationBridge(
                         }
                     }
 
-                    // Alternate the single free text line.
-                    val line = if (showingMetrics) step.metricsLine(textRowChars) else step.displayLine(textRowChars)
-                    driver.buildNavText(
-                        NavStep(
-                            distanceToTurnMeters = nav.distanceToTurnMeters,
-                            etaMinutes = nav.etaMinutes,
-                            remainingDistanceMeters = nav.remainingDistanceMeters,
-                            pictogram = nav.pictogram,
-                            streetName = line,
-                        ),
-                    )?.let { ble.write(it) }
-                    showingMetrics = !showingMetrics
+                    if (twoRows) {
+                        driver.buildNavText(nav.copy(streetName = street))?.let { ble.write(it) }
+                        driver.buildNavTextSecondary(
+                            nav.copy(streetName = metrics),
+                        )?.let { ble.write(it) }
+                    } else {
+                        val line = if (showingMetrics) metrics else street
+                        driver.buildNavText(nav.copy(streetName = line))?.let { ble.write(it) }
+                        showingMetrics = !showingMetrics
+                    }
                 }
                 delay(if (showingMetrics) controlIntervalMs else textSwapIntervalMs)
             }

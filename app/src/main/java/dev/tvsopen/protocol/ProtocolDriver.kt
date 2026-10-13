@@ -55,6 +55,20 @@ interface ProtocolDriver {
      */
     fun buildNavText(nav: NavStep): ByteArray?
 
+    /**
+     * The cluster's second navigation text line.
+     *
+     * `0x5B 0x50` (`NAVIGATION_TEXT_ALT`), same 17-character shape as
+     * [buildNavText]. Null by default: a driver that has only proved one row
+     * returns null and the bridge falls back to alternating a single row, which
+     * is what the Ntorq did until this was transcribed.
+     *
+     * The control frame's row-count byte (`b[10]`) is what tells the cluster both
+     * lines are populated, so a driver returning a second row must also report
+     * `rows = 2` on the [NavStep] it passes to [buildNavControl].
+     */
+    fun buildNavTextSecondary(nav: NavStep): ByteArray? = null
+
     /** Plain 17-char text row for caller ID / song titles / notifications. */
     fun buildTextRow(row: Int, text: String): ByteArray?
 

@@ -92,6 +92,15 @@ class ScooterBleService(private val context: Context) {
     private var gatt: BluetoothGatt? = null
     private var writeChar: BluetoothGattCharacteristic? = null
 
+    /**
+     * Whether the current link outage has already been reported.
+     *
+     * Guarded by [writeLock] rather than volatile: every read and write happens
+     * inside `write`, so the lock is already held and a separate field would
+     * only invite a second synchronisation scheme to drift out of step.
+     */
+    private var dropWarned = false
+
     val bluetoothManager: BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     val adapter: BluetoothAdapter? get() = bluetoothManager?.adapter
@@ -166,7 +175,26 @@ class ScooterBleService(private val context: Context) {
         val g = gatt
         val ch = writeChar
         if (g == null || ch == null || _state.value != ConnectionState.CONNECTED) {
-            Log.d(TAG, "write dropped, link not ready")
+            // Log the *first* drop of an outage, not every attempt.
+            //
+            // The keepalive pings every 2 s for the whole session, so with the
+            // link down this line fired 30 times a minute, forever. It drowned
+            // the log: a 13-hour capture was mostly one repeated message, and the
+            // frames that actually explain a fault became the hard part to find.
+            // The per-frame dedup in `Log.frame` cannot help here because these
+            // writes never reach it — they are dropped before any frame is built.
+            //
+            // Reset on the first successful write, so each outage is reported
+            // exactly once and a reconnect is not silent.
+            if (!dropWarned) {
+                dropWarned = true
+                val why = when {
+                    g == null -> "no gatt"
+                    ch == null -> "no write characteristic"
+                    else -> "state is ${_state.value}"
+                }
+                Log.w(TAG, "link not ready, dropping writes ($why)")
+            }
             return@withLock false
         }
         // Explicit <Boolean>: the lambda's last expression is a conditional on
@@ -200,6 +228,9 @@ class ScooterBleService(private val context: Context) {
             cont.resumeWith(Result.success(result))
         }
         if (ok) {
+            // Re-arm the outage warning: the link came back, so the next drop is
+            // news again rather than a continuation of the one already reported.
+            dropWarned = false
             emit(BleFrame(BleFrame.Direction.OUTBOUND, bytes, System.currentTimeMillis()))
         }
         ok
