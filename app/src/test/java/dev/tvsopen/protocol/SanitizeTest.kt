@@ -15,13 +15,20 @@ class SanitizeTest {
 
     private fun s(text: String) = String(PacketBuilder.sanitize(text), Charsets.UTF_8)
 
+    /** The printable run of a built frame, before zero padding and the 0xFF. */
+    private fun textOf(frame: ByteArray): String {
+        val end = frame.indexOfFirst { it == 0.toByte() || it == 0xFF.toByte() }
+            .let { if (it < 0) frame.size else it }
+        return String(frame.copyOfRange(0, end), Charsets.UTF_8).trim()
+    }
+
     @Test
     fun `punctuation is kept or folded, never replaced with a letter`() {
         // This is the hardware finding: the old sanitiser shipped
         // "Meppayyur X Avalla" to the cluster.
         // Seventeen columns is the hard cap, so this is the wire length too.
         assertEquals("Meppayyur - Avala", s("Meppayyur - Avala Rd"))
-        assertEquals("a b c", s("a/b,c.d"))
+        assertEquals("a b c d", s("a/b,c.d"))   // four tokens, three separators
     }
 
     @Test
@@ -84,8 +91,7 @@ class SanitizeTest {
 
     @Test
     fun `caller info falls back to the number when there is no name`() {
-        val bare = String(PacketBuilder.callerInfo("+919876543210", null), Charsets.UTF_8)
-        assertEquals(true, bare.startsWith("+919876543210"))
+        val bare = textOf(PacketBuilder.callerInfo("+919876543210", null))
         assertEquals("+919876543210", bare)
     }
 }
