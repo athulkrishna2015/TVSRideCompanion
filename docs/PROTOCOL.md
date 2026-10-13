@@ -486,6 +486,27 @@ The cluster firmware natively renders the distance-to-turn integer on line 1
 next to the arrow, so the app only has to fight for the remaining 17-character
 line — hence the 3-second text cycling described in `docs/NAVIGATION.md`.
 
+### Byte 10 and the second navigation line
+
+Byte 10 is a row count, and `0x5B 0x50` is a **distinct data id** from `0x4F`,
+not a second use of it. Together they mean the cluster can hold two navigation
+lines at once: street on one, ETA and distance on the other, both visible without
+waiting for a swap.
+
+The bridge implements this behind `NavigationBridge.twoRowNav`, **defaulting to
+off**, and it stays off until the scooter is available:
+
+- Both facts are transcribed from the official app, not measured. No capture has
+  shown `0x50` on the wire, and byte 10 has never been read back from a cluster
+  that was displaying two lines.
+- The alternating single-row path *is* known to reach the display.
+
+Enabling an unverified two-line path while the only way to check it is
+unavailable would trade a working display for a hopeful one. `NavTextRowTest`
+pins the packet shape — different data ids, identical 17-byte payload, row count
+in byte 10 only — so flipping the flag is a one-line change with the format
+already covered.
+
 ## 6. Outbound text — `0x4C` / `0x63` / `0x4F`
 
 Pure text with no arrow overlay: caller ID, song titles, notifications, and the

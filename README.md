@@ -39,15 +39,26 @@ both are documented rather than silently merged.
 
 ### Screenshots
 
-Captured from the running app while connected to the cluster. No location, no
-street names, no device identifiers.
+Captured from the running app. The cluster is currently out of service with a
+flat battery, so these show the **disconnected** state — which is also the state
+a new user sees first. No location, no street names, no device identifiers: the
+cluster MAC is redacted wherever the UI shows it.
 
-| Home | Frame log |
+| Home | Overview |
 | :--- | :--- |
-| ![Home](docs/screenshots/home.png) | ![Log](docs/screenshots/log.png) |
+| ![Home](docs/screenshots/home.png) | ![Overview](docs/screenshots/overview.png) |
+
+| More | Frame log |
+| :--- | :--- |
+| ![More](docs/screenshots/more.png) | ![Log](docs/screenshots/log.png) |
+
+Overview is the interesting one when disconnected: every tile reads `—` and the
+fuel gauge says **No usable reading**. Neither is a placeholder. A tile showing
+`0` with no scooter connected would mean the UI was inventing data.
 
 The Log tab is the project's evidence base: every frame in and out is hex-dumped
-with a timestamp, and **Export** writes a bundle that can be pulled without root.
+with a timestamp, and **Export** writes a bundle to
+`Android/data/dev.tvsopen/files/logs/` that can be pulled without root.
 
 ### Tested on a phone. Never connected to a scooter.
 
