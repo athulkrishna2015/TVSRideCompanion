@@ -56,9 +56,19 @@ Overview is the interesting one when disconnected: every tile reads `—` and th
 fuel gauge says **No usable reading**. Neither is a placeholder. A tile showing
 `0` with no scooter connected would mean the UI was inventing data.
 
+Home shows **Mirror navigation** already on, with nothing to switch. It is the
+app's reason to exist, and the bridge does nothing until a maps app posts a
+navigation notification — so enabling it costs nothing and asking twice is a
+worse default. The toggle is still there for anyone who wants the cluster left
+alone.
+
 The Log tab is the project's evidence base: every frame in and out is hex-dumped
 with a timestamp, and **Export** writes a bundle to
-`Android/data/dev.tvsopen/files/logs/` that can be pulled without root.
+`Android/data/dev.tvsopen/files/logs/` that can be pulled without root. In the
+shot above the log is 12 lines for a full launch and two connect attempts. An
+earlier build logged a dropped write every two seconds for as long as the link
+was down, which was 28% of every log file — the same failure hiding in the
+evidence as in the display.
 
 ### Tested on a phone. Never connected to a scooter.
 
