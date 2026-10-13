@@ -9,8 +9,8 @@
 //   STAY SAME ROAD     -> STAY SAME RD
 //
 // A renderer that truncates at 12 and never exceeds it is displaying a 12-cell
-// row. Sending 17 meant the tail was lost, so "Meppayyur - Avalla" rendered as
-// "Meppayyur -" — the half naming the destination gone.
+// row. Sending 17 meant the tail was lost, so "Example Road - Hill Route" rendered as
+// "Example Rd -" — the half naming the destination gone.
 //
 // These pin the width and the scrolling that replaces truncation.
 
@@ -53,10 +53,16 @@ class RowWidthTest {
 
     @Test
     fun `a long street no longer loses its destination half`() {
-        // The real regression: 17 chars, cut to 12, drops "Avalla" entirely.
-        val street = "Meppayyur - Avalla"
+        // An invented name, per the repo rule against real street names.
+        val street = "Example Road - Hill Route"
         assertTrue(street.length > RowChars.NTORQ)
-        assertEquals("Meppayyur -", street.take(RowChars.NTORQ))
+
+        // Truncation cuts mid-word and drops the destination half — which is why
+        // the bridge scrolls instead of calling take().
+        assertEquals("Example Rd - ", street.take(RowChars.NTORQ))
+
+        // What scrolling must recover, so the two are pinned against each other:
+        // the tail has to be non-empty or there is nothing to scroll to.
         assertTrue("the tail must survive somewhere", street.drop(RowChars.NTORQ).isNotBlank())
     }
 
@@ -75,12 +81,26 @@ class RowWidthTest {
     fun `displayLine defaults to the Ntorq width`() {
         val step = NavInstruction(
             title = "Turn left",
-            street = "Meppayyur - Avalla",
+            street = "Example Road - Hill Route",
             distanceMeters = 550,
             pictogram = null,
             provider = "test",
         )
-        assertEquals("Meppayyur - ", step.displayLine().trimEnd())
-        assertEquals(12, step.displayLine().length)
+        // take() keeps the trailing space; sanitize() collapses and trims it
+        // later, so the raw display line is the one asserted here.
+        assertEquals("Example Rd - ", step.displayLine())
+        assertEquals(RowChars.NTORQ, step.displayLine().length)
+    }
+
+    @Test
+    fun `displayLine falls back to the title when there is no street`() {
+        val step = NavInstruction(
+            title = "Take U-Turn",
+            street = "",
+            distanceMeters = 80,
+            pictogram = null,
+            provider = "test",
+        )
+        assertEquals("Take U-Turn", step.displayLine())
     }
 }

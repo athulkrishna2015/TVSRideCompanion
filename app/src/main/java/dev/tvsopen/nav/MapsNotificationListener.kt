@@ -215,7 +215,7 @@ class MapsNotificationListener : NotificationListenerService() {
  * - `STAY SAME ROAD` -> `STAY SAME RD`
  *
  * That is a 12-cell row. Sending 17 characters means the tail is either
- * clipped on the cluster or never read, and `"Meppayyur - Avalla"` lost its
+ * clipped on the cluster or never read, and `"Example Road - Hill Route"` lost its
  * destination half every time.
  */
 object RowChars {

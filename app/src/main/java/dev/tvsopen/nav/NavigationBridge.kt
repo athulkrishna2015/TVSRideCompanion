@@ -173,7 +173,7 @@ class NavigationBridge(
                     // Long street names scroll rather than lose their tail.
                     //
                     // The row is 12 characters and Indian street names rarely
-                    // fit. Truncating showed "Meppayyur -" and dropped the half
+                    // fit. Truncating showed "Example Rd -" and dropped the half
                     // naming the destination, which is the half that matters.
                     //
                     // [scrollNav] decides who does the scrolling. When the
@@ -292,9 +292,10 @@ class NavigationBridge(
     /**
      * A window that walks a long string across the row and back.
      *
-     * The row is 12 characters. An Indian street name rarely fits — "Meppayyur -
-     * Avalla" is 17, and "Kumbakonam Gandhi Nagar" is longer still — so
-     * truncating showed `"Meppayyur -"` and dropped the half that says where you
+     * The row is 12 characters. An Indian street name rarely fits —
+     * "Example Road - Hill Route" is 23, and "Hill View Residency" is longer
+     * still — so
+     * truncating showed `"Example Rd -"` and dropped the half that says where you
      * are going. The cluster scrolls long text itself, so the app should hand it
      * the whole string and let it do that.
      *

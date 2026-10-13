@@ -176,8 +176,8 @@ that is the frame shape the cluster expects; only the *characters* are limited.
 
 Two consequences worth having:
 
-- A street name is cut at 12, so `"Meppayyur - Avalla"` (17) became
-  `"Meppayyur -"` — the destination half was being lost off the end.
+- A street name is cut at 12, so `"Example Road - Hill Route"` (17) became
+  `"Example Rd -"` — the destination half was being lost off the end.
 - The `+` and `-` that `sanitize()` now preserves both **appear in TVS's own
   rendered strings** (`TAKE U-TURN`, `10Km 700m`), which is the first direct
   evidence that the cluster renders them.
