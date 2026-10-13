@@ -325,8 +325,20 @@ object PacketBuilder {
         return clamped.replace(SPACE_RUN, " ").trim().toByteArray(Charsets.UTF_8)
     }
 
+    /**
+     * Whether [sanitize] produced something the cheap path can measure.
+     *
+     * Must stay in step with the character filter in [sanitize], including
+     * [KEPT_PUNCTUATION] — when these two disagreed, every string containing a
+     * '+' or a '-' silently fell through to the byte-accurate branch and came
+     * out differently from the identical string without one. Five tests caught
+     * it; the check is worth keeping only if it is kept correct.
+     */
     private fun isAsciiPrintable(s: String): Boolean =
-        s.all { (it in 'A'..'Z') || (it in 'a'..'z') || (it in '0'..'9') || it == ' ' }
+        s.all {
+            (it in 'A'..'Z') || (it in 'a'..'z') || (it in '0'..'9') ||
+                it == ' ' || it in KEPT_PUNCTUATION
+        }
 
     /** Byte-accurate truncation that never splits a multibyte character. */
     private fun truncateToBytes(text: String, maxBytes: Int): String {
