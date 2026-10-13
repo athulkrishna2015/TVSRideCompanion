@@ -85,7 +85,7 @@ class KeepaliveClockTest {
     }
 
     @Test
-    fun `every hour of the day maps into 1..12`() {
+    fun `every hour of the day maps into 1 to 12`() {
         for (h in 0..23) {
             val b = ping(at(2026, 10, 13, h, 30, 0))
             assertTrue("hour $h became ${b[6].toInt()}", b[6].toInt() in 1..12)
