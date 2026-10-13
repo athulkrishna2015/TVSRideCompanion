@@ -137,12 +137,12 @@ The dashboard's tile set is therefore generated from `ui/ClusterTiles.kt`, where
 every entry cites a manual reference. Adding a tile needs a cluster element,
 not just a byte offset we can decode.
 
-### The row is 12 characters, not 17 — from TVS's own manual
+### The display is asymmetric: 10 characters on line 1, 12 on line 2
 
 The Jupiter reference implementation targets a single 17-character row, and the
 protocol's text payload is 17 bytes. Neither carries over. The Ntorq 125 manual
-renders every navigation string the cluster can produce, and **none exceeds 12
-characters**:
+renders every navigation string the cluster can produce, and the **longest
+examples fit 12 characters on line 2**:
 
 | Displayed | Chars |
 | :--- | ---: |
@@ -161,26 +161,29 @@ Two of those are exactly 12 **and are truncations**:
 - `DISTANCE REMAINING` → `DISTANCE REM`
 - `STAY SAME ROAD` → `STAY SAME RD`
 
-A renderer that cuts a 16-character string to 12 and never once exceeds 12 is
-not displaying a 17-cell row and happening to be careful. TVS's own UI
-truncates at **12**, which is the row width.
+TVS's own UI truncates at **12** on the longer row. The rider has confirmed the
+display is asymmetric: **line 1 has 10 characters, line 2 has 12**. The
+all-segments-on photograph's segment grid corroborates the unequal line widths.
 
-This retires the "three rows of 9-10 characters" reading of the
-all-segments-on photograph, which counted lit cells rather than character cells
-and is why it looked ambiguous.
-
-`RowChars.NTORQ = 12` in `MapsNotificationListener.kt` is where this is
-implemented, with the manual page cited. The 17-byte payload is still sent —
-the extra bytes are zero-padded and the terminator stays at index 19 — because
-that is the frame shape the cluster expects; only the *characters* are limited.
+`RowChars.NTORQ_LINE_1 = 10` and `RowChars.NTORQ_LINE_2 = 12` in
+`MapsNotificationListener.kt` implement this asymmetry, with the manual page
+cited. `RowChars.NTORQ = 12` is retained for the legacy single-row path. The
+17-byte payload is still sent — the extra bytes are zero-padded and the
+terminator stays at index 19 — because that is the frame shape the cluster
+expects; only the *usable characters* differ per line.
 
 Two consequences worth having:
 
-- A street name is cut at 12, so `"Example Road - Hill Route"` (17) became
-  `"Example Rd -"` — the destination half was being lost off the end.
+- A street name is cut at 12 on line 2, so `"Example Road - Hill Route"` (17)
+  became `"Example Rd -"` — the destination half was being lost off the end.
 - The `+` and `-` that `sanitize()` now preserves both **appear in TVS's own
   rendered strings** (`TAKE U-TURN`, `10Km 700m`), which is the first direct
   evidence that the cluster renders them.
+
+**Note:** How the cluster places a 17-character packet across the two unequal
+lines (wraps, scrolls, truncates, or uses only one line) still needs a live
+hardware capture. The simulator wraps into 10 then 12 as a development model;
+that is not a claim about firmware behavior.
 
 ## Packet layouts (proven)
 

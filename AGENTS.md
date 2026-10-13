@@ -303,6 +303,36 @@ and it will not turn over. Do not plan on hardware verification.** The phone
 stays available; the cluster does not. Everything below is for whenever it
 comes back, and should be read as deferred rather than pending.
 
+**The independent `ntorq-console` project is what to reach for instead.** It is
+a digital clone of the cluster:
+[athulkrishna2015/ntorq-console](https://github.com/athulkrishna2015/ntorq-console).
+It advertises as `TVSBT…`, exposes the SmartXonnect GATT service, notifies
+20-byte frames, and draws the display. **The app needs no changes** to connect
+to it.
+
+```bash
+git clone https://github.com/athulkrishna2015/ntorq-console.git
+cd ntorq-console && python3 -m ntorq.cli serve --ble
+```
+
+It is an independent repository, not a submodule or vendored code. **Make
+simulator changes and releases in its own repository.** Keep any claims there
+consistent with this repository's protocol evidence; a simulator passing is
+useful for app development, but does not independently verify disputed hardware
+behaviour.
+
+Two rules when using it:
+
+- **It is not a mock of this app.** It is a clone of the cluster. A test
+  against it that passes is evidence about the app; a test against a mock of
+  the app is evidence about the mock.
+- **Do not let it become the only evidence.** It was built to expose what is
+  unverified, and it now encodes two open questions from `docs/` as its own
+  behaviour. In particular, consult `docs/NAVIGATION.md` and `docs/CAPTURE.md`
+  for the app repository's current text-width evidence and open hardware
+  questions. Anything settled only by simulator construction is *not* settled
+  about the hardware.
+
 Do not assume. When a scooter is in range:
 
 1. Confirm the GATT service is `5456534D-5647-5341-5342-454E544F5251`.
@@ -338,9 +368,12 @@ were wrong. A live cluster is worth more than a year of reading an APK.
 
 - **Fuel scale.** One capture with fuel in the tank is the second anchor; two
   points fix the mapping.
-- **Cluster alpha-numeric layout.** `FUEL EMPTY` fits 10 characters on one row,
-  so the assumed 17 is likely too long. Needs someone to read the dash during a
-  live route.
+- **Cluster alpha-numeric layout.** The display is asymmetric: **line 1 has 10
+  characters, line 2 has 12**. `FUEL EMPTY` fits on line 1; the manual's
+  navigation strings show line 2 fits 12. The 17-character packet placement
+  (wrap, scroll, truncate, or single-line use) still needs a live capture.
+  `RowChars.NTORQ_LINE_1 = 10` and `RowChars.NTORQ_LINE_2 = 12` model the
+  requested simulator geometry.
 - **Caller ID and SMS**, end to end: an incoming call should light the green LED
   and show the number.
 - **Bike mode**, never exercised on hardware.

@@ -100,8 +100,99 @@ it corrected more assumptions than it confirmed:
 Every one of those produced a screen that looked right. That is the argument for
 reading the raw bytes rather than trusting the display.
 
-Still unconfirmed: the alpha-numeric row layout, whether the cluster renders
-`+` and `-`, and caller ID end to end.
+Still unconfirmed: the cluster's own text scrolling, the second text line, the
+rider-name greeting, and caller ID end to end.
+
+### Defaults, and why each obvious-looking default is wrong
+
+A first launch now works end to end without touching a switch:
+
+- **Permissions are asked for up front**, in one sequence — Bluetooth,
+  notifications, and the caller-ID set — plus a pointer to Notification access,
+  which is a Settings toggle that no dialog in the app can grant. It matters
+  because notification access is what turn-by-turn is *built on*: without it a
+  rider could install, connect successfully, start a route and see nothing on the
+  cluster, with nothing indicating why.
+- **The last scooter reconnects on launch**, with no scanning. The stored MAC is
+  the only thing that identifies a cluster, and this one advertises no service
+  UUID — so a scan is both slower and less certain than reconnecting to the
+  address already known.
+- **Navigation mirroring is on** (above).
+- **The scan does not filter on service UUID.** Measured, not preferred: a
+  `ScanFilter.setServiceUuid` is applied to the advertisement packet, and this
+  cluster advertises no UUID, so the filtered default found *nothing* on the one
+  vehicle known to work.
+- **Ntorq is preselected** in the scan screen. The advertised name is `TVSBT…`
+  with no model in it, so the name-based guess resolves to `UNKNOWN`, which
+  selects a driver with no frame table, no navigation and no caller ID — a
+  connection that looks successful while decoding nothing.
+
+### The rider name is deliberately not implemented
+
+TVS's manual documents the cluster greeting you as `HELLO RIDER`, or your name
+if one is set. This app stores a name and knows the 12-character limit, but
+**does not send it**: the outbound packet has not been located in the official
+app, where `U399popUpRidenameEdit` exists only as a layout binding with no
+sender reachable from the BLE layer.
+
+Writing a guessed packet would be worse than omitting the feature — the same
+mistake as the fuel clamp, where a plausible invented mapping produced a full
+tank on an empty one. `RidePrefs.riderName` holds the value, so when the packet
+is found this becomes one function rather than a new feature.
+
+---
+
+## Developing without the scooter
+
+The independent project [ntorq-console](https://github.com/athulkrishna2015/ntorq-console)
+is a digital clone of the instrument cluster — the same Bluetooth LE protocol,
+the same advertised name, and a dash drawn from TVS's own Ntorq 125 manual. It
+is maintained and released separately; this repository does not vendor or link
+its source.
+
+```bash
+git clone https://github.com/athulkrishna2015/ntorq-console.git
+cd ntorq-console
+python3 -m ntorq.cli serve --ble     # your laptop is the scooter
+```
+
+**The app is not modified in any way.** It scans, connects, writes to
+`00005352-…` and reads notifications from `00005354-…`, exactly as it does
+against a parked Ntorq, so the scanner, service discovery, MTU exchange, write
+path and every decoder are exercised for real. The web display works without
+Bluetooth at all, for when you only want the frame log.
+
+It reproduces what the vehicle *does*, not what the protocol transcription says:
+no service UUID in the advertisement, no `9B F2` challenge, no `5A 19`, plus the
+all-zero frames that arrive at connect time. Each is switchable, so the app can
+be tested against a cluster that does something the real one does not — which is
+how you find out whether it copes.
+
+Two observations documented by the simulator project:
+
+- **The alpha-numeric row layout is asymmetric**, previously "unconfirmed" above.
+  Per the cluster reference supplied for the display: **line 1 has 10 characters;
+  line 2 has 12**. The simulator models this asymmetry rather than assuming a
+  uniform grid. `PacketBuilder` carries 17 characters in its fixed-size text
+  field. That exceeds line 1 and also exceeds line 2 when sent as one line. How
+  the real cluster places, wraps, scrolls or truncates the packet still needs a
+  live hardware capture. The simulator wraps text into 10 characters on line 1
+  and up to 12 on line 2 as a useful development model, not as a claim that the
+  real firmware wraps identically.
+- **The outbound byte order**, also previously unestablished. `PacketBuilder`
+  writes little-endian while every field the cluster sends is big-endian. 550 m
+  little-endian is `26 02`; read big-endian the same two bytes are 9730. The
+  simulator reports both readings on every navigation frame instead of picking
+  one. These are simulator observations/hypotheses, not hardware verification;
+  see `docs/NAVIGATION.md` and `docs/CAPTURE.md` for the app repository's current
+  evidence and remaining questions.
+
+**Display-geometry caveat:** the simulator now models an asymmetric display
+(line 1 = 10, line 2 = 12). The manual's rendered navigation strings show a
+12-character row 2 (`docs/NAVIGATION.md`). Until a live cluster capture confirms
+the wrapping/layout behavior, the app's `RowChars.NTORQ_LINE_1 = 10` and
+`RowChars.NTORQ_LINE_2 = 12` model the requested simulator geometry but are not
+hardware-verified.
 
 ---
 
