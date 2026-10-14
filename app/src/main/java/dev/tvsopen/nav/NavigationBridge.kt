@@ -117,6 +117,11 @@ class NavigationBridge(
         }
         if (controlJob?.isActive == true) return
         var showingMetrics = false
+        // The control frame is a liveness signal the cluster expects roughly
+        // every 1.5 s. Alternating a single line runs on the slower text cadence
+        // by design, but once both rows go out together there is no reason to
+        // wait for it — so the two-row path holds the control cadence instead.
+        var lastTwoRows = false
 
         controlJob = scope.launch {
             _hud.value = _hud.value.copy(active = true, navigationDataId = navigationDataId)
@@ -169,8 +174,9 @@ class NavigationBridge(
                         driver.buildNavText(nav.copy(streetName = line))?.let { ble.write(it) }
                         showingMetrics = !showingMetrics
                     }
+                    lastTwoRows = twoRows
                 }
-                delay(if (showingMetrics) controlIntervalMs else textSwapIntervalMs)
+                delay(if (lastTwoRows || showingMetrics) controlIntervalMs else textSwapIntervalMs)
             }
         }
     }
@@ -195,23 +201,6 @@ class NavigationBridge(
         pictogram = pictogram ?: Pictograms.STRAIGHT,
         streetName = street,
     )
-
-    /**
-     * The ETA / distance line.
-     *
-     * Formats to match TVS's own rendering, from the manual's navigation page:
-     * `10Km 700m` for a multi-kilometre distance, plain metres below that. The
-     * old `1.2km` style appeared nowhere in the documentation.
-     *
-     * Returns the whole source value; the caller applies the 10-character
-     * maneuver-line capacity before it is encoded.
-     */
-    private fun NavInstruction.metricsLine(max: Int): String {
-        val d = if (distanceMeters >= 1000)
-            "${distanceMeters / 1000}Km ${distanceMeters % 1000}m"
-        else "${distanceMeters}m"
-        return if (etaMinutes > 0) "ETA ${etaMinutes}m $d" else d
-    }
 
     companion object {
         private const val TAG = "NavBridge"

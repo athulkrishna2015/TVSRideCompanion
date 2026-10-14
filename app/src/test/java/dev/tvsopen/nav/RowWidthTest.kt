@@ -114,6 +114,52 @@ class RowWidthTest {
     }
 
     @Test
+    fun `displayLine prefers the maneuver, which is what the cluster shows`() {
+        // The live provider posts the maneuver as the title and trip metrics as
+        // the text. Preferring the street showed "2.32 km • 3" on both lines and
+        // the turn instruction never reached the cluster at all.
+        val step = NavInstruction(
+            title = "Turn left onto Hill View Road",
+            street = "2.32 km • 3 min • 11:40 AM ETA",
+            distanceMeters = 2320,
+            etaMinutes = 3,
+            pictogram = 0,
+            provider = "test",
+        )
+        assertEquals("Turn left on", step.displayLine())
+    }
+
+    @Test
+    fun `displayLine falls back to the street when the title is distance-only`() {
+        // The Google Maps shape: title "550 m" parses to an empty maneuver, so
+        // the road name is the only instruction available.
+        val step = NavInstruction(
+            title = "",
+            street = "Example Road",
+            distanceMeters = 550,
+            pictogram = null,
+            provider = "test",
+        )
+        assertEquals("Example Road", step.displayLine())
+    }
+
+    @Test
+    fun `metricsLine fits the maneuver row`() {
+        // Without truncation this was 14 characters on a 10-character row and
+        // the cluster clipped the distance — the very number the line exists for.
+        val step = NavInstruction(
+            title = "Turn left",
+            street = "Example Road",
+            distanceMeters = 2320,
+            etaMinutes = 3,
+            pictogram = 0,
+            provider = "test",
+        )
+        assertEquals("ETA 3m 2Km", step.metricsLine())
+        assertEquals(RowChars.NTORQ_LINE_1, step.metricsLine().length)
+    }
+
+    @Test
     fun `displayLine defaults to the Ntorq width`() {
         val step = NavInstruction(
             title = "Turn left",
@@ -122,14 +168,14 @@ class RowWidthTest {
             pictogram = null,
             provider = "test",
         )
-        assertEquals("Example Road", step.displayLine())
-        assertEquals(RowChars.NTORQ, step.displayLine().length)
+        assertEquals("Turn left", step.displayLine())
+        assertEquals("Turn left".length, step.displayLine().length)
     }
 
     @Test
     fun `displayLine uses the Jupiter width only when asked`() {
         val step = NavInstruction(
-            title = "Turn left",
+            title = "Turn right onto Hill View Road xyz",
             street = longStreet,
             distanceMeters = 550,
             pictogram = null,
@@ -137,7 +183,8 @@ class RowWidthTest {
         )
         val ntorq = step.displayLine()
         val jupiter = step.displayLine(maxChars = RowChars.JUPITER)
-        assertEquals(RowChars.JUPITER, jupiter.length)
+        assertEquals("Turn right o", ntorq)
+        assertEquals("Turn right onto H", jupiter)
         assertTrue("the Jupiter row must show more", jupiter.length > ntorq.length)
     }
 

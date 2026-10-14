@@ -16,6 +16,7 @@ import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.DashState
 import dev.tvsopen.protocol.DriverRegistry
 import dev.tvsopen.protocol.NtorqDriver
+import dev.tvsopen.protocol.PacketBuilder
 import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Session
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,33 @@ class RideService : android.app.Service() {
     private var linkJob: Job? = null
     private var lastModel: VehicleModel = VehicleModel.NTORQ
     private var lastAddress: String? = null
+    /**
+     * Held for the whole link, released on teardown.
+     *
+     * A foreground service alone does not keep the CPU awake: with the screen
+     * off the coroutines driving the 2 s keepalive and 1.5 s nav control stall,
+     * the cluster times out the HUD (the control frame is a liveness signal),
+     * and then the link. The Doze exemption keeps the system from killing us;
+     * this keeps us actually running. Partial, not full — the screen stays off.
+     */
+    private var linkWakeLock: android.os.PowerManager.WakeLock? = null
+
+    private fun holdWakeLock() {
+        if (linkWakeLock?.isHeld == true) return
+        val pm = getSystemService(android.os.PowerManager::class.java) ?: return
+        linkWakeLock = pm.newWakeLock(
+            android.os.PowerManager.PARTIAL_WAKE_LOCK, "TVSRide:link",
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+        Log.i(TAG, "wake lock held for link lifetime")
+    }
+
+    private fun releaseWakeLock() {
+        runCatching { if (linkWakeLock?.isHeld == true) linkWakeLock?.release() }
+        linkWakeLock = null
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -209,6 +237,9 @@ class RideService : android.app.Service() {
         }
 
         linkJob = scope.launch {
+            // The link owns a wake lock for as long as it lives; without it the
+            // keepalive and nav loops stall the moment the screen goes off.
+            holdWakeLock()
             // One for the bridge (nav state)…
             //
             // Driven by `Session.hud`, not by BLE frames. It used to be a
@@ -259,6 +290,16 @@ class RideService : android.app.Service() {
                     when (st) {
                         ConnectionState.CONNECTED -> {
                             notify("Connected to ${model.displayName}")
+                            // Auto-start here, not only from the activity's
+                            // LaunchedEffect: if the UI process dies while the
+                            // screen is off, nothing else sends START_NAV and
+                            // the mirror silently stays down. startNavigation
+                            // early-returns when already running, and the
+                            // toggle's explicit STOP_NAV still wins — the next
+                            // onInstruction(null) clears it.
+                            if (RidePrefs.load(this@RideService).navigationMirroring) {
+                                b.startNavigation()
+                            }
                             b.startKeepalive {
                                 DashState(
                                     timeMillis = System.currentTimeMillis(),
@@ -296,6 +337,7 @@ class RideService : android.app.Service() {
         linkJob = null
         bridge?.stopKeepalive()
         bridge?.stopNavigation()
+        releaseWakeLock()
         // The state collector is gone with linkJob, so publish the disconnect
         // explicitly — otherwise the UI keeps showing the old link as live.
         Session.onConnection(ConnectionState.DISCONNECTED, lastModel, lastAddress)

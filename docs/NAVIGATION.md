@@ -64,6 +64,21 @@ a notification is removed therefore blanked the cluster mid-journey. Removal is
 debounced by 12 s and a repost cancels the pending clear — a period chosen from
 those observed gaps, not from a guess.
 
+### The live provider is the official TVS app, not Google Maps
+
+Observed on device 2026-10-14, and this changes which field matters:
+
+| Extra | Actual value |
+| :--- | :--- |
+| `EXTRA_TITLE` | `"Turn left onto Perambra Chembra Koorachundu Road"` — maneuver **with** the street |
+| `EXTRA_TEXT` | `"2.32 km • 3 min • 11:40 AM ETA"` — trip metrics, not a street |
+
+So `displayLine` prefers the title: it is the only field carrying the turn
+instruction. Preferring the street showed an ETA fragment on both cluster lines
+and the maneuver never reached the dash at all — which reads as "only ETA, no
+turn-by-turn". The Google shape still works because a distance-only title parses
+to an empty maneuver and falls through to the street.
+
 MapMyIndia (also present in the official APK) posts its own shape; Organic Maps
 follows the Android navigation notification convention. Neither has been observed
 on hardware, so both are still assumptions.

@@ -27,20 +27,37 @@ data class NavInstruction(
     /**
      * Best single line for this cluster's display.
      *
-     * Width is [RowChars.NTORQ], **not** the 17 the Jupiter payload implies.
-     * TVS's own manual renders `DISTANCE REMAINING` as `DISTANCE REM` and
-     * `STAY SAME ROAD` as `STAY SAME RD` — both cut at 12 — and no string it
-     * documents is longer. A renderer that truncates at 12 and never exceeds it
-     * is displaying a 12-cell row.
+     * The maneuver first, the street second. The provider that is actually in
+     * use here (`com.tvsm.connect`) posts the maneuver as the title and trip
+     * metrics (`"2.32 km • 3 min • 11:40 AM ETA"`) as the text — preferring the
+     * street therefore showed an ETA fragment where the turn instruction
+     * belongs, on both lines at once. The Google Maps shape is the mirror:
+     * its title is distance-only (`"550 m"`), so [NavParsing] leaves the
+     * maneuver empty and this falls through to the street, which is the road.
      *
-     * The 17-byte payload is still sent; the bytes beyond 12 are zero-padded and
-     * the `0xFF` terminator stays at index 19, because that is the frame shape
-     * the cluster expects. Only the character count changed.
+     * The 17-byte payload is still sent; the bytes beyond the row are
+     * zero-padded and the `0xFF` terminator stays at index 19, because that is
+     * the frame shape the cluster expects. Only the character count changed.
      */
     fun displayLine(maxChars: Int = RowChars.NTORQ): String {
-        val combined = listOf(street, title)
+        val combined = listOf(title, street)
             .firstOrNull { it.isNotBlank() } ?: "Navigating"
         return combined.take(maxChars)
+    }
+
+    /**
+     * The ETA / distance line, in TVS's own rendering.
+     *
+     * `10Km 700m` for multi-kilometre distances (as the manual prints it),
+     * plain metres below that. Truncated to the row: without the take, a
+     * `"ETA 3m 2Km 320m"` line overran the 10-character maneuver row and the
+     * cluster clipped the distance off the end.
+     */
+    fun metricsLine(maxChars: Int = RowChars.NTORQ_LINE_1): String {
+        val d = if (distanceMeters >= 1000)
+            "${distanceMeters / 1000}Km ${distanceMeters % 1000}m"
+        else "${distanceMeters}m"
+        return (if (etaMinutes > 0) "ETA ${etaMinutes}m $d" else d).take(maxChars)
     }
 }
 
