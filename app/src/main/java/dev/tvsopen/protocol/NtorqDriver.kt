@@ -431,6 +431,10 @@ class NtorqDriver(
     override fun buildCallerInfo(number: String, name: String?, state: Int): ByteArray? =
         PacketBuilder.callerInfo(number, name, state)
 
+    /** `0x5B 0x52` — the cluster shows it as the ignition greeting. */
+    override fun buildRiderName(name: String): ByteArray? =
+        PacketBuilder.riderName(name)
+
     override fun buildChallengeResponse(challenge: ByteArray): ByteArray? =
         Challenge.buildResponse(challenge)
 }

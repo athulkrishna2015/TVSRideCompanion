@@ -33,13 +33,13 @@ object OutboundId {
     const val TEXT_ROW1 = 0x4C
     /** Text row 2 (also the artist-name packet upstream). */
     const val TEXT_ROW2 = 0x63
+    /** Rider name shown by the cluster greeting. Official `DATA_ID_52`. */
+    const val RIDER_NAME = 0x52
     const val ARTIST_NAME = 0x63
     const val ARTIST_NAME_NEW = 0x65
     const val ALBUM_NAME = 0x61
     /** Climate. */
     const val CLIMATE = 0x5D
-    /** Vehicle mode / ride mode. */
-    const val VEHICLE_MODE = 0x52
     /** Challenge response. */
     const val CHALLENGE_RESPONSE = 0xF1
     const val CHALLENGE = 0xF2
@@ -65,11 +65,6 @@ object Command {
 
     const val VALID_PACKET = 0
     const val INVALID_PACKET = 1
-}
-
-/** Traffic-signal-light assistance actions. */
-enum class TslAction(val code: Int) {
-    NO_ACTION(0), OFF(1), LEFT(2), RIGHT(3), HAZARD(4), DO_NOTHING(5);
 }
 
 /** Calibration commands and ids, from `BluetoothConstants`. */
@@ -259,7 +254,7 @@ object PacketBuilder {
      * Transcribed from `BluetoothUtil.createMobileToClusterArray` in the
      * official APK, which is stricter than it first appears:
      *
-     * 1. Emoji and symbol codepoints collapse to a single `X` — the regex covers
+     * 1. Emoji and symbol codepoints collapse to a single `@` — the regex covers
      *    `\p{So}`, `\p{Cn}`, U+1F300-1F6FF, U+1F900-1F9FF, U+1FA70-1FAFF,
      *    U+2600-26FF and ZWJ. Collapsing matters because an emoji is two UTF-16
      *    chars and the row is only seventeen wide.
@@ -288,10 +283,12 @@ object PacketBuilder {
         private val SPACE_RUN = Regex(" +")
 
         fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
-        // Collapse each emoji/symbol run to a single 'X'. Still 'X' rather than
-        // dropped: for a pictogram an unknown glyph genuinely *is* an X, and a
-        // dropped emoji would silently close the gap between two words.
-        val symbolised = EMOJI_OR_SYMBOL.replace(text, "X")
+        // Collapse each emoji/symbol run to a single '@', exactly as upstream
+        // `createMobileToClusterArray` does. '@' is the official unknown-glyph
+        // marker — a dropped emoji would silently close the gap between two
+        // words, and any other choice would differ from what the cluster's own
+        // app sends for the same input.
+        val symbolised = EMOJI_OR_SYMBOL.replace(text, "@")
 
         val filtered = buildString(symbolised.length) {
             var lastWasSpace = false
@@ -409,26 +406,38 @@ object PacketBuilder {
         return b
     }
 
+    /**
+     * Rider-name frame for the cluster greeting.
+     *
+     * `0x5B 0x52`, 17 sanitised characters, zero-padded, `0xFF` terminator.
+     * Transcribed from the official app three independent ways:
+     * `BluetoothUtil.createRiderNameArray` inlines `{91, 82}` in its bytecode
+     * (v2.13.0), the same builder's array-data payload in v8.14.1 reads
+     * `[5B 52]`, and `NtorqMobileToCluster.sendRiderName` passes the name
+     * through `createMobileToClusterArray(name, DATA_ID_52)` with
+     * `DATA_ID_52 = 82` in `BluetoothConstants`.
+     *
+     * The sanitize path (not raw UTF-8) matches the current official builder.
+     * Sent on every connect, like the official `sendInitialData`, and whenever
+     * the saved name changes while connected.
+     */
+    fun riderName(name: String): ByteArray = textRow(OutboundId.RIDER_NAME, name)
+
     /** Caller info: number, name and a category/state byte. */
     fun callerInfo(number: String, name: String?, state: Int = Command.CALL_RINGING): ByteArray {
         val text = if (name.isNullOrBlank()) number else "$name · $number"
         return textRow(OutboundId.CALLER, text)
     }
 
-    /** Traffic-signal-light hint shown on the cluster. */
-    fun trafficSignal(action: TslAction): ByteArray = textRow(
-        OutboundId.VEHICLE_MODE,
-        // No glyphs. sanitize() turns every non-alphanumeric character into 'X',
-        // so "← TURN LEFT" shipped to the cluster as "XX TURN LEFT". The manual
-        // rules them out anyway, so the words carry the meaning on their own.
-        when (action) {
-            TslAction.LEFT -> "TURN LEFT"
-            TslAction.RIGHT -> "TURN RIGHT"
-            TslAction.HAZARD -> "HAZARD AHEAD"
-            TslAction.OFF -> ""
-            else -> ""
-        }.take(17),
-    )
+    /**
+     * Removed: `trafficSignal()` built `0x5B 0x52` text frames for
+     * traffic-signal hints, but `0x52` under `0x5B` is the **rider-name**
+     * channel (`DATA_ID_52`, verified three ways — see [riderName]). Sending
+     * TSL text there would overwrite the greeting, and TSL on the Ntorq is
+     * calibration-based (`sendTslSignal`/`sendTslTimer`) rather than a text
+     * row anyway. The `VEHICLE_MODE = 0x52` constant went with it: the official
+     * vehicle-control frame leads with `0x5A`, a different namespace.
+     */
 
     /** Calibration write, per the `NtorqCalibrationResponse` layout. */
     fun calibration(command: Int, id: Int, data: ByteArray): ByteArray {

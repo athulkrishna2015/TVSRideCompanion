@@ -234,12 +234,14 @@ class ProtocolTest {
     }
 
     @Test
-    fun `traffic signal text carries no glyphs`() {
-        // The sanitiser maps every non-alphanumeric character to 'X', so a
-        // leading arrow would reach the cluster as "XX TURN LEFT".
-        val s = PacketBuilder.trafficSignal(TslAction.LEFT).decodeToString()
-        assertTrue("unexpected glyph damage: $s", !s.contains("XX"))
-        assertTrue(s.contains("TURN LEFT"))
+    fun `emoji collapses to the official unknown-glyph marker`() {
+        // Upstream createMobileToClusterArray replaces emoji runs with '@',
+        // not 'X' — verified in the decompiled current SDK. A different marker
+        // would still render, but it would differ from the official app for the
+        // same input, which is the kind of silent divergence this suite exists
+        // to catch.
+        val out = String(PacketBuilder.sanitize("Hi 🙂 there"), Charsets.UTF_8)
+        assertEquals("Hi @ there", out)
     }
 
     @Test

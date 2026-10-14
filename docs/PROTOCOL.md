@@ -239,7 +239,7 @@ companion app's `dev.tvsopen.protocol.OutboundId`.
 | 0x4E | NAVIGATION_CONTROL           | Navigation control (distance/ETA) | BluetoothConstants (`DATA_ID_0x4E`-ish)   |
 | 0x4F | NAVIGATION_TEXT              | Navigation street text row 1     | BluetoothConstants (`DATA_ID_0x4F`-ish)   |
 | 0x50 | NAVIGATION_TEXT_ALT          | Navigation street text row 2     | BluetoothConstants (`DATA_ID_50`)         |
-| 0x52 | VEHICLE_MODE                 | Ride / vehicle mode control      | OutboundId / BluetoothConstants           |
+| 0x52 | RIDER_NAME                   | Cluster greeting name            | BluetoothConstants (`DATA_ID_52 = 82`) + bytecode x2 |
 | 0x53 | SMS                          | SMS / notification text          | BluetoothConstants (`DATA_ID_SMS_53`)     |
 | 0x5D | CLIMATE                      | Climate control                  | BluetoothConstants (`DATA_ID_CLIMATE_5D`) |
 | 0x61 | ALBUM_NAME                   | Album name                       | BluetoothConstants (`ALBUM_NAME_PACKET`)  |
@@ -631,22 +631,32 @@ navigation street line.
 | `0x5B 0x4F` | navigation text (`DATA_ID_NAVIGATIONDATA1 = 79`) |
 | `0x5B 0x50` | navigation text 2 (`DATA_ID_NAVIGATIONDATA2 = 80`) |
 
-### Rider-name frame — observed shape, unresolved ID
+### Rider-name frame — `0x5B 0x52`, ID verified three ways
 
-The official `com.tvsm.connect` 2.13.0 `sendInitialData()` calls
-`BluetoothUtil.createRiderNameArray(profileName)` and passes the returned bytes
-to the normal encrypted GATT sender. The helper constructs:
+The official `com.tvsm.connect` `sendInitialData()` sends the rider name during
+connection setup:
 
 ```
-5B <DATA_ID_NAME> <UTF-8 name, max 17 chars> <zero padding> FF
+5B 52 <UTF-8 name, max 17 chars> <zero padding> FF
 ```
 
-This confirms that the console greeting can be updated from the phone and that
-the name has a 17-character wire limit. **The numeric value of
-`DATA_ID_NAME` is not recovered by the decompiler**, however: the class field is
-present, but its initializer did not appear in the parsed/decompiled source.
-Until that byte is recovered or measured, the app's rider-name editor stores the
-value locally and explicitly does not send a packet. No ID should be guessed.
+The ID survived two reverted guesses (0x56, then 0x5A — neither shipped) and is
+now established independently of any single tool:
+
+1. v2.13.0 `BluetoothUtil.createRiderNameArray` inlines `{91, 82}` in its Dalvik
+   bytecode (`const/16 #91` + `aput`, `const/16 #82` + `aput`, register-tracked
+   past the index loads).
+2. v8.14.1's equivalent builder emits a fill-array-data payload of `[5B 52]`.
+3. `NtorqMobileToCluster.sendRiderName` calls
+   `createMobileToClusterArray(name, DATA_ID_52)` with `DATA_ID_52 = 82`
+   stated symbolically in `BluetoothConstants`.
+
+The current official builder uses the sanitised path, so this app sends the
+name through the same `textRow` builder as every other text row. Note the
+namespace subtlety that killed the old `VEHICLE_MODE = 0x52` constant: the
+official vehicle-control frame leads with `0x5A`, so `0x52` under `0x5B` is
+unambiguously the rider channel. A removed `trafficSignal()` helper used to
+send TSL text there — it would have overwritten the greeting.
 
 All are 20 bytes: 2-byte header, 17-byte payload, `0xFF` terminator, **no
 checksum**.

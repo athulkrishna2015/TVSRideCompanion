@@ -236,7 +236,8 @@ private fun RiderNameCard(name: String?, onNameChange: (String?) -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Console greeting", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Saved on this phone only. The rider-name packet ID is not verified yet, so this does not update the console.",
+                "Shown by the cluster on ignition. Saving sends it at once when " +
+                    "connected, otherwise on the next connection.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -260,8 +261,8 @@ private fun RiderNameCard(name: String?, onNameChange: (String?) -> Unit) {
                 }) { Text("Clear") }
             }
             Text(
-                if (name.isNullOrBlank()) "No local name saved"
-                else "Saved locally: $name",
+                if (name.isNullOrBlank()) "Cluster shows HELLO RIDER"
+                else "Saved: $name — sent now if connected, else on next connection",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

@@ -134,26 +134,20 @@ A first launch now works end to end without touching a switch:
   off; a user's filter toggle and per-scooter model selection are persisted so
   reopening Scan does not silently reset either one.
 
-### Rider name: editable locally; cluster write still gated
-
-This is intentionally a development control, not a finished console feature.
-The More screen says **Saved on this phone only** and that no console update is
-sent until its ID is verified.
+### Rider name: editable, and sent to the cluster
 
 TVS's manual documents the cluster greeting you as `HELLO RIDER`, or your name
-if one is set. The More screen has a **Console greeting** editor. It saves to
-`RidePrefs.riderName` and survives restarts, but it is labelled **phone only**:
-the name frame's shape and sender are visible in the official APK, while the
-numeric `DATA_ID_NAME` value is unresolved. The editor deliberately does not
-send a guessed packet, and saving the name does not claim to update the console.
+if one is set. The More screen has a **Console greeting** editor (up to 17
+characters). Saving sends the name at once when connected, otherwise on the
+next connection; clearing it restores `HELLO RIDER`, which needs no frame.
 
-The official 2.13.0 sender invokes `BluetoothUtil.createRiderNameArray()` during
-initial connection, which builds a 20-byte UTF-8 name frame with a 17-character
-limit, zero padding and `0xFF` terminator. The method references
-`DATA_ID_NAME`, but the decompiler does not expose its literal value; the
-separate `SampleGattAttributes` constant initializer was not recovered. Until
-that byte is verified, no name frame is sent. A guessed packet would repeat the
-fuel clamp mistake: plausible-looking, silently wrong data on a real console.
+The packet ID is verified three independent ways, after two guessed values
+were written and reverted rather than shipped: v2.13.0's
+`createRiderNameArray` inlines `{91, 82}` in its bytecode, v8.14.1's equivalent
+emits a `[5B 52]` array-data payload, and `NtorqMobileToCluster.sendRiderName`
+calls `createMobileToClusterArray(name, DATA_ID_52)` with `DATA_ID_52 = 82`
+stated symbolically. The frame is `0x5B 0x52` with the standard sanitised
+17-character payload — the same builder as every other text row.
 
 ---
 

@@ -184,12 +184,14 @@ object Session {
         val wasConnected = previous.state == ConnectionState.CONNECTED
         val isConnected = state == ConnectionState.CONNECTED
 
-        // Stamp the odometer baseline on the first frame after a connect, so
+        // Stamp the baseline on the first frame after a connect, so
         // "Connected Distance" is measured from the start of this link.
+        // Cleared here rather than stamped: at CONNECTED time the odometer is
+        // either stale (previous link) or null (fresh install, forever — the
+        // old code stamped null once and "This connection" never recovered).
+        // onFrame fills it from the first 0x10 that carries an odometer.
         if (isConnected && !wasConnected) {
-            _telemetry.value = _telemetry.value.copy(
-                odometerAtConnectKm = _telemetry.value.odometerKm,
-            )
+            _telemetry.value = _telemetry.value.copy(odometerAtConnectKm = null)
             rideLog?.start()
         }
         if (!isConnected && wasConnected) {
@@ -223,6 +225,10 @@ object Session {
             0x10 -> cur.copy(
                 speedKmh = frame.field(Field.SPEED)?.toInt() ?: cur.speedKmh,
                 odometerKm = scaled(Field.ODOMETER, 10.0) ?: cur.odometerKm,
+                // Baseline for "this connection", from the first frame that
+                // carries an odometer — see onConnection, which clears it.
+                odometerAtConnectKm = cur.odometerAtConnectKm
+                    ?: scaled(Field.ODOMETER, 10.0),
                 // Fuel is the low nibble of index 6 — that is exactly what the
                 // official app does (NtorqSpeedOMeter1.getFuelLevel takes the last
                 // hex character), and this app matches it. The decode is right;

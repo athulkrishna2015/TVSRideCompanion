@@ -80,6 +80,15 @@ interface ProtocolDriver {
      */
     fun buildCallerInfo(number: String, name: String?, state: Int): ByteArray? = null
 
+    /**
+     * Rider-name frame for the cluster greeting (`0x5B 0x52`).
+     *
+     * Null when the model has no greeting display. The ID is verified three
+     * ways against the official app (see [PacketBuilder.riderName]); the only
+     * thing a driver decides is whether its cluster renders it.
+     */
+    fun buildRiderName(name: String): ByteArray? = null
+
     // ---- handshake ----
 
     /**

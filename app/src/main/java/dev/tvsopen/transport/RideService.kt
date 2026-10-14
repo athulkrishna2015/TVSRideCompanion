@@ -16,7 +16,7 @@ import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.DashState
 import dev.tvsopen.protocol.DriverRegistry
 import dev.tvsopen.protocol.NtorqDriver
-import dev.tvsopen.protocol.PacketBuilder
+import dev.tvsopen.protocol.ProtocolDriver
 import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Session
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +46,8 @@ class RideService : android.app.Service() {
     private var linkJob: Job? = null
     private var lastModel: VehicleModel = VehicleModel.NTORQ
     private var lastAddress: String? = null
+    /** Driver for the current link; needed outside connect() by the rider-name send. */
+    private var driver: ProtocolDriver? = null
     /**
      * Held for the whole link, released on teardown.
      *
@@ -128,6 +130,7 @@ class RideService : android.app.Service() {
             ACTION_STOP_FIND_MY -> bridge?.setFindMyScooter(false)
             ACTION_START_NAV -> bridge?.startNavigation()
             ACTION_STOP_NAV -> bridge?.stopNavigation()
+            ACTION_UPDATE_RIDER_NAME -> sendRiderNameIfConnected()
             ACTION_DISCONNECT -> {
                 teardown()
                 stopSelf()
@@ -204,6 +207,7 @@ class RideService : android.app.Service() {
         }
         val b = NavigationBridge(transport, scope, driver)
         bridge = b
+        this.driver = driver
         lastModel = model
         lastAddress = address
         RidePrefs.load(this).updateLastConnection(address, model.name)
@@ -300,6 +304,10 @@ class RideService : android.app.Service() {
                             if (RidePrefs.load(this@RideService).navigationMirroring) {
                                 b.startNavigation()
                             }
+                            // Greeting first, like the official sendInitialData:
+                            // the cluster shows it on ignition, and a name saved
+                            // while disconnected goes out on the next connect.
+                            sendRiderNameIfConnected()
                             b.startKeepalive {
                                 DashState(
                                     timeMillis = System.currentTimeMillis(),
@@ -332,12 +340,36 @@ class RideService : android.app.Service() {
         return (level / 20).coerceIn(0, 5)
     }
 
+    /**
+     * Send the saved rider name when there is a live link, else just remember it.
+     *
+     * A blank name is not "send an empty greeting" — the cluster shows
+     * `HELLO RIDER` in that state, so there is nothing to write. A save made
+     * while disconnected goes out on the next connect instead, which is why
+     * this never warns: no link is the normal case, not a fault.
+     */
+    private fun sendRiderNameIfConnected() {
+        val name = RidePrefs.load(this).riderName
+        val transport = ble
+        val drv = driver
+        if (name.isNullOrBlank() || transport == null || drv == null) return
+        if (transport.state.value != ConnectionState.CONNECTED) {
+            Log.i(TAG, "rider name saved; will send on next connection")
+            return
+        }
+        val frame = drv.buildRiderName(name) ?: return
+        scope.launch {
+            if (transport.write(frame)) Log.i(TAG, "rider name sent (${name.length} chars)")
+        }
+    }
+
     private fun teardown() {
         linkJob?.cancel()
         linkJob = null
         bridge?.stopKeepalive()
         bridge?.stopNavigation()
         releaseWakeLock()
+        driver = null
         // The state collector is gone with linkJob, so publish the disconnect
         // explicitly — otherwise the UI keeps showing the old link as live.
         Session.onConnection(ConnectionState.DISCONNECTED, lastModel, lastAddress)
@@ -418,6 +450,7 @@ class RideService : android.app.Service() {
         const val ACTION_STOP_FIND_MY = "dev.tvsopen.STOP_FIND_MY"
         const val ACTION_START_NAV = "dev.tvsopen.START_NAV"
         const val ACTION_STOP_NAV = "dev.tvsopen.STOP_NAV"
+        const val ACTION_UPDATE_RIDER_NAME = "dev.tvsopen.UPDATE_RIDER_NAME"
         const val ACTION_DISCONNECT = "dev.tvsopen.DISCONNECT"
 
         const val EXTRA_ADDRESS = "address"

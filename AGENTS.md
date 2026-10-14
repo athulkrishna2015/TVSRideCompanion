@@ -397,12 +397,14 @@ This is the intended defaults contract. Keep the tests in
   Per-address model overrides are persisted and must survive rediscovery.
 - Navigation mirroring defaults on. Its toggle remains available to turn it off.
 
-The More screen includes a developer-facing rider-name editor. It currently
-stores the value locally only. **Do not send it over BLE** until the numeric
-`DATA_ID_NAME` is recovered from the official artifact: packet shape is observed
-in `createRiderNameArray`, but the ID's literal remains unresolved. The UI must
-say that it has not updated the console. Keep `RiderNameFrameTest` as a shape /
-length test; do not add a test with a guessed outbound ID.
+The More screen includes a rider-name editor backed by `RidePrefs.riderName`. The
+numeric greeting ID is resolved: `0x52`, verified three independent ways (v2.13.0
+bytecode `{91, 82}`, v8.14.1 array payload `[5B 52]`, and
+`NtorqMobileToCluster.sendRiderName` passing `DATA_ID_52 = 82`). The service
+sends it on every connect and on save-while-connected via
+`ACTION_UPDATE_RIDER_NAME`. Do not reintroduce a second `0x52`-under-`0x5B`
+sender: a removed `trafficSignal()` helper once built TSL text there, which
+would have overwritten the greeting (TSL on Ntorq is calibration-based).
 
 Ntorq display rows are asymmetric: **10 characters on line 1, 12 on line 2**,
 confirmed by the rider; the manual independently shows line-2 strings clipped

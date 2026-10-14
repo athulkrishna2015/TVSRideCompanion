@@ -81,7 +81,6 @@ object Keepalive {
     fun build(
         state: DashState,
         missedCalls: Int = 0,
-        incomingCall: Boolean = state.incomingCall,
         /** Injectable for tests; defaults to the device's current time. */
         calendar: Calendar = Calendar.getInstance(),
     ): ByteArray {
@@ -90,7 +89,12 @@ object Keepalive {
         b[1] = DATA_ID_MOBILE_DATA.toByte()
 
         b[2] = packSignalBattery(state.signalBars, state.batteryBars)
-        b[3] = if (incomingCall) 1 else 0
+        // Overspeed-limit holder, empty when no alert is configured — which is
+        // always here, since this app never sets an overspeed limit. An earlier
+        // revision wrote the phone's call state into this byte, but nothing
+        // ever set it and the official layout carries the overspeed holder, so
+        // a nonzero value would be a surprise to the cluster, not information.
+        b[3] = 0
 
         b[4] = 0
         b[5] = 2
