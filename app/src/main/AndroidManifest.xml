@@ -7,8 +7,19 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Map tiles, route search and turn-by-turn routing for the embedded map.
+         Introduced for on-device OpenStreetMap navigation (see docs/MAPS.md).
+         This is network access with a closed destination list, not a cloud
+         account: tile.openstreetmap.org for tiles, router.project-osrm.org for
+         keyless demo routing, api.graphhopper.com / api.mapbox.com only when
+         the rider enters their own key (BYOK), nominatim.openstreetmap.org for
+         place search. There is still no TVS account, no TVS server contact,
+         and no telemetry upload anywhere in the app — grep the tree for
+         HttpURLConnection if you do not believe the comment. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- Read navigation from any maps app -->
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
@@ -51,10 +62,14 @@
          READ_CALL_LOG     - missed calls, which the cluster shows like an SMS
          READ_CONTACTS     - resolve a number to a name for the display
 
-         What the data can do: nothing that leaves the phone. There is no
-         INTERNET permission (asserted in CI), no account, and no server, so a
-         call log and contact list read here stay on the device and are only
-         rendered as 17 bytes of text on the cluster.
+         What the data can do: the app now holds INTERNET for map tiles and
+         routing (see above), so the old "nowhere to send them" argument no
+         longer applies and is not repeated here. The replacement guarantee is
+         narrower and checkable: no code path transmits contact or call-log
+         data. The only consumers are the caller-ID formatter (renders as
+         bytes on the cluster) and the on-device contact resolver. The
+         network call sites are confined to dev.tvsopen.nav.maps; grep
+         HttpURLConnection to verify nothing else opens a connection.
 
          NOT requested: ANSWER_PHONE_CALLS and CALL_PHONE. Both are hard
          restricted from Android 10 — only the app the user has set as the
@@ -70,11 +85,14 @@
     <!-- Parked location, only when the user asks for it -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Deliberately absent: INTERNET.
-         This app never talks to TVS or to a maps provider. Maps run in their
-         own app and we read their notifications. Enforcing that with a missing
-         permission makes "no account, no network" a property of the build
-         rather than a promise in a README. -->
+    <!-- No TVS contact, enforced by architecture rather than by audit.
+         The app holds INTERNET solely for map tiles and routing (see the
+         permission comment above and docs/MAPS.md). It never talks to TVS:
+         no account, no registration, no SmartXonnect backend calls, and no
+         telemetry upload. The network call sites are confined to
+         dev.tvsopen.nav.maps; anything opening a connection from anywhere
+         else is a bug. Contact and call-log data stay on the device — they
+         are read only to render caller ID as bytes on the cluster. -->
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 

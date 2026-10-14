@@ -111,6 +111,12 @@ dependencies {
     // the double-division bug that made the odometer read 10x low was invisible
     // to the compiler and to every smoke test on a disconnected phone.
     testImplementation("junit:junit:4.13.2")
+
+    // Embedded OpenStreetMap view (docs/MAPS.md). Pinned, not ranged: tile
+    // fetching behaviour must not shift under a future release unreviewed.
+    // Verified not to add INTERNET itself — the permission is declared
+    // explicitly in the manifest for map use; CI pins the merged set.
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 }
 
 // CPU budget: see AGENTS.md and gradle.properties — workers.max=2, daemon off.
