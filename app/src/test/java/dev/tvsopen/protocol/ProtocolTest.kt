@@ -211,7 +211,9 @@ class ProtocolTest {
             "Turn right NH44",
             PacketBuilder.sanitize("Turn right NH44").decodeToString(),
         )
-        // Each emoji collapses to exactly one 'X', not one per UTF-16 unit.
+        // Each emoji collapses to exactly one 'X', not one per UTF-16 unit —
+        // which is also the official wire result (upstream routes emoji through
+        // a transient '@' that its own filter then converts to 'X').
         assertEquals("XX TURN", PacketBuilder.sanitize("🚦⚠ TURN").decodeToString())
         // An em dash is a separator, so it folds to a space and trims away
         // rather than becoming an "X". Emoji above still become X.
@@ -234,14 +236,15 @@ class ProtocolTest {
     }
 
     @Test
-    fun `emoji collapses to the official unknown-glyph marker`() {
-        // Upstream createMobileToClusterArray replaces emoji runs with '@',
-        // not 'X' — verified in the decompiled current SDK. A different marker
-        // would still render, but it would differ from the official app for the
-        // same input, which is the kind of silent divergence this suite exists
-        // to catch.
+    fun `emoji collapses to X, matching the official wire result`() {
+        // Upstream writes this in two steps — emoji runs become '@', then every
+        // character outside `[A-Za-z0-9 ]` (including that '@') becomes 'X' —
+        // so the observable result is 'X' either way. A prior revision of the
+        // sanitiser emitted '@' directly, which our own filter then folded to a
+        // space: "Hi 🙂 there" came out as "Hi there", silently joining two
+        // words. The marker must survive our filter, and only 'X' does.
         val out = String(PacketBuilder.sanitize("Hi 🙂 there"), Charsets.UTF_8)
-        assertEquals("Hi @ there", out)
+        assertEquals("Hi X there", out)
     }
 
     @Test

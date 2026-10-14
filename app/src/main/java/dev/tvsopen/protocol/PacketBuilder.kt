@@ -283,12 +283,17 @@ object PacketBuilder {
         private val SPACE_RUN = Regex(" +")
 
         fun sanitize(text: String, maxBytes: Int = 17): ByteArray {
-        // Collapse each emoji/symbol run to a single '@', exactly as upstream
-        // `createMobileToClusterArray` does. '@' is the official unknown-glyph
-        // marker — a dropped emoji would silently close the gap between two
-        // words, and any other choice would differ from what the cluster's own
-        // app sends for the same input.
-        val symbolised = EMOJI_OR_SYMBOL.replace(text, "@")
+        // Collapse each emoji/symbol run to a single 'X'.
+        //
+        // Upstream writes this in two steps — emoji runs become '@', and then
+        // every character outside `[A-Za-z0-9 ]` becomes 'X', which includes the
+        // '@' just inserted — so the observable wire result is 'X' regardless.
+        // Doing it in one step is net-identical and cheaper; what matters is
+        // that an emoji never reaches the cluster and never silently closes the
+        // gap between two words. (A run of upstream's intermediate '@' through
+        // our filter would fold to a space instead, which is how a prior
+        // revision of this line produced "Hi there" from "Hi 🙂 there".)
+        val symbolised = EMOJI_OR_SYMBOL.replace(text, "X")
 
         val filtered = buildString(symbolised.length) {
             var lastWasSpace = false
