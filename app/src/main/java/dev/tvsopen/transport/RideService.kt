@@ -49,7 +49,7 @@ class RideService : android.app.Service() {
     /** Driver for the current link; needed outside connect() by the rider-name send. */
     private var driver: ProtocolDriver? = null
     /**
-     * Held for the whole link, released on teardown.
+     * Held while connected, released on disconnect and on teardown.
      *
      * A foreground service alone does not keep the CPU awake: with the screen
      * off the coroutines driving the 2 s keepalive and 1.5 s nav control stall,
@@ -241,9 +241,12 @@ class RideService : android.app.Service() {
         }
 
         linkJob = scope.launch {
-            // The link owns a wake lock for as long as it lives; without it the
+            // The link owns a wake lock while connected; without it the
             // keepalive and nav loops stall the moment the screen goes off.
-            holdWakeLock()
+            // Held on CONNECTED and released on DISCONNECTED rather than for
+            // the whole job: after a drop the collectors stay alive waiting
+            // for a reconnect, and holding a lock through that idle wait would
+            // drain the battery for nothing.
             // One for the bridge (nav state)…
             //
             // Driven by `Session.hud`, not by BLE frames. It used to be a
@@ -294,6 +297,7 @@ class RideService : android.app.Service() {
                     when (st) {
                         ConnectionState.CONNECTED -> {
                             notify("Connected to ${model.displayName}")
+                            holdWakeLock()
                             // Auto-start here, not only from the activity's
                             // LaunchedEffect: if the UI process dies while the
                             // screen is off, nothing else sends START_NAV and
@@ -316,8 +320,10 @@ class RideService : android.app.Service() {
                                 )
                             }
                         }
-                        ConnectionState.DISCONNECTED ->
+                        ConnectionState.DISCONNECTED -> {
+                            releaseWakeLock()
                             notify("Disconnected")
+                        }
                         else -> Unit
                     }
                 }
