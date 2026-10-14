@@ -73,6 +73,37 @@ class NavParsingTest {
         assertEquals(-1, NavParsing.extractDistance("", "", "Heading north"))
     }
 
+    @Test
+    fun `minutes are not miles`() {
+        // Observed live: Google Maps arrival text is "Drive 1 min (450 m) to
+        // Perambra", and longest-first alternation matched the "mi" in "min",
+        // decoding every arrival as a 1609 m turn. The real distance sits later
+        // in the same string and must be the one found.
+        assertEquals(450, NavParsing.extractDistance("Drive 1 min (450 m) to Perambra"))
+        assertEquals(850, NavParsing.extractDistance("Drive 3 min (850 m) to Perambra"))
+        assertEquals(-1, NavParsing.extractDistance("1 min"))
+        // A genuine mile still converts — the lookahead only rejects a unit
+        // glued to more letters.
+        assertEquals(1609, NavParsing.extractDistance("1 mi"))
+        assertEquals(1609, NavParsing.extractDistance("in 1 mi"))
+    }
+
+    @Test
+    fun `google maps arrival shape parses end to end`() {
+        // Recorded from a live notification, 2026-10-14. The distance is the
+        // parenthesised metres in the text, not the trip total in the sub-text
+        // and not a mile read out of "min".
+        val parsed = NavParsing.parse(
+            title = "Arrive at 11:41 AM",
+            text = "Drive 1 min (450 m) to Perambra",
+            bigText = "",
+            subText = "1 hr 8 min · 38 km · 9:16 PM ETA",
+        )
+        assertEquals(450, parsed.distanceMeters)
+        assertEquals(68, parsed.etaMinutes)
+        assertEquals("Arrive at 11:41 AM", parsed.maneuver)
+    }
+
     // --- ETA -----------------------------------------------------------------
 
     @Test

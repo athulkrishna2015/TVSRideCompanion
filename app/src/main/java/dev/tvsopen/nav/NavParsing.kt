@@ -132,9 +132,18 @@ object NavParsing {
      * `(m|km|mi|ft)` matches the `m` of `"1 mi"` and a mile is read as one
      * metre — a 1600x error that looks entirely plausible in the UI. `mi` has
      * to be attempted before `m`.
+     *
+     * The trailing lookahead is load-bearing for the same reason in reverse.
+     * Longest-first makes `"1 min"` match `mi` — the first two letters of
+     * "min" — so "Drive 1 min (450 m)" parsed as one **mile** (1609 m) and the
+     * real 450 m later in the string was never reached. Observed live:
+     * Google Maps arrival notifications always contain "N min", so every one
+     * of them decoded to a phantom ~1609 m turn distance. A unit must not be
+     * followed by another letter; genuine units end at whitespace, punctuation
+     * or end of string.
      */
     private val DISTANCE_RE =
-        Regex("""(\d+(?:[.,]\d+)?)\s*(km|mi|ft|m)""", RegexOption.IGNORE_CASE)
+        Regex("""(\d+(?:[.,]\d+)?)\s*(km|mi|ft|m)(?![A-Za-z])""", RegexOption.IGNORE_CASE)
 
     /** `1 min`, `25 mins`, `1 hr`, `2 hours`. */
     private val ETA_RE =

@@ -46,6 +46,19 @@ Recorded from a live navigation on an Android 15 phone, 2026-10-12:
 | `EXTRA_BIG_TEXT` | `""` — empty, despite being documented above as holding distance |
 | `EXTRA_SUB_TEXT` | `"6 hr 21 min · 307 km · 4:34 AM ETA"` |
 
+A second shape arrives near the destination (recorded 2026-10-14):
+
+| Extra | Actual value |
+| :--- | :--- |
+| `EXTRA_TITLE` | `"Arrive at 11:41 AM"` — an instruction, not a distance |
+| `EXTRA_TEXT` | `"Drive 1 min (450 m) to Perambra"` — metrics **and** the real distance |
+| `EXTRA_SUB_TEXT` | `"1 hr 8 min · 38 km · 9:16 PM ETA"` — trip totals, not turn distance |
+
+That second shape carried a real bug: longest-first unit matching read the
+"mi" in "1 min" as one **mile**, so every arrival decoded to a 1609 m turn and
+the parenthesised 450 m was never reached. A unit match now requires a
+non-letter after it (`(?![A-Za-z])`), which keeps genuine `"1 mi"` working.
+
 So the distance is in the title and nowhere else, and the ETA is a *duration
 with extra units*, not a clock. `EXTRA_LARGE_ICON` is not supplied, so
 `pictogram` resolves from the wording instead, via `ManeuverResolver`.
