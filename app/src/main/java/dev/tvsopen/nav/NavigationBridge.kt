@@ -162,13 +162,22 @@ class NavigationBridge(
                     }
 
                     if (twoRows) {
-                        // The Ntorq's two lines have separate capacities: line 1
-                        // is 10 characters, line 2 is 12. The current packet API
-                        // routes the primary row through 0x4F and secondary
-                        // through 0x50; physical row assignment still needs a
-                        // console capture, but no longer shares one width.
-                        driver.buildNavText(nav.copy(streetName = metrics))?.let { ble.write(it) }
-                        driver.buildNavTextSecondary(nav.copy(streetName = street))?.let { ble.write(it) }
+                        // The maneuver goes on the primary channel, 0x4F.
+                        //
+                        // This was backwards: metrics went on 0x4F and the
+                        // maneuver on 0x50, so a cluster rendering the primary
+                        // nav text channel showed ETA forever and the turn
+                        // instruction never appeared — exactly "only ETA, no
+                        // turn-by-turn". 0x4F (`DATA_ID_NAVIGATIONDATA1`) is the
+                        // only nav text ID the current official sender defines;
+                        // 0x50 is secondary. The cluster takes the distance for
+                        // line 1 from the control frame itself, so the text line
+                        // must be the instruction, matching the manual's
+                        // "AFTER 900m / TAKE RIGHT" layout.
+                        driver.buildNavText(nav.copy(streetName = street))?.let { ble.write(it) }
+                        driver.buildNavTextSecondary(
+                            nav.copy(streetName = metrics),
+                        )?.let { ble.write(it) }
                     } else {
                         val line = if (showingMetrics) metrics else street
                         driver.buildNavText(nav.copy(streetName = line))?.let { ble.write(it) }

@@ -79,6 +79,14 @@ and the maneuver never reached the dash at all — which reads as "only ETA, no
 turn-by-turn". The Google shape still works because a distance-only title parses
 to an empty maneuver and falls through to the street.
 
+The maneuver goes on the **primary** text channel (`0x5B 0x4F`,
+`DATA_ID_NAVIGATIONDATA1` — the only nav text ID the current official sender
+defines), with ETA/distance on the secondary `0x50`. An earlier revision had
+this backwards, and since the two-row path is taken whenever both lines are
+non-blank, the primary line carried ETA on every single frame. The cluster takes
+the line-1 distance from the `0x4E` control frame itself, so the text line must
+be the instruction — matching the manual's "AFTER 900m / TAKE RIGHT" layout.
+
 MapMyIndia (also present in the official APK) posts its own shape; Organic Maps
 follows the Android navigation notification convention. Neither has been observed
 on hardware, so both are still assumptions.
