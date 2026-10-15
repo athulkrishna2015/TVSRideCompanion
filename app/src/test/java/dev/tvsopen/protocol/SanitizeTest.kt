@@ -106,4 +106,12 @@ class SanitizeTest {
         val bare = textOf(PacketBuilder.callerInfo("+919876543210", null))
         assertEquals("+919876543210", bare)
     }
+
+    @Test
+    fun `nav arrow prefixes survive the sanitiser`() {
+        // "<- LFT -> RGT ^" is what the maneuver line looks like once the
+        // short codes gain their glanceable arrow. Every character in it must
+        // be kept, never folded to a space or an 'X'.
+        assertEquals("<- LFT -> RGT ^", s("<- LFT -> RGT ^"))
+    }
 }

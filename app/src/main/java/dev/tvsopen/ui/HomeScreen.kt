@@ -435,8 +435,9 @@ private fun NavigationStrip(hud: HudState) {
             // empty once that is moved to the distance row — rendering "?"
             // for it, or an empty line above the street, both look broken.
             hud.instructionTitle?.takeIf { it.isNotBlank() }?.let {
+                val arrow = dev.tvsopen.nav.NavShortCodes.uiArrow(hud.pictogramId)
                 Text(
-                    it,
+                    if (arrow.isNotEmpty()) "$arrow $it" else it,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )

@@ -277,7 +277,12 @@ object PacketBuilder {
         // wrong for caller ID. Both are ASCII printable and very likely
         // renderable, though that is **unverified on the cluster** — worth
         // confirming on the next live session.
-        private const val KEPT_PUNCTUATION = "+-"
+        //
+        // '<', '>' and '^' are kept for the same reason: they are the nav
+        // arrow prefixes ("<-", "->", ">>", "^") that NavShortCodes puts in
+        // front of every maneuver line. ASCII printable like '-' and '+', but
+        // likewise unverified until seen rendering on hardware.
+        private const val KEPT_PUNCTUATION = "+-<>^"
 
         // Run of anything that folds to a space.
         private val SPACE_RUN = Regex(" +")

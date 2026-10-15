@@ -83,6 +83,12 @@ class NavigationBridge(
 
     private var findMy = false
 
+    // Rolling offset for overflowing text. Advances once per send so a line
+    // wider than the row scrolls instead of clipping its tail. Reset whenever
+    // the instruction changes so a new turn starts at its head, not mid-scroll.
+    private var scrollTick = 0
+    private var lastInstructionKey: String? = null
+
     /**
      * Start the keepalive. The cluster drops the link if the presence packet
      * stops, so this runs for the whole session, ride or not.
@@ -128,9 +134,19 @@ class NavigationBridge(
             while (isActive) {
                 val step = _hud.value.instruction
                 if (step != null) {
+                    val key = "${step.title}|${step.street}|${step.distanceMeters}"
+                    if (key != lastInstructionKey) {
+                        lastInstructionKey = key
+                        scrollTick = 0
+                    }
                     val nav = step.toNavStep()
-                    val street = step.displayLine(secondTextRowChars)
-                    val fullMetrics = step.metricsLine(firstTextRowChars)
+                    // Both cluster lines are always populated together: the
+                    // maneuver (compressed + arrow, line 1) and the ETA/distance
+                    // (line 2). Each rolls independently when it overflows its
+                    // row. The control frame advertises rows = 2 so the cluster
+                    // shows both at once instead of alternating.
+                    val street = step.displayLine(secondTextRowChars, scrollTick)
+                    val fullMetrics = step.metricsLine(firstTextRowChars, scrollTick)
 
                     // Two lines when the driver has a second row, else alternate.
                     //
@@ -184,6 +200,7 @@ class NavigationBridge(
                         showingMetrics = !showingMetrics
                     }
                     lastTwoRows = twoRows
+                    scrollTick++
                 }
                 delay(if (lastTwoRows || showingMetrics) controlIntervalMs else textSwapIntervalMs)
             }
@@ -193,6 +210,8 @@ class NavigationBridge(
     fun stopNavigation() {
         controlJob?.cancel()
         controlJob = null
+        scrollTick = 0
+        lastInstructionKey = null
         _hud.value = HudState(active = false)
     }
 

@@ -118,6 +118,8 @@ class RowWidthTest {
         // The live provider posts the maneuver as the title and trip metrics as
         // the text. Preferring the street showed "2.32 km • 3" on both lines and
         // the turn instruction never reached the cluster at all.
+        // The maneuver is compressed to short codes with an ASCII arrow and
+        // rolled when it still overflows the 12-character row.
         val step = NavInstruction(
             title = "Turn left onto Hill View Road",
             street = "2.32 km • 3 min • 11:40 AM ETA",
@@ -126,13 +128,13 @@ class RowWidthTest {
             pictogram = 0,
             provider = "test",
         )
-        assertEquals("Turn left on", step.displayLine())
+        assertEquals("<- LFT to H", step.displayLine())
     }
 
     @Test
     fun `displayLine falls back to the street when the title is distance-only`() {
         // The Google Maps shape: title "550 m" parses to an empty maneuver, so
-        // the road name is the only instruction available.
+        // the road name is the only instruction available. Road words compress.
         val step = NavInstruction(
             title = "",
             street = "Example Road",
@@ -140,7 +142,7 @@ class RowWidthTest {
             pictogram = null,
             provider = "test",
         )
-        assertEquals("Example Road", step.displayLine())
+        assertEquals("Example Rd", step.displayLine())
     }
 
     @Test
@@ -168,8 +170,8 @@ class RowWidthTest {
             pictogram = null,
             provider = "test",
         )
-        assertEquals("Turn left", step.displayLine())
-        assertEquals("Turn left".length, step.displayLine().length)
+        assertEquals("LFT", step.displayLine())
+        assertEquals("LFT".length, step.displayLine().length)
     }
 
     @Test
@@ -183,8 +185,11 @@ class RowWidthTest {
         )
         val ntorq = step.displayLine()
         val jupiter = step.displayLine(maxChars = RowChars.JUPITER)
-        assertEquals("Turn right o", ntorq)
-        assertEquals("Turn right onto H", jupiter)
+        // Windows can end on a word gap; compare trimmed, pin widths exactly.
+        assertEquals("RGT to Hill", ntorq.trim())
+        assertEquals(RowChars.NTORQ, ntorq.length)
+        assertEquals("RGT to Hill View", jupiter.trim())
+        assertEquals(RowChars.JUPITER, jupiter.length)
         assertTrue("the Jupiter row must show more", jupiter.length > ntorq.length)
     }
 
@@ -197,6 +202,27 @@ class RowWidthTest {
             pictogram = null,
             provider = "test",
         )
-        assertEquals("Take U-Turn", step.displayLine())
+        assertEquals("UTN", step.displayLine())
+    }
+
+    @Test
+    fun `an overflowing line rolls instead of clipping its tail`() {
+        // The destination half used to be lost off the end; each tick shows the
+        // next window and a full cycle returns to the head.
+        val step = NavInstruction(
+            title = "Turn right onto Hill View Road xyz",
+            street = "",
+            distanceMeters = 550,
+            pictogram = null,
+            provider = "test",
+        )
+        val head = step.displayLine(tick = 0)
+        val moved = step.displayLine(tick = 5)
+        assertEquals(RowChars.NTORQ, head.length)
+        assertEquals(RowChars.NTORQ, moved.length)
+        assertTrue("tick 5 must show a different window, got '$moved'", moved != head)
+        val full = NavShortCodes.compress("Turn right onto Hill View Road xyz")
+        val loop = full + " - "
+        assertEquals(head, step.displayLine(tick = loop.length))
     }
 }
