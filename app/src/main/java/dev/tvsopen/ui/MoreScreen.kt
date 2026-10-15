@@ -213,6 +213,41 @@ fun MoreScreen(
 
         item {
             Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Navigation display", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Every instruction is compressed before it is sent: " +
+                            "Turn left onto Example Road becomes <- LFT to Example Rd.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "The arrow prefix marks the turn at a glance " +
+                            "(<- left, -> right, ^ straight, U U-turn, O roundabout).",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "Text wider than the row scrolls one window per send " +
+                            "instead of clipping its tail.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "Both cluster lines go out together (0x4F + 0x50, rows = 2); " +
+                            "a single alternating line when the second has nothing to show.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "Compression, arrows and scrolling run on the phone and are " +
+                            "unit-tested. Whether the Ntorq renders both lines at once " +
+                            "still needs your scooter.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.Science, null)
                     Text("TVSRide", style = MaterialTheme.typography.titleMedium)

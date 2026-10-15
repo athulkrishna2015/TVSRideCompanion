@@ -595,29 +595,35 @@ Byte 9 is the interesting one: it is the arrow. Its mapping is in
 `docs/NAVIGATION.md`.
 
 The cluster firmware natively renders the distance-to-turn integer on line 1
-next to the arrow, so the app only has to fight for the remaining 17-character
-line — hence the 3-second text cycling described in `docs/NAVIGATION.md`.
+next to the arrow, so the app only has to fight for the remaining text: 10
+characters on line 1, 12 on line 2. Instructions are compressed to short codes
+(`Turn left` → `LFT`, `toward` → `twd`), prefixed with an ASCII arrow, and
+rolled one window per send when they still overflow — see `docs/NAVIGATION.md`.
 
 ### Byte 10 and the second navigation line
 
 Byte 10 is a row count, and `0x5B 0x50` is a **distinct data id** from `0x4F`,
 not a second use of it. Together they mean the cluster can hold two navigation
-lines at once: street on one, ETA and distance on the other, both visible without
-waiting for a swap.
+lines at once: the maneuver on one, ETA and distance on the other, both visible
+without waiting for a swap.
 
-The bridge implements this behind `NavigationBridge.twoRowNav`, **defaulting to
-off**, and it stays off until the scooter is available:
+The bridge always attempts both rows when the driver offers a secondary text
+builder and both lines have content, and falls back to alternating a single
+row otherwise. There is no flag to flip — `NavTextRowTest` pins the packet
+shape (different data ids, identical 17-byte payload, row count in byte 10
+only), and the two-row path is taken on every send that qualifies.
 
-- Both facts are transcribed from the official app, not measured. No capture has
-  shown `0x50` on the wire, and byte 10 has never been read back from a cluster
-  that was displaying two lines.
-- The alternating single-row path *is* known to reach the display.
+What remains unverified is rendering, not framing:
 
-Enabling an unverified two-line path while the only way to check it is
-unavailable would trade a working display for a hopeful one. `NavTextRowTest`
-pins the packet shape — different data ids, identical 17-byte payload, row count
-in byte 10 only — so flipping the flag is a one-line change with the format
-already covered.
+- No capture has shown `0x50` on the wire from this app, and byte 10 has never
+  been read back from a cluster that was displaying two lines.
+- The Ntorq's physical rows are 10 and 12 characters while the payload is 17
+  bytes, so how the cluster places a full packet (wrap, scroll, truncate, or
+  single-line use) still needs a live capture.
+
+The compression, arrow prefixes and rolling above are phone-side and covered by
+`NavShortCodesTest`/`RowWidthTest`; they hold regardless of how the cluster
+lays the rows out.
 
 ## 6. Outbound text — `0x4C` / `0x63` / `0x4F`
 

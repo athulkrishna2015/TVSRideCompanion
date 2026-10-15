@@ -354,6 +354,7 @@ class NtorqDriver(
         "inbound frame layouts" to Confidence.VERIFIED_FROM_APK,
         "navigation control 0x5A 0x4E" to Confidence.VERIFIED_FROM_APK,
         "navigation text 0x5B 0x4F" to Confidence.VERIFIED_FROM_APK,
+        "navigation second row 0x5B 0x50" to Confidence.INHERITED_UNVERIFIED,
         "outbound ping 0x4A" to Confidence.INHERITED_UNVERIFIED,
         "text rows 0x4C / 0x63" to Confidence.NEEDS_CAPTURE,
         "pictogram table on Ntorq TFT" to Confidence.NEEDS_CAPTURE,

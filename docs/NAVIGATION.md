@@ -210,11 +210,16 @@ expects; only the *usable characters* differ per line.
 
 Two consequences worth having:
 
-- A street name is cut at 12 on line 2, so `"Example Road - Hill Route"` (17)
-  became `"Example Rd -"` — the destination half was being lost off the end.
+- A street name no longer loses its tail to the row width. It used to be cut
+  at 12 on line 2, so `"Example Road - Hill Route"` (17) became
+  `"Example Rd -"` — the destination half gone. Compression
+  (`Road` → `Rd`, filler dropped) shrinks it first, and whatever still
+  overflows rolls instead of clipping.
 - The `+` and `-` that `sanitize()` now preserves both **appear in TVS's own
   rendered strings** (`TAKE U-TURN`, `10Km 700m`), which is the first direct
-  evidence that the cluster renders them.
+  evidence that the cluster renders them. The nav arrow prefixes (`<-`, `->`,
+  `^`) are kept on the same ASCII-printable reasoning but are still
+  unverified on hardware.
 
 **Note:** How the cluster places a 17-character packet across the two unequal
 lines (wraps, scrolls, truncates, or uses only one line) still needs a live
@@ -265,14 +270,43 @@ been corrected in `PacketBuilder.navigationControl`.
 > character can overrun the field and displace the terminator. `PacketBuilder`
 > clamps by bytes as well as characters.
 
-### Text cycling
+### Text compression, arrows and rolling
 
-The reference implementation alternates on a 5-second boundary,
-`(System.currentTimeMillis() / 5000) % 2 == 0`:
+A 10/12-character display cannot show a Maps sentence, so each line is
+compressed before it is framed (`NavShortCodes`, pinned by
+`NavShortCodesTest`):
 
-- street name on one phase
-- `time` + padding + `distance` on the other, right-aligned to 11 characters:
-  `"1h 20m"`, `"45m"`, `"850m"`, `"12km"`, `"120k"` for >= 100 km
+- Maneuvers become codes: `Turn left` → `LFT`, `Turn slight right` → `SRG`,
+  `Make a U-turn` → `UTN`, `roundabout` → `RND`, `merge` → `MRG`,
+  `fork keep left` → `FRK-L`, `ramp` → `RMP`, `exit` → `EXT`.
+- Modifiers shrink: `toward(s)` → `twd`, `then` → `>`, `onto` → `to`,
+  `Street/Road/Avenue/Highway` → `St/Rd/Ave/Hwy`, filler (`in`, `the`, `at`,
+  `take`, `make`, bare `turn`) is dropped.
+- `In 200 meters, turn slight right onto Main Street, then turn left.`
+  becomes `200 m, SRG to Main St, > LFT`.
+
+The maneuver line gains an ASCII arrow prefix from the pictogram
+(`<-` left, `->` right, `^` straight, `U` U-turn, `O` roundabout) for
+glanceability; the phone strip shows the unicode equivalent
+(`← → ↑ ↩ ↻`). Wire-safe by construction: every arrow character survives
+`PacketBuilder.sanitize()`, pinned by `SanitizeTest`.
+
+Whatever still overflows its row rolls instead of clipping: `RollingText`
+shows one window per send over `text + " - "`, advancing each control-frame
+tick and restarting at the head for a new instruction. A short line is
+returned untouched.
+
+### Two rows at once, alternating fallback
+
+The bridge sends the maneuver on the primary channel (`0x5B 0x4F`) and the
+ETA/distance on the secondary (`0x5B 0x50`), with the control frame
+advertising `rows = 2` — whenever the driver offers a secondary builder and
+both lines have content. Otherwise it falls back to alternating a single row
+every few seconds, which is the only path known to reach a display. The
+reference Jupiter app alternated on a 5-second boundary
+(`(System.currentTimeMillis() / 5000) % 2`; street on one phase,
+`time` + padding + `distance` on the other); that cadence survives only in the
+fallback.
 
 ## What still needs the Ntorq
 

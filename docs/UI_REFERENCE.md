@@ -71,5 +71,7 @@ redacted.
   entirely rather than stubbed, because they cannot exist without TVS's
   servers.
 - **Transparency panel.** The More tab states which protocol facts are verified
-  and which still need hardware confirmation. A reverse-engineering app that
+  and which still need hardware confirmation, plus a navigation-display card
+  describing what the app does to each instruction (short codes, arrow
+  prefixes, rolling, two lines). A reverse-engineering app that
   hides its uncertainty is worse than useless.
