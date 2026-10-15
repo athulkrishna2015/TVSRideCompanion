@@ -128,7 +128,7 @@ class RowWidthTest {
             pictogram = 0,
             provider = "test",
         )
-        assertEquals("<- LFT to H", step.displayLine())
+        assertEquals("<- LFT to Hi", step.displayLine())
     }
 
     @Test

@@ -34,6 +34,11 @@ object NavShortCodes {
         ci("\\bsharp\\s+left\\b") to "SHL",
         ci("\\bturn\\s+sharp\\s+right\\b") to "SHR",
         ci("\\bsharp\\s+right\\b") to "SHR",
+        // Fork kept with its side, before the keep-left/keep-right rules below
+        // consume the side word on their own: "fork, keep left" must become
+        // FRK-L, not FRK plus SLF.
+        ci("\\bfork\\b\\s*,?\\s*keep\\s+left\\b") to "FRK-L",
+        ci("\\bfork\\b\\s*,?\\s*keep\\s+right\\b") to "FRK-R",
         ci("\\bturn\\s+slight\\s+left\\b") to "SLF",
         ci("\\bslight\\s+left\\b") to "SLF",
         ci("\\bkeep\\s+left\\b") to "SLF",
@@ -42,10 +47,6 @@ object NavShortCodes {
         ci("\\bkeep\\s+right\\b") to "SRG",
         ci("\\bturn\\s+left\\b") to "LFT",
         ci("\\bturn\\s+right\\b") to "RGT",
-        // Fork kept with its side, before keep-left/keep-right below consume
-        // the side word on their own: "fork, keep left" must become FRK-L.
-        ci("\\bfork\\b\\s*,?\\s*keep\\s+left\\b") to "FRK-L",
-        ci("\\bfork\\b\\s*,?\\s*keep\\s+right\\b") to "FRK-R",
         ci("\\btake\\s+the\\s+ramp\\b") to "RMP",
         ci("\\btake\\s+ramp\\b") to "RMP",
         ci("\\bslip\\s+road\\b") to "RMP",
@@ -137,7 +138,10 @@ object NavShortCodes {
         for ((re, replacement) in WORD_RULES) {
             out = re.replace(out, replacement)
         }
-        return out.replace(SPACES, " ").trim()
+        // A sentence-final full stop is never a decimal point. The sanitiser
+        // would fold it to a space on the wire anyway; dropping it here keeps
+        // one more column for the road name.
+        return out.replace(SPACES, " ").trim().removeSuffix(".")
     }
 
     // ASCII arrow prefix for the cluster text line. Only uses characters the
