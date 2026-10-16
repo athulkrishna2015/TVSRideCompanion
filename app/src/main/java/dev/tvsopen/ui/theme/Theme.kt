@@ -37,10 +37,6 @@ import androidx.compose.ui.unit.sp
  *     whose header carries the TVS logo and the Jupiter name. We keep the
  *     *structure* — name, connection pill, status dot — and substitute our own
  *     identifiers. See `research/SOURCES.md`.
- *
- * The soft pastel tile scheme is likewise from that app, reused under the same
- * licence. Tiles keep their hues: they are functional surfaces (adjacent tiles
- * must stay distinguishable), not brand accents.
  */
 private val LightColors = lightColorScheme(
     primary = Color(0xFF0052FF),
@@ -65,11 +61,16 @@ private val LightColors = lightColorScheme(
 )
 
 /**
- * Tile backgrounds, kept out of the [androidx.compose.material3.ColorScheme]
- * because they are decorative and have no foreground/background pairing role.
+ * Tile fills, drawn from the `DESIGN.md` neutral surfaces.
  *
- * Soft pastels only; text on top of every one of these is the near-black
- * `onSurface`, which clears WCAG AA on all of them.
+ * Every tile is the same fill (surface-soft #F7F7F7 / surface-dark-elevated
+ * #16181C). Separation between adjacent tiles comes from the 1dp hairline
+ * border on each tile Surface (`outline` token) — the system's own
+ * "hairline border on white" card treatment — not from hue cycling. The old
+ * three-hue cycle existed only to keep same-colour neighbours apart, and a
+ * single neutral plus border does that with less visual noise.
+ *
+ * `connected` is the token semantic green #05B169: a status dot, never text.
  */
 @Immutable
 data class TilePalette(
@@ -84,45 +85,28 @@ data class TilePalette(
 )
 
 private val LightTiles = TilePalette(
-    largeLeft = Color(0xFFDCE9FB),   // fuel
-    largeRight = Color(0xFFF6DCF4),  // odometer
-    small1 = Color(0xFFCFE3FB),      // range
-    small2 = Color(0xFFE3EAFB),      // economy
-    small3 = Color(0xFFEEDCFA),      // service
-    neutral = Color(0xFFECECEE),     // last parked, ride mode
-    accent = Color(0xFFCFE3FB),      // find my scooter
-    connected = Color(0xFF4CAF50),   // status dot
+    largeLeft = Color(0xFFF7F7F7),
+    largeRight = Color(0xFFF7F7F7),
+    small1 = Color(0xFFF7F7F7),
+    small2 = Color(0xFFF7F7F7),
+    small3 = Color(0xFFF7F7F7),
+    neutral = Color(0xFFF7F7F7),
+    accent = Color(0xFFF7F7F7),
+    connected = Color(0xFF05B169),   // status dot
 )
 
 private val DarkTiles = TilePalette(
-    largeLeft = Color(0xFF1B2735),
-    largeRight = Color(0xFF2A1F30),
-    small1 = Color(0xFF1F3040),
-    small2 = Color(0xFF1A2430),
-    small3 = Color(0xFF241E33),
-    neutral = Color(0xFF1C2024),
-    accent = Color(0xFF17293A),
-    connected = Color(0xFF66BB6A),
+    largeLeft = Color(0xFF16181C),
+    largeRight = Color(0xFF16181C),
+    small1 = Color(0xFF16181C),
+    small2 = Color(0xFF16181C),
+    small3 = Color(0xFF16181C),
+    neutral = Color(0xFF16181C),
+    accent = Color(0xFF16181C),
+    connected = Color(0xFF05B169),   // status dot
 )
 
 val LocalTilePalette = staticCompositionLocalOf { LightTiles }
-
-/**
- * Background for the n-th small telemetry tile.
- *
- * Cycles rather than clamping. A `when { else -> small3 }` made every tile past
- * the third reuse one colour, which is invisible until a sixth value is added
- * and two adjacent tiles become indistinguishable.
- */
-@Composable
-fun smallTile(index: Int): Color {
-    val p = LocalTilePalette.current
-    return when (((index % 3) + 3) % 3) {
-        0 -> p.small1
-        1 -> p.small2
-        else -> p.small3
-    }
-}
 
 private val AppTypography = Typography(
     headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Normal),

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
@@ -22,6 +23,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -74,15 +76,17 @@ fun MoreScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("Keep the connection alive", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold)
+            Text("KEEP THE CONNECTION ALIVE", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         item { DozeCard() }
 
         item {
-            Text("Appearance", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold)
+            Text("APPEARANCE", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         item { AppearanceCard() }
@@ -91,8 +95,9 @@ fun MoreScreen(
 
 
         item {
-            Text("Connection", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold)
+            Text("CONNECTION", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         item {
@@ -118,8 +123,9 @@ fun MoreScreen(
         }
 
         item {
-            Text("Permissions", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold)
+            Text("PERMISSIONS", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         item {
@@ -145,8 +151,9 @@ fun MoreScreen(
         }
 
         item {
-            Text("Protocol transparency", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold)
+            Text("PROTOCOL TRANSPARENCY", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         item {
@@ -162,7 +169,13 @@ fun MoreScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Nucleus.describe().forEach { (model, facts) ->
+                    Nucleus.describe().forEachIndexed { index, (model, facts) ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.outline,
+                            )
+                        }
                         Text(
                             model.displayName,
                             style = MaterialTheme.typography.labelLarge,
@@ -281,6 +294,7 @@ private fun RiderNameCard(name: String?, onNameChange: (String?) -> Unit) {
                 onValueChange = { if (it.length <= 17) editing = it },
                 label = { Text("Rider name") },
                 singleLine = true,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
                 supportingText = { Text("${editing.length}/17") },
             )

@@ -1,5 +1,6 @@
 package dev.tvsopen.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -142,11 +143,18 @@ fun OverviewScreen(
 }
 
 @Composable
+/**
+ * Eyebrow section label, per `DESIGN.md` (`badge-pill` / `caption-strong`:
+ * small uppercase muted label). Text-only: on a dense telemetry screen a
+ * filled pill behind every heading would be noise.
+ */
+@Composable
 private fun SectionLabel(text: String) {
     Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 10.dp),
     )
 }
@@ -164,6 +172,7 @@ private fun BigStat(
         modifier.height(140.dp),
         shape = RoundedCornerShape(24.dp),
         color = background,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(
             Modifier.padding(16.dp),
@@ -212,6 +221,7 @@ private fun DistanceStat(
         modifier,
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(16.dp)) {
             Icon(

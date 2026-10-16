@@ -1,5 +1,6 @@
 package dev.tvsopen.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +46,6 @@ import dev.tvsopen.transport.ConnectionState
 import dev.tvsopen.transport.label
 import dev.tvsopen.ui.theme.LocalTilePalette
 import dev.tvsopen.ui.theme.NumberStyle
-import dev.tvsopen.ui.theme.smallTile
 
 /**
  * Dashboard.
@@ -142,6 +142,7 @@ private fun NavCard(
         modifier = modifier.height(104.dp),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         onClick = onClick,
     ) {
         Column(
@@ -183,6 +184,7 @@ private fun ConnectCard(connected: Boolean, stateLabel: String, onClick: () -> U
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = LocalTilePalette.current.accent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             Modifier.padding(16.dp),
@@ -212,12 +214,18 @@ private fun ConnectCard(connected: Boolean, stateLabel: String, onClick: () -> U
     }
 }
 
+/**
+ * Eyebrow section label, per `DESIGN.md` (`badge-pill` / `caption-strong`:
+ * small uppercase muted label). Text-only: on a dense telemetry screen a
+ * filled pill behind every heading would be noise.
+ */
 @Composable
 private fun SectionLabel(text: String) {
     Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 10.dp),
     )
 }
@@ -259,6 +267,7 @@ private fun Pill(text: String, on: Boolean) {
         shape = RoundedCornerShape(50),
         color = if (on) LocalTilePalette.current.accent
         else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -360,6 +369,7 @@ private fun ActionCard(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = background,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             Modifier.padding(16.dp),
@@ -407,6 +417,7 @@ private fun LinkCard(telemetry: Telemetry) {
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(18.dp)) {
             Text(
@@ -429,6 +440,7 @@ private fun NavigationStrip(hud: HudState) {
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(14.dp)) {
             // Both fields are skipped when blank rather than defaulted. Google
