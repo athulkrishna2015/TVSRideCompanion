@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import dev.tvsopen.ui.theme.AppSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -309,7 +309,7 @@ private fun MirrorNavCard(enabled: Boolean, hud: HudState, onChange: (Boolean) -
             hud.active -> "Live from ${hud.provider ?: "your maps app"}"
             else -> "On — waiting for a navigation step"
         },
-        trailing = { Switch(checked = enabled, onCheckedChange = onChange) },
+        trailing = { AppSwitch(checked = enabled, onCheckedChange = onChange) },
     )
 }
 
@@ -353,7 +353,7 @@ private fun FindMyCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
         icon = Icons.Filled.NotificationsActive,
         title = "Find My Scooter",
         subtitle = "Flash lights & sound horn",
-        trailing = { Switch(checked = enabled, onCheckedChange = onChange) },
+        trailing = { AppSwitch(checked = enabled, onCheckedChange = onChange) },
     )
 }
 
@@ -500,9 +500,7 @@ private fun RideModeCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
             // decides the post-reboot resume from RidePrefs.rideMode. A toggle
             // that cannot be flipped cannot set that flag, so the resume path
             // was dead code dressed up as reachable UI.
-            androidx.compose.material3.Switch(
-                checked = enabled, onCheckedChange = onChange,
-            )
+            AppSwitch(checked = enabled, onCheckedChange = onChange)
         },
     )
 }

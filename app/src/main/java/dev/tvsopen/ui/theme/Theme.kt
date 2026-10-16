@@ -2,6 +2,8 @@ package dev.tvsopen.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -10,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -107,6 +110,32 @@ private val DarkTiles = TilePalette(
 )
 
 val LocalTilePalette = staticCompositionLocalOf { LightTiles }
+
+/**
+ * The single switch used everywhere.
+ *
+ * Material defaults derive the off-track from the scheme, which went
+ * near-invisible once tiles turned neutral white: a pale track on a
+ * near-white tile. This pins both states to explicit tokens — blue track
+ * when on, mid-grey track with a white thumb when off — chosen per canvas
+ * by surface luminance so a theme-mode override still resolves correctly.
+ */
+@Composable
+fun AppSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = Color(0xFF0052FF),
+            checkedThumbColor = Color.White,
+            checkedBorderColor = Color.Transparent,
+            uncheckedTrackColor = if (dark) Color(0xFF5B616E) else Color(0xFFA8ACB3),
+            uncheckedThumbColor = Color.White,
+            uncheckedBorderColor = Color.Transparent,
+        ),
+    )
+}
 
 private val AppTypography = Typography(
     headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Normal),
