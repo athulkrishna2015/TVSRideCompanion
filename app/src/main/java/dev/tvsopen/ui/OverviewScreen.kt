@@ -148,7 +148,6 @@ fun OverviewScreen(
  * small uppercase muted label). Text-only: on a dense telemetry screen a
  * filled pill behind every heading would be noise.
  */
-@Composable
 private fun SectionLabel(text: String) {
     Text(
         text.uppercase(),

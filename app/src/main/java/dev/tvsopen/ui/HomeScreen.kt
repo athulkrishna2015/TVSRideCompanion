@@ -214,12 +214,12 @@ private fun ConnectCard(connected: Boolean, stateLabel: String, onClick: () -> U
     }
 }
 
+@Composable
 /**
  * Eyebrow section label, per `DESIGN.md` (`badge-pill` / `caption-strong`:
  * small uppercase muted label). Text-only: on a dense telemetry screen a
  * filled pill behind every heading would be noise.
  */
-@Composable
 private fun SectionLabel(text: String) {
     Text(
         text.uppercase(),
