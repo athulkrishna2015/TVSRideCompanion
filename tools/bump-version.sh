@@ -45,7 +45,8 @@ echo "bump: $NAME ($CODE) -> $NEW ($NEWCODE)"
 
 if [ "${DRY_RUN:-0}" = "1" ]; then
   git diff --stat
-  echo "dry run: not committing"
+  git checkout -q -- "$FILE"
+  echo "dry run: reverted, not committing"
   exit 0
 fi
 
