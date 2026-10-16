@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.tvsopen.session.Telemetry
 import dev.tvsopen.ui.theme.LocalTilePalette
+import dev.tvsopen.ui.theme.NumberStyle
 
 /**
  * Vehicle Overview.
@@ -145,7 +146,7 @@ private fun SectionLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(bottom = 10.dp),
     )
 }
@@ -161,7 +162,7 @@ private fun BigStat(
 ) {
     Surface(
         modifier.height(140.dp),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         color = background,
     ) {
         Column(
@@ -178,8 +179,8 @@ private fun BigStat(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     value,
+                    style = NumberStyle,
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                 )
@@ -209,7 +210,7 @@ private fun DistanceStat(
 ) {
     Surface(
         modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -222,8 +223,8 @@ private fun DistanceStat(
             Spacer(Modifier.height(12.dp))
             Text(
                 value,
+                style = NumberStyle,
                 fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(

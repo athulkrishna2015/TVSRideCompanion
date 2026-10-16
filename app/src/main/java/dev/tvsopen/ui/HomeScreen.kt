@@ -44,6 +44,7 @@ import dev.tvsopen.session.Telemetry
 import dev.tvsopen.transport.ConnectionState
 import dev.tvsopen.transport.label
 import dev.tvsopen.ui.theme.LocalTilePalette
+import dev.tvsopen.ui.theme.NumberStyle
 import dev.tvsopen.ui.theme.smallTile
 
 /**
@@ -139,7 +140,7 @@ private fun NavCard(
 ) {
     Surface(
         modifier = modifier.height(104.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         onClick = onClick,
     ) {
@@ -180,7 +181,7 @@ private fun ConnectCard(connected: Boolean, stateLabel: String, onClick: () -> U
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         color = LocalTilePalette.current.accent,
     ) {
         Row(
@@ -216,7 +217,7 @@ private fun SectionLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(bottom = 10.dp),
     )
 }
@@ -357,7 +358,7 @@ private fun ActionCard(
 ) {
     Surface(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         color = background,
     ) {
         Row(
@@ -404,7 +405,7 @@ private fun LinkCard(telemetry: Telemetry) {
     }
     Surface(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
         Column(Modifier.padding(18.dp)) {
@@ -426,7 +427,7 @@ private fun LinkCard(telemetry: Telemetry) {
 private fun NavigationStrip(hud: HudState) {
     Surface(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -456,7 +457,7 @@ private fun NavigationStrip(hud: HudState) {
             Text(
                 if (distance >= 0) "$distance m · ${hud.etaMinutes} min"
                 else "${hud.etaMinutes} min to arrival",
-                style = MaterialTheme.typography.bodyMedium,
+                style = NumberStyle,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }

@@ -11,11 +11,22 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Palette.
+ * Palette, mapped from the token set in `DESIGN.md` (Coinbase-inspired
+ * system: single blue accent, white canvas, near-black dark canvas).
+ *
+ * Token mapping (light / dark):
+ * - primary #0052FF both; CTAs stay blue on either canvas per the system.
+ * - primaryContainer is the neutral card fill (surface-strong #EEF0F3 /
+ *   surface-dark-elevated #16181C), not a blue tint: blue is scarce.
+ * - tertiary is the darker/faded blue step (primary-active #003ECC /
+ *   primary-disabled #A8B8CC, readable on black). It signals WARN-level
+ *   and unverified-provenance rows, never brand.
+ * - error is semantic-down #CF202F, text/fill per the trading-semantics rule.
  *
  * Two deliberate constraints, both about not misrepresenting provenance:
  *
@@ -28,25 +39,29 @@ import androidx.compose.ui.unit.sp
  *     identifiers. See `research/SOURCES.md`.
  *
  * The soft pastel tile scheme is likewise from that app, reused under the same
- * licence.
+ * licence. Tiles keep their hues: they are functional surfaces (adjacent tiles
+ * must stay distinguishable), not brand accents.
  */
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF2196F3),
+    primary = Color(0xFF0052FF),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFCFE3FB),
-    onPrimaryContainer = Color(0xFF0B1B2B),
-    secondary = Color(0xFF5B6B7A),
-    secondaryContainer = Color(0xFFEDF1F6),
-    onSecondaryContainer = Color(0xFF1A2430),
-    tertiary = Color(0xFF7E57C2),
-    tertiaryContainer = Color(0xFFEEDCFA),
-    onTertiaryContainer = Color(0xFF2A1B3D),
-    error = Color(0xFFD32F2F),
+    primaryContainer = Color(0xFFEEF0F3),
+    onPrimaryContainer = Color(0xFF0A0B0D),
+    secondary = Color(0xFF5B616E),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFEEF0F3),
+    onSecondaryContainer = Color(0xFF0A0B0D),
+    tertiary = Color(0xFF003ECC),
+    tertiaryContainer = Color(0xFFEEF0F3),
+    onTertiaryContainer = Color(0xFF0A0B0D),
+    error = Color(0xFFCF202F),
+    onError = Color.White,
+    background = Color(0xFFFFFFFF),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF14181C),
-    surfaceVariant = Color(0xFFECECEE),
-    onSurfaceVariant = Color(0xFF5A5F66),
-    outline = Color(0xFFD3D7DC),
+    onSurface = Color(0xFF0A0B0D),
+    surfaceVariant = Color(0xFFF7F7F7),
+    onSurfaceVariant = Color(0xFF5B616E),
+    outline = Color(0xFFDEE1E6),
 )
 
 /**
@@ -110,40 +125,51 @@ fun smallTile(index: Int): Color {
 }
 
 private val AppTypography = Typography(
-    headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold),
+    headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Normal),
     titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-    labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+    titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Normal),
+    labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
     bodyMedium = TextStyle(fontSize = 14.sp),
     bodySmall = TextStyle(fontSize = 12.sp),
 )
 
 /**
- * Dark scheme.
- *
- * Not an inversion of the light one. The pastel tiles have no readable pairing
- * on a dark surface, so the whole scheme is desaturated and darkened while
- * keeping the same accent hues, and `primary` is lightened to clear 4.5:1
- * against the dark background.
+ * Tabular numerals, per `DESIGN.md` (`number-display`, weight 500, mono).
+ * System monospace: the licensed brand mono has an Inter/JetBrains substitute
+ * on the web, but this app ships no fonts and requests no network, so the
+ * platform face is the honest stand-in. Applied to telemetry readouts only,
+ * never to prose.
+ */
+val NumberStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Medium,
+)
+
+/**
+ * Dark scheme: near-black canvas #0A0B0D with #16181C elevated cards, per
+ * `DESIGN.md` (`surface-dark`, `surface-dark-elevated`). Blue stays #0052FF —
+ * CTAs are blue pills on either canvas. Error stays semantic-down #CF202F,
+ * which is the system's own dark-hero price-cell treatment.
  */
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF64B5F6),
-    onPrimary = Color(0xFF00344C),
-    primaryContainer = Color(0xFF1F3247),
-    onPrimaryContainer = Color(0xFFCFE3FB),
-    secondary = Color(0xFFB4C2CE),
-    secondaryContainer = Color(0xFF2A3138),
-    onSecondaryContainer = Color(0xFFD6E1EA),
-    tertiary = Color(0xFFB388E8),
-    tertiaryContainer = Color(0xFF2C2440),
-    onTertiaryContainer = Color(0xFFEEDCFA),
-    error = Color(0xFFEF5350),
-    onError = Color(0xFF3B0907),
-    surface = Color(0xFF12161A),
-    onSurface = Color(0xFFECEFF2),
-    surfaceVariant = Color(0xFF1E2226),
-    onSurfaceVariant = Color(0xFFB4BAC1),
-    outline = Color(0xFF3A4046),
+    primary = Color(0xFF0052FF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF16181C),
+    onPrimaryContainer = Color(0xFFFFFFFF),
+    secondary = Color(0xFFA8ACB3),
+    secondaryContainer = Color(0xFF16181C),
+    onSecondaryContainer = Color(0xFFFFFFFF),
+    tertiary = Color(0xFFA8B8CC),
+    tertiaryContainer = Color(0xFF16181C),
+    onTertiaryContainer = Color(0xFFFFFFFF),
+    error = Color(0xFFCF202F),
+    onError = Color.White,
+    background = Color(0xFF0A0B0D),
+    surface = Color(0xFF0A0B0D),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF16181C),
+    onSurfaceVariant = Color(0xFFA8ACB3),
+    outline = Color(0xFF5B616E),
 )
 
 /**
