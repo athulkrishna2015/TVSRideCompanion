@@ -49,3 +49,4 @@ wrapper.log
 # never committed. The two APKs it came from live in the parent folder and
 # are referenced by SHA-256 in research/SOURCES.md.
 research/vendor/
+docs/FORUM_POSTS.md
