@@ -17,11 +17,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -139,6 +143,62 @@ fun OverviewScreen(
                 telemetry.connectedDistanceKm()
                     ?.let { String.format("%.1f", it) } ?: "—",
                 "This connection",
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+        SectionLabel("Cluster telemetry")
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.BatteryChargingFull,
+                telemetry.batteryVoltage?.let { String.format("%.1f", it / 10.0) } ?: "—",
+                "Battery (V)",
+            )
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.Thermostat,
+                telemetry.engineTempC?.toString() ?: "—",
+                "Coolant (°C)",
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.LocalGasStation,
+                telemetry.distanceToEmptyKm?.toString() ?: "—",
+                "Range (km)",
+            )
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.Build,
+                when (telemetry.serviceDue) {
+                    true -> "Due"
+                    false -> "OK"
+                    null -> "—"
+                },
+                "Service",
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.Warning,
+                when (telemetry.milOn) {
+                    true -> "On"
+                    false -> "Off"
+                    null -> "—"
+                },
+                "Check engine",
+            )
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.Speed,
+                telemetry.avgEconomyKmpl?.let { "$it kmpl" } ?: "—",
+                "Avg economy",
             )
         }
 

@@ -35,6 +35,8 @@ data class Telemetry(
     val tripFMeters: Int? = null,         // SM1 idx 14..16, /10
     val engineRpm: Int? = null,           // SM1 idx 17..18
     val serviceDue: Boolean? = null,      // SM2 idx 4
+    /** MIL / check-engine lamp, from 0x11 diagnostics byte bit 2. */
+    val milOn: Boolean? = null,
     val softwareVersion: String? = null,  // SM2 idx 7
     val avgEconomyKmpl: Int? = null,      // SM3 idx 8
     val instantEconomyKmpl: Int? = null,  // SM3 idx 9
@@ -269,6 +271,8 @@ object Session {
             0x11 -> cur.copy(
                 serviceDue = (frame.field(Field.SERVICE_REMINDER)?.toInt()?.let { it != 0 })
                     ?: cur.serviceDue,
+                milOn = (frame.field(Field.VEHICLE_DIAGNOSTICS)?.toInt()
+                    ?.let { (it and 0x04) != 0 }) ?: cur.milOn,
                 softwareVersion = frame.field(Field.SOFTWARE_VERSION)?.toInt()
                     ?.let { "0x%X".format(it) } ?: cur.softwareVersion,
                 lastFrameAt = now,
