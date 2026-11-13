@@ -100,7 +100,11 @@ fun OverviewScreen(
                 Icons.Filled.Bolt,
                 telemetry.engineRpm?.toString() ?: "—",
                 "rpm",
-                "Top RPM",
+                // Not "Top RPM": this is the current engine speed from 0x10
+                // bytes 17-18. Only the speed tile is a top-speed field, and
+                // that is because the cluster sends one, not because we
+                // compute it.
+                "Engine RPM",
                 LocalTilePalette.current.largeRight,
             )
         }

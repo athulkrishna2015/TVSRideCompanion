@@ -513,7 +513,13 @@ class _BleApp:
 
     def _update_link(self):
         # Phone link is UP only when a central is connected AND subscribed.
-        up = bool(self.centrals) and self.notify_char.notifying
+        #
+        # Local fix (TVSRideCompanion): a subscription is itself proof that a
+        # central is connected, so `notifying` alone is authoritative. Some
+        # BlueZ versions deliver the `Connected: true` PropertiesChanged for a
+        # peripheral-mode connection before the GATT path is exported, and the
+        # bridge then reports ble=false forever even though frames flow.
+        up = self.notify_char.notifying
         self.hub.set_ble_link(up)
 
     def export(self, bus):
@@ -537,6 +543,11 @@ class _BleApp:
                 else:
                     self.centrals.discard(msg.path)
                     log.info("central disconnected: %s", msg.path)
+                    # A gone central cannot be subscribed. BlueZ usually calls
+                    # StopNotify, but not on every disconnect path, and a stale
+                    # "notifying" would make the bridge believe the link is up.
+                    if not self.centrals:
+                        self.notify_char._subscribers = 0
                 self._update_link()
         return False
 

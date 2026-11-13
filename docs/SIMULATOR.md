@@ -93,6 +93,23 @@ code 3).
 - Anything Ntorq. The simulator is Jupiter-only; the Ntorq driver keeps its
   own evidence base.
 
+## Local patch to the vendored bridge
+
+`research/vendor/scoot-sim/bridge/jupiter-ble-bridge.py` carries one change
+from upstream, marked in place: the link is considered up when the notify
+characteristic is subscribed, instead of requiring a separately tracked
+`Connected` signal as well.
+
+Upstream's version reported `{"ble": false}` on this BlueZ version even while
+frames flowed, because the `Connected: true` PropertiesChanged for a
+peripheral-mode connection arrives before the GATT path is usable and the
+bridge never adds the central to its set. Frames were never blocked by it —
+the bell was just wrong — but `/health` and the stats line were unreadable
+during a test.
+
+A disconnect now also clears the subscriber count, so the link cannot stay
+"up" after the phone walks away.
+
 ## Troubleshooting
 
 - `cannot reach the bridge`: start `tools/jupiter-bridge.sh` first.

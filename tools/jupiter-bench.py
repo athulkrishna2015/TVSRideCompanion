@@ -227,13 +227,17 @@ class Ride:
             out[0x19] = economy(dte_km=0)
             return out
 
-        # ride / fuel-low: accelerate to 42, hold, then coast.
-        if t < 5:
-            speed = int(42 * t / 5)
-        elif t < 25:
+        # ride / fuel-low: accelerate to 42, hold, coast, repeat. A looping
+        # cycle keeps the phone showing live values while it is being looked
+        # at, instead of a cluster that went quiet while the screenshot was
+        # taken.
+        phase = t % 40
+        if phase < 5:
+            speed = int(42 * phase / 5)
+        elif phase < 25:
             speed = 42
         else:
-            speed = max(0, int(42 - (t - 25) * 4))
+            speed = max(0, int(42 - (phase - 25) * 4))
 
         self.odo += speed * dt / 3600.0
         self.trip += speed * dt / 3600.0

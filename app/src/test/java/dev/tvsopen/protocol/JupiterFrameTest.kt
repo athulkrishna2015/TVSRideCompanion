@@ -239,6 +239,16 @@ class JupiterFrameTest {
     }
 
     @Test
+    fun `jupiter ping carries the section 2 checksum, ntorq still does not`() {
+        val jupiter = JupiterDriver(VehicleModel.JUPITER_125).buildPing(DashState(0L))!!
+        val expected = (255 - (jupiter.take(18).sumOf { it.toInt() and 0xFF } % 256)) and 0xFF
+        assertEquals(expected, jupiter[18].toInt() and 0xFF)
+
+        val ntorq = NtorqDriver().buildPing(DashState(0L))!!
+        assertEquals(0, ntorq[18].toInt())
+    }
+
+    @Test
     fun `jupiter has no second text row because 0x50 is the pictogram`() {
         val d = JupiterDriver(VehicleModel.JUPITER_125)
         assertNull(d.buildNavTextSecondary(NavStep(10, 1, 10, 7, "Example Road")))

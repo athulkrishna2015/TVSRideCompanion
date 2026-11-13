@@ -216,11 +216,19 @@ class JupiterDriver(
      * here: a 120 km/h overspeed holder and the ambient temperature. The clock
      * block and the find-me flag are shared with the Ntorq path.
      */
-    override fun buildPing(state: DashState): ByteArray? = Keepalive.build(
-        state = state,
-        overspeedLimitKph = 120,
-        ambientTempC = state.temperatureC,
-    )
+    override fun buildPing(state: DashState): ByteArray? {
+        val ping = Keepalive.build(
+            state = state,
+            overspeedLimitKph = 120,
+            ambientTempC = state.temperatureC,
+        )
+        // The Ntorq keepalive carries no checksum (byte 18 is zero in the
+        // official builder). The Jupiter spec says every outbound frame does,
+        // so the checksum is applied here rather than in [Keepalive], where it
+        // would silently change Ntorq behaviour.
+        ping[18] = ((255 - (ping.take(18).sumOf { it.toInt() and 0xFF } % 256)) and 0xFF).toByte()
+        return ping
+    }
 
     override fun buildNavControl(nav: NavStep): ByteArray? =
         PacketBuilder.navigationControl(nav)
