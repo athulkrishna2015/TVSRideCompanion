@@ -152,7 +152,7 @@ class JupiterFrameTest {
         assertEquals(0xF1, p[1].toInt() and 0xFF)
         assertEquals(13, p[9].toInt())   // day
         assertEquals(9, p[11].toInt())   // October, zero-based
-        assertEquals(2026 and 0xFF, p[13].toInt())
+        assertEquals(2026 and 0xFF, p[13].toInt() and 0xFF)
         assertEquals(0xFF.toByte(), p[19])
     }
 

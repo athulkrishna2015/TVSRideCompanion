@@ -828,3 +828,26 @@ both sources.
 - Answering a call from the cluster. It needs the default-dialer role, which
   this app does not take; `CallButtons` dispatches a headset-hook key event and
   says so in its own log.
+
+### Reference and how to reproduce it
+
+- `docs/reference/scoot-releases-repo.md` — a condensed review of the whole
+  upstream feed: every file, what it is evidence for, and what was adopted or
+  deliberately skipped.
+- `docs/reference/jupiter-scoot.md` — the frame tables themselves.
+- `docs/SIMULATOR.md` — running the upstream simulator locally. It works on
+  this laptop: the bridge advertises the real Jupiter service UUID, so the app
+  can be exercised end-to-end with **no scooter in range**, and
+  `tools/jupiter-bench.py` supplies the telemetry.
+
+Two facts from that material that are easy to get wrong:
+
+- **Inbound byte 18 of `0x10` is the RPM low byte, not a checksum.** The
+  cluster does not compute the phone-side formula there and the stock app never
+  verifies an inbound checksum; validation is structural only (length 20,
+  start byte `0x5A`/`0x9B`/`0x5B`, end byte `0xFF`). A bench that writes a
+  checksum at byte 18 silently corrupts RPM.
+- **Only two outbound frames lead with `0x5A`:** navigation control (`0x4E`)
+  and brightness (`0xF1`). Navigation *text* (`0x4F`) and calibration (`0x73`)
+  keep the `0x5B` lead.
+
