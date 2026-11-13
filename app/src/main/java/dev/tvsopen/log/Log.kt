@@ -119,6 +119,24 @@ object Log {
     /** Ceiling on remembered payloads, so a long ride cannot grow this forever. */
     private const val FRAME_SIG_CAP = 256
 
+    /**
+     * Shortest gap between two logged hex dumps of the **same data id**.
+     *
+     * Collapsing identical payloads is not enough on a live link: the cluster
+     * stamps every `0x10` with a moving odometer and every `0x18` with a runtime
+     * counter, so no two consecutive frames are byte-identical and nothing ever
+     * collapses. A ten-hertz bench feed produced 2337 records in two and a half
+     * minutes, which fills the four-thousand-entry ring and rotates the file
+     * sink inside ten minutes — losing the start of the ride, which is the part
+     * worth keeping.
+     *
+     * One line per id per second keeps every distinct *change* visible while
+     * capping the stream at roughly one line per data id per second. The count
+     * of lines this dropped is appended to the next one, so nothing is
+     * silently lost.
+     */
+    private const val FRAME_MIN_INTERVAL_MS = 1000L
+
     /** Records between explicit flushes, so a crash keeps what was written. */
     private const val FLUSH_EVERY = 16
 
@@ -134,6 +152,21 @@ object Log {
     private var lastPublishAt = 0L
 
     private val frameCounts = HashMap<Int, Int>()
+
+    /**
+     * Per data-id pacing state for [frame].
+     *
+     * Keyed by the frame's data id (byte 1), not by payload: the point is to
+     * limit how often *one channel* is written down, no matter how much its
+     * contents move.
+     */
+    private class FrameGate {
+        var lastEmitAt = 0L
+        var pending = 0
+        var lastBytes: ByteArray? = null
+    }
+
+    private val frameGates = HashMap<Int, FrameGate>()
     private val lock = Any()
 
     private val _records = MutableStateFlow<List<LogRecord>>(emptyList())
@@ -354,6 +387,11 @@ object Log {
      * [FRAME_TALLY_EVERY] repeats, timestamped like any other record, so the
      * spacing stays derivable, and the final tally is flushed the moment the
      * payload changes. Only the redundancy goes.
+     *
+     * **Changing payloads are paced per data id as well.** See
+     * [FRAME_MIN_INTERVAL_MS]: a live cluster never repeats a payload, so
+     * identical-payload collapsing alone left the full byte stream on screen
+     * and in the file.
      */
     fun frame(direction: String, bytes: ByteArray, atMillis: Long = System.currentTimeMillis()) {
         _frameCount.value = _frameCount.value + 1
@@ -361,7 +399,11 @@ object Log {
         // contentHashCode compares content, not identity, so this is a genuine
         // payload test; a collision would only merge two already-identical lines.
         val sig = 31 * direction.hashCode() + bytes.contentHashCode()
-        val seen: Int
+        val id = (bytes.getOrNull(1)?.toInt() ?: -1) and 0xFF
+
+        var seen: Int
+        var suppressed = 0
+        var emit: Boolean
         synchronized(lock) {
             // **Per payload, not per run.** A first attempt collapsed only
             // *consecutive* repeats, which is nearly useless here: the cluster
@@ -374,14 +416,37 @@ object Log {
             seen = (frameCounts[sig] ?: 0) + 1
             if (frameCounts.size > FRAME_SIG_CAP) frameCounts.clear()
             frameCounts[sig] = seen
+
+            val gate = frameGates.getOrPut(id) { FrameGate() }
+            val sameAsLast = gate.lastBytes?.contentEquals(bytes) == true
+            gate.pending++
+            emit = if (sameAsLast) {
+                // An unchanged payload keeps the old rule: a few full dumps,
+                // then a countable tally.
+                seen <= FRAME_FIRST_N
+            } else {
+                // A changed payload is what matters, but writing every one of
+                // them is what flooded the log. Pace them. The first frame of a
+                // channel is always written, so a test clock starting at zero
+                // still sees it.
+                gate.lastBytes == null ||
+                    atMillis - gate.lastEmitAt >= FRAME_MIN_INTERVAL_MS
+            }
+            if (emit) {
+                suppressed = gate.pending - 1
+                gate.pending = 0
+                gate.lastEmitAt = atMillis
+                gate.lastBytes = bytes.copyOf()
+            }
         }
-        if (seen > FRAME_FIRST_N) {
+        if (!emit) {
             if (seen % FRAME_TALLY_EVERY == 0) {
                 log(Level.DEBUG, "BLE", "$direction … unchanged, x$seen")
             }
             return
         }
-        log(Level.DEBUG, "BLE", "$direction ${hex(bytes)} (${bytes.size} bytes)")
+        val suffix = if (suppressed > 0) " (+$suppressed more)" else ""
+        log(Level.DEBUG, "BLE", "$direction ${hex(bytes)} (${bytes.size} bytes)$suffix")
     }
 
     /**

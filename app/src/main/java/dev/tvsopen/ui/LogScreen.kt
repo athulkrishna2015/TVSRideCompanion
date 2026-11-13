@@ -53,7 +53,12 @@ fun LogScreen(modifier: Modifier = Modifier) {
     val records by Log.records.collectAsStateWithLifecycle()
     val frameCount by Log.frameCount.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    var minLevel by remember { mutableStateOf(Level.DEBUG) }
+    // Default to INFO, not DEBUG. Raw hex frames are DEBUG records, and a live
+    // link produces one per channel per second at best; opening the tab on
+    // DEBUG buried the events that explain a session (service created,
+    // connected, subscribed, decoded) under a wall of telemetry. The frames are
+    // one tap away and the caption below says so.
+    var minLevel by remember { mutableStateOf(Level.INFO) }
     var autoScroll by remember { mutableStateOf(true) }
 
     val visible = remember(records, minLevel) {
@@ -75,7 +80,8 @@ fun LogScreen(modifier: Modifier = Modifier) {
         ) {
             Column(Modifier.padding(12.dp)) {
                 Text(
-                    "${frameCount} frames · ${visible.size} shown",
+                    "${frameCount} frames · ${visible.size} shown" +
+                        if (minLevel > Level.DEBUG) " · tap DEBUG for raw frames" else "",
                     style = MaterialTheme.typography.labelLarge,
                 )
                 Row(
