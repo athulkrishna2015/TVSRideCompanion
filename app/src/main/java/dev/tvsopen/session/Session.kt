@@ -92,6 +92,23 @@ data class HudState(
     val lastError: String? = null,
 )
 
+/**
+ * A call or message to mirror on the cluster.
+ *
+ * [subtitle] carries the number or a short source label (e.g. "WhatsApp").
+ * The message text itself is never included: the cluster gets a name and a
+ * count, not the content.
+ */
+data class ClusterAlert(
+    val kind: Kind,
+    val title: String,
+    val subtitle: String = "",
+    /** Source notification key, so removal clears only the alert it posted. */
+    val key: String = "",
+) {
+    enum class Kind { CALL, MESSAGE }
+}
+
 data class ConnectionState1(
     val state: ConnectionState = ConnectionState.DISCONNECTED,
     val model: VehicleModel = VehicleModel.UNKNOWN,
@@ -126,6 +143,9 @@ object Session {
 
     private val _hud = MutableStateFlow(HudState())
     val hud: StateFlow<HudState> = _hud.asStateFlow()
+
+    private val _alert = MutableStateFlow<ClusterAlert?>(null)
+    val alert: StateFlow<ClusterAlert?> = _alert.asStateFlow()
 
     private val _connection = MutableStateFlow(ConnectionState1())
     val connection: StateFlow<ConnectionState1> = _connection.asStateFlow()
@@ -304,5 +324,15 @@ object Session {
 
     fun onHud(update: (HudState) -> HudState) {
         _hud.value = update(_hud.value)
+    }
+
+    /** Post or clear the active cluster alert (call/message). */
+    fun onAlert(alert: ClusterAlert?) {
+        _alert.value = alert
+    }
+
+    /** Clear the alert only if it was posted by [key]. */
+    fun clearAlert(key: String) {
+        if (_alert.value?.key == key) _alert.value = null
     }
 }

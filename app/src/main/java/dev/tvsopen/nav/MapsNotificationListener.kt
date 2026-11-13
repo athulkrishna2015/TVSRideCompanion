@@ -1,9 +1,13 @@
 package dev.tvsopen.nav
 
 import android.app.Notification
+import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import dev.tvsopen.log.Log
+import dev.tvsopen.prefs.RidePrefs
+import dev.tvsopen.session.ClusterAlert
 import dev.tvsopen.session.Session
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -105,10 +109,6 @@ class MapsNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val n = sbn ?: return
-        // packageName is platform-defined non-null, but it is typed String? in
-        // the SDK. `?: return` on a non-null type is a compile error, so it was
-        // written as a pointless `n.packageName ?: return` elsewhere; bind it
-        // plainly and let the next line filter.
         val pkg = n.packageName
         val extras = n.notification?.extras ?: return
         if (pkg.isBlank()) return
@@ -119,10 +119,6 @@ class MapsNotificationListener : NotificationListenerService() {
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim().orEmpty()
         val ongoing = n.isOngoing
 
-        // Google Maps does not put the distance where most providers do, so the
-        // distance is read across all four fields before deciding whether this
-        // notification is navigation at all. See NavParsing for the observed
-        // format and why the title has to be searched too.
         val parsed = NavParsing.parse(title, text, bigText, subText)
         val distance = parsed.distanceMeters
 
@@ -132,8 +128,39 @@ class MapsNotificationListener : NotificationListenerService() {
                 (ongoing && title.isNotEmpty() && (text.isNotEmpty() || bigText.isNotEmpty()) &&
                     distance >= 0))
 
-        if (!looksLikeNav) return
+        if (looksLikeNav) {
+            postNav(pkg, parsed)
+            return
+        }
 
+        val prefs = RidePrefs.load(this)
+        val category = n.notification?.category
+        val isCall = category == Notification.CATEGORY_CALL ||
+            extras.containsKey("android.telecom.extra.INCOMING_CALL_EXTRAS") ||
+            extras.containsKey("android.telecom.extra.INCOMING_CALL_ADDRESS")
+        if (isCall) {
+            // Phone dialer calls follow the phone-calls toggle; VoIP/app calls
+            // (WhatsApp, Telegram, …) are mirrored when phone calls are enabled,
+            // since the cluster shows "who is calling" regardless of transport.
+            if (prefs.mirrorPhoneCalls) {
+                postCall(n.key, pkg, extras, title, text)
+            }
+            return
+        }
+
+        val hasMessageStyle = extractMessagingStyle(extras) != null
+        val isMessage = hasMessageStyle || category == Notification.CATEGORY_MESSAGE
+        if (isMessage && prefs.mirrorMessages) {
+            // Only mirror messaging apps; a random app using MessagingStyle for
+            // progress would be noise. Known packages plus any app whose
+            // category is explicitly MESSAGE.
+            if (pkg in MESSAGE_PACKAGES || category == Notification.CATEGORY_MESSAGE || hasMessageStyle) {
+                postMessage(n.key, pkg, extras, title)
+            }
+        }
+    }
+
+    private fun postNav(pkg: String, parsed: ParsedNav) {
         val step = NavInstruction(
             title = parsed.maneuver,
             street = parsed.street,
@@ -142,12 +169,10 @@ class MapsNotificationListener : NotificationListenerService() {
             pictogram = parsed.pictogram,
             provider = pkg,
         )
-
         Log.i(
             TAG,
             "nav from $pkg: '${step.title}' / '${step.street}' " +
-                "d=${step.distanceMeters}m eta=${step.etaMinutes}m pic=${step.pictogram} " +
-                "[raw title='$title' text='$text' big='$bigText' sub='$subText']",
+                "d=${step.distanceMeters}m eta=${step.etaMinutes}m pic=${step.pictogram}",
         )
         Session.onHud {
             it.copy(
@@ -160,30 +185,94 @@ class MapsNotificationListener : NotificationListenerService() {
                 provider = step.provider,
             )
         }
-        // A repost cancels a pending "navigation ended", so a refresh that
-        // arrives as remove-then-post keeps the HUD alive.
         pendingClear?.let { handler.removeCallbacks(it) }
         pendingClear = null
         _instruction.value = step
         _navigating.value = true
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // Bind to a non-null local first: the safe-call form below would not
-        // smart-cast, leaving sbn nullable at the log line.
-        val removed = sbn ?: return
-        if (removed.packageName !in allowedPackages) return
+    private fun isMessagingCall(pkg: String): Boolean =
+        pkg in APP_CALL_PACKAGES
 
-        // **Debounced, deliberately.** Observed on device: Google Maps posted a
-        // navigation notification and then *cancelled it nine seconds later*
-        // while still navigating — it re-creates the notification as it
-        // refreshes. Clearing straight away blanked the cluster display for a
-        // journey that was still under way, and the rider would have watched
-        // directions vanish mid-turn.
-        //
-        // So a removal only ends navigation if nothing reposts within
-        // [CLEAR_GRACE_MS]. A repost cancels this, which is the common case and
-        // the one that used to be broken.
+    private fun postCall(key: String, pkg: String, extras: Bundle, title: String, text: String) {
+        val number = extras.getString("android.telecom.extra.INCOMING_CALL_ADDRESS")
+            ?: extras.getString("android.text")
+            ?: text.takeIf { it.isNotBlank() }
+            ?: ""
+        val name = title.ifBlank { number }.ifBlank { "Incoming call" }
+        val label = appLabel(pkg).takeUnless { it == "Phone" } ?: ""
+        Log.i(TAG, "call from $pkg: '$name' '$number'")
+        Session.onAlert(
+            ClusterAlert(
+                kind = ClusterAlert.Kind.CALL,
+                title = name,
+                subtitle = if (label.isNotBlank() && number.isNotBlank()) "$label · $number" else number.ifBlank { label },
+                key = key,
+            ),
+        )
+    }
+
+    private fun postMessage(key: String, pkg: String, extras: Bundle, title: String) {
+        val info = extractMessageInfo(extras, title)
+        val app = appLabel(pkg)
+        val display = when {
+            info.title.isNotBlank() && info.count > 1 -> "${info.title} ($app ${info.count})"
+            info.title.isNotBlank() && app.isNotBlank() -> "${info.title} ($app)"
+            info.title.isNotBlank() -> info.title
+            info.count > 1 -> "$app: ${info.count} msgs"
+            else -> app.ifBlank { "Message" }
+        }
+        Log.i(TAG, "message from $pkg: '$display'")
+        Session.onAlert(
+            ClusterAlert(
+                kind = ClusterAlert.Kind.MESSAGE,
+                title = display,
+                subtitle = app,
+                key = key,
+            ),
+        )
+    }
+
+    private data class MessageInfo(val title: String, val count: Int)
+
+    private fun extractMessageInfo(extras: Bundle, fallbackTitle: String): MessageInfo {
+        val style = extractMessagingStyle(extras)
+        if (style != null) {
+            val conv = style.conversationTitle?.toString()?.trim().orEmpty()
+            val messages = style.messages
+            val count = messages.size
+            val sender = conv.ifBlank {
+                messages.lastOrNull()?.senderPerson?.name?.toString()?.trim().orEmpty()
+            }
+            return MessageInfo(sender.ifBlank { fallbackTitle }, count.coerceAtLeast(1))
+        }
+        return MessageInfo(fallbackTitle, 1)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun extractMessagingStyle(extras: Bundle): Notification.MessagingStyle? {
+        val p = extras.getParcelable<android.os.Parcelable>("android.messagingStyle")
+            ?: extras.getParcelable<android.os.Parcelable>(Notification.EXTRA_MESSAGING_STYLE)
+        return p as? Notification.MessagingStyle
+    }
+
+    private fun appLabel(pkg: String): String = when (pkg) {
+        "com.whatsapp" -> "WhatsApp"
+        "org.telegram.messenger", "org.telegram.messenger.web" -> "Telegram"
+        "com.google.android.apps.messaging" -> "Messages"
+        "com.facebook.orca" -> "Messenger"
+        "com.instagram.android" -> "Instagram"
+        "com.google.android.dialer", "com.android.dialer", "com.samsung.android.dialer" -> "Phone"
+        else -> pkg.substringAfterLast('.').replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        val removed = sbn ?: return
+        val key = removed.key
+        // Clear a call/message alert posted from this notification.
+        Session.clearAlert(key)
+
+        if (removed.packageName !in allowedPackages) return
         pendingClear?.let { handler.removeCallbacks(it) }
         pendingClear = Runnable {
             Log.i(TAG, "navigation ended (${removed.packageName})")
@@ -208,6 +297,28 @@ class MapsNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MapsNavListener"
+
+        /** Apps commonly posting messages/calls that riders expect to see. */
+        private val APP_CALL_PACKAGES = setOf(
+            "com.whatsapp",
+            "org.telegram.messenger",
+            "org.telegram.messenger.web",
+            "com.facebook.orca",
+            "com.google.android.apps.tachyon", // Duo/Meet legacy
+            "com.instagram.android",
+        )
+
+        private val MESSAGE_PACKAGES = setOf(
+            "com.whatsapp",
+            "org.telegram.messenger",
+            "org.telegram.messenger.web",
+            "com.facebook.orca",
+            "com.instagram.android",
+            "com.google.android.apps.messaging",
+            "com.samsung.android.messaging",
+            "com.android.mms",
+            "org.thoughtcrime.securesms", // Signal
+        )
 
         /**
          * How long a cancelled navigation notification is given to be replaced.

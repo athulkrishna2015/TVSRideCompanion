@@ -13,11 +13,15 @@ import dev.tvsopen.log.Log
 import dev.tvsopen.nav.NavInstruction
 import dev.tvsopen.nav.NavigationBridge
 import dev.tvsopen.prefs.RidePrefs
+import dev.tvsopen.protocol.Command
 import dev.tvsopen.protocol.DashState
 import dev.tvsopen.protocol.DriverRegistry
 import dev.tvsopen.protocol.NtorqDriver
+import dev.tvsopen.protocol.OutboundId
+import dev.tvsopen.protocol.PacketBuilder
 import dev.tvsopen.protocol.ProtocolDriver
 import dev.tvsopen.protocol.VehicleModel
+import dev.tvsopen.session.ClusterAlert
 import dev.tvsopen.session.Session
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -368,6 +372,22 @@ class RideService : android.app.Service() {
                 }
             }
             launch {
+                var lastAlert: ClusterAlert? = null
+                Session.alert.collect { alert ->
+                    val t = ble ?: return@collect
+                    if (t.state.value != ConnectionState.CONNECTED) {
+                        lastAlert = alert
+                        return@collect
+                    }
+                    if (alert != null) {
+                        sendAlert(driver, t, alert)
+                    } else if (lastAlert?.kind == ClusterAlert.Kind.CALL) {
+                        sendCallEnded(driver, t)
+                    }
+                    lastAlert = alert
+                }
+            }
+            launch {
                 b.hud.collect { h ->
                     Session.onHud { it.copy(framesSent = h.framesSent, lastError = h.lastError) }
                 }
@@ -405,6 +425,44 @@ class RideService : android.app.Service() {
         val frame = drv.buildRiderName(name) ?: return
         scope.launch {
             if (transport.write(frame)) Log.i(TAG, "rider name sent (${name.length} chars)")
+        }
+    }
+
+    private suspend fun sendAlert(
+        driver: ProtocolDriver,
+        transport: ScooterBleService,
+        alert: ClusterAlert,
+    ) {
+        when (alert.kind) {
+            ClusterAlert.Kind.CALL -> {
+                val number = alert.subtitle.substringAfterLast('·').trim().ifBlank { alert.subtitle }
+                val name = alert.title.takeIf { it.isNotBlank() && it != number }
+                val frames = driver.buildCallerFrames(number, null, name)
+                if (frames.isNotEmpty()) {
+                    Log.i(TAG, "cluster call alert: '$name' '$number' (${frames.size} frames)")
+                    frames.forEach { transport.write(it) }
+                } else {
+                    // Generic fallback: a plain text row with the caller.
+                    val text = if (name != null) "$name $number" else number.ifBlank { alert.title }
+                    transport.write(PacketBuilder.textRow(OutboundId.CALLER, text))
+                }
+            }
+            ClusterAlert.Kind.MESSAGE -> {
+                val text = alert.title.take(17)
+                Log.i(TAG, "cluster message alert: '$text'")
+                val frame = driver.buildSms(text) ?: PacketBuilder.textRow(OutboundId.SMS, text)
+                transport.write(frame)
+            }
+        }
+    }
+
+    private suspend fun sendCallEnded(driver: ProtocolDriver, transport: ScooterBleService) {
+        // Best-effort clear: send an idle/ended caller frame where the driver
+        // supports it. The cluster typically times the display out on its own.
+        val frame = driver.buildCallerInfo("", null, Command.CALL_IDLE)
+        if (frame != null) {
+            Log.i(TAG, "cluster call alert cleared")
+            transport.write(frame)
         }
     }
 

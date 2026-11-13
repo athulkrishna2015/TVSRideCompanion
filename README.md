@@ -3,7 +3,7 @@
 A third-party companion app for **TVS SmartXonnect** vehicles — Ntorq, Jupiter,
 Apache, Raider, iQube. Speaks the instrument cluster's Bluetooth LE protocol
 directly and mirrors turn-by-turn navigation from **whatever maps app you
-already use**, with **no TVS account and no network access at all**.
+already use**, with **no TVS account, no TVS servers, and no telemetry upload**.
 
 ```
 Google Maps / MapMyIndia / Organic Maps / Waze
@@ -12,8 +12,9 @@ Google Maps / MapMyIndia / Organic Maps / Waze
   NotificationListenerService  ──►  pictogram + text  ──►  BLE  ──►  cluster
 ```
 
-The manifest has **no `INTERNET` permission**. That is deliberate: "works
-without logging in" is enforced by the build, not promised in a README.
+`INTERNET` is declared only for embedded map tiles, place search and routing
+(OpenStreetMap / user-supplied routing keys where configured). It is never used
+to contact TVS or to upload data, and contact/call-log data stays on the device.
 
 ---
 
@@ -70,15 +71,21 @@ earlier build logged a dropped write every two seconds for as long as the link
 was down, which was 28% of every log file — the same failure hiding in the
 evidence as in the display.
 
+## Download
+
+- **Debug APK (every push/PR):** open the latest successful [Android Actions run](https://github.com/tvsopen/TVSRideCompanion/actions/workflows/android.yml), download the **`app-debug`** artifact, and install `app-debug.apk` (`adb install -r app-debug.apk`). This is the debug-signed build used for development and `run-as` log access.
+- **Tagged releases:** a `v*` tag (or a manual workflow dispatch) also attaches the same APK to a [GitHub Release](https://github.com/tvsopen/TVSRideCompanion/releases).
+
 ### Tested on a phone. Never connected to a scooter.
 
 Those are two very different claims and it is worth keeping them apart.
 
 `:app:assembleDebug` succeeds with zero warnings; CI runs the unit tests and
-asserts the merged manifest contains **no `INTERNET` permission**. The app has
-been installed and driven on a real device many times — which is how the
-Overview/Log tab swap, an unreachable Ride Mode toggle, and a log sink that
-discarded every session were all found. None of them were visible to any test.
+asserts the merged manifest's permission set (including `INTERNET` for embedded
+maps, and the expected BLE/caller-ID permissions). The app has been installed
+and driven on a real device many times — which is how the Overview/Log tab swap,
+an unreachable Ride Mode toggle, and a log sink that discarded every session
+were all found. None of them were visible to any test.
 
 ### Connected, and what that changed
 

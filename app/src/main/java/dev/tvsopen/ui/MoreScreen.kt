@@ -155,7 +155,7 @@ fun MoreScreen(
                         if (notificationAccessGranted)
                             "Notification access: granted"
                         else
-                            "Notification access: required to read navigation",
+                            "Notification access: required to read navigation, calls and messages",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     if (!notificationAccessGranted) {
@@ -165,6 +165,66 @@ fun MoreScreen(
                             Spacer(Modifier.size(6.dp))
                             Text("Open notification access")
                         }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text("ALERTS", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        item {
+            val ctx = LocalContext.current
+            val prefs = remember { RidePrefs.load(ctx) }
+            var mirrorCalls by remember { mutableStateOf(prefs.mirrorPhoneCalls) }
+            var mirrorMessages by remember { mutableStateOf(prefs.mirrorMessages) }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Phone & app calls", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Show incoming calls (phone, WhatsApp, Telegram, etc.) on the cluster.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(
+                            checked = mirrorCalls,
+                            onCheckedChange = {
+                                mirrorCalls = it
+                                prefs.mirrorPhoneCalls = it
+                            },
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Messages", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Show sender and app (WhatsApp, Telegram, SMS, etc.). Message text is never sent.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(
+                            checked = mirrorMessages,
+                            onCheckedChange = {
+                                mirrorMessages = it
+                                prefs.mirrorMessages = it
+                            },
+                        )
                     }
                 }
             }

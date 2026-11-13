@@ -73,6 +73,16 @@ class RidePrefs private constructor(private val ctx: Context) {
         get() = sp.getBoolean(KEY_NAVIGATION_MIRRORING, true)
         set(value) { sp.edit().putBoolean(KEY_NAVIGATION_MIRRORING, value).apply() }
 
+    /** Mirror incoming phone calls to the cluster (caller name/number). */
+    var mirrorPhoneCalls: Boolean
+        get() = sp.getBoolean(KEY_MIRROR_PHONE_CALLS, true)
+        set(value) { sp.edit().putBoolean(KEY_MIRROR_PHONE_CALLS, value).apply() }
+
+    /** Mirror message/app notifications (sender and count, never the message text). */
+    var mirrorMessages: Boolean
+        get() = sp.getBoolean(KEY_MIRROR_MESSAGES, false)
+        set(value) { sp.edit().putBoolean(KEY_MIRROR_MESSAGES, value).apply() }
+
     /** Local profile name; UI can edit it without sending an unverified packet. */
     var riderName: String?
         get() = sp.getString(KEY_RIDER_NAME, null)
@@ -92,6 +102,8 @@ class RidePrefs private constructor(private val ctx: Context) {
         private const val KEY_RIDER_NAME = "rider_name"
         private const val KEY_ONLY_SMART_XONNECT = "only_smart_xonnect"
         private const val KEY_NAVIGATION_MIRRORING = "navigation_mirroring"
+        private const val KEY_MIRROR_PHONE_CALLS = "mirror_phone_calls"
+        private const val KEY_MIRROR_MESSAGES = "mirror_messages"
         private const val KEY_SELECTED_MODEL_PREFIX = "selected_model_"
 
         private fun modelKey(address: String) = "$KEY_SELECTED_MODEL_PREFIX$address"
