@@ -35,9 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import android.net.Uri
 import dev.tvsopen.session.ConnectionState1
 import dev.tvsopen.session.HudState
 import dev.tvsopen.session.ParkedInfo
@@ -99,9 +102,12 @@ fun HomeScreen(
 
         // Card navigation rather than a value grid, mirroring the official app's
         // dashboard. The values live on the Overview tab where they belong.
+        val ctx = LocalContext.current
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             NavCard(Modifier.weight(1f), Icons.Filled.Speed, "Overview", onOpenOverview)
-            NavCard(Modifier.weight(1f), Icons.Filled.Place, "Last parked", onOpenParked)
+            NavCard(Modifier.weight(1f), Icons.Filled.Place, "Last parked") {
+                if (!openParkedLocation(ctx, parked)) onOpenParked()
+            }
         }
         Spacer(Modifier.height(12.dp))
         ConnectCard(connected, connection.state.label, onConnect)
@@ -119,7 +125,9 @@ fun HomeScreen(
         Spacer(Modifier.height(12.dp))
         FindMyCard(findMyEnabled, onFindMyChange)
         Spacer(Modifier.height(12.dp))
-        LastParkedCard(parked)
+        LastParkedCard(parked) {
+            openParkedLocation(ctx, parked)
+        }
 
         // Telemetry freshness is the number that actually tells you whether the
         // link is alive. The frame counter belongs in the Log tab, not here.
@@ -314,16 +322,18 @@ private fun MirrorNavCard(enabled: Boolean, hud: HudState, onChange: (Boolean) -
 }
 
 @Composable
-private fun LastParkedCard(parked: ParkedInfo?) {
+private fun LastParkedCard(parked: ParkedInfo?, onClick: () -> Unit = {}) {
     // Recomputed only when the record changes, not on every recomposition.
     val ago = remember(parked) {
         parked?.let { relativeTime(System.currentTimeMillis() - it.atMillis) }
     }
+    val clickable = parked?.label?.split(",")?.mapNotNull { it.trim().toDoubleOrNull() }?.size == 2
     ActionCard(
         background = LocalTilePalette.current.neutral,
         icon = Icons.Filled.Place,
         title = "Last Parked",
         subtitle = parked?.label ?: "Not recorded on this device",
+        onClick = if (clickable) onClick else null,
         trailing = {
             Text(
                 if (ago != null) "$ago ago" else "—",
@@ -345,6 +355,19 @@ private fun LastParkedCard(parked: ParkedInfo?) {
     )
 }
 
+private fun openParkedLocation(context: android.content.Context, parked: ParkedInfo?): Boolean {
+    val label = parked?.label ?: return false
+    val parts = label.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+    if (parts.size != 2) return false
+    val lat = parts[0]
+    val lon = parts[1]
+    val uri = Uri.parse("geo:$lat,$lon?q=$lat,$lon(Parked scooter)")
+    return runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    }.getOrDefault(false)
+}
+
 
 @Composable
 private fun FindMyCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
@@ -363,14 +386,10 @@ private fun ActionCard(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    onClick: (() -> Unit)? = null,
     trailing: @Composable () -> Unit,
 ) {
-    Surface(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = background,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-    ) {
+    val content: @Composable () -> Unit = {
         Row(
             Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -397,6 +416,24 @@ private fun ActionCard(
             }
             trailing()
         }
+    }
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = background,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            content = content,
+        )
+    } else {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = background,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            content = content,
+        )
     }
 }
 

@@ -1,13 +1,21 @@
 package dev.tvsopen.transport
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import dev.tvsopen.session.ParkedInfo
+import java.util.Locale
 import dev.tvsopen.R
 import dev.tvsopen.log.Log
 import dev.tvsopen.nav.NavInstruction
@@ -86,6 +94,9 @@ class RideService : android.app.Service() {
      * this keeps us actually running. Partial, not full — the screen stays off.
      */
     private var linkWakeLock: android.os.PowerManager.WakeLock? = null
+
+    /** True after a CONNECTED state, so a disconnect records where the scooter was left. */
+    private var hadLiveLink = false
 
     private fun holdWakeLock() {
         if (linkWakeLock?.isHeld == true) return
@@ -336,6 +347,7 @@ class RideService : android.app.Service() {
                     when (st) {
                         ConnectionState.CONNECTED -> {
                             reconnectAttempt = 0
+                            hadLiveLink = true
                             notify("Connected to ${model.displayName}")
                             holdWakeLock()
                             // Auto-start here, not only from the activity's
@@ -364,6 +376,7 @@ class RideService : android.app.Service() {
                         }
                         ConnectionState.DISCONNECTED -> {
                             releaseWakeLock()
+                            recordParkedIfPossible()
                             notify("Disconnected")
                             scheduleReconnect(address, model)
                         }
@@ -466,6 +479,47 @@ class RideService : android.app.Service() {
         }
     }
 
+    private fun recordParkedIfPossible() {
+        if (!hadLiveLink) return
+        hadLiveLink = false
+        val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!fine && !coarse) {
+            Log.i(TAG, "parked spot not recorded: no location permission")
+            return
+        }
+        val lm = getSystemService(LocationManager::class.java) ?: return
+        val loc = bestLastLocation(lm) ?: run {
+            Log.i(TAG, "parked spot not recorded: no recent location fix")
+            return
+        }
+        val label = String.format(Locale.US, "%.5f, %.5f", loc.latitude, loc.longitude)
+        val info = ParkedInfo(System.currentTimeMillis(), label, null)
+        RidePrefs.load(this).saveParked(info.atMillis, info.label)
+        Session.onParked(info)
+        Log.i(TAG, "parked spot saved: $label")
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun bestLastLocation(lm: LocationManager): Location? {
+        val providers = listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+            LocationManager.PASSIVE_PROVIDER,
+        )
+        var best: Location? = null
+        for (provider in providers) {
+            val loc = runCatching {
+                val enabled = provider == LocationManager.PASSIVE_PROVIDER || lm.isProviderEnabled(provider)
+                if (enabled) lm.getLastKnownLocation(provider) else null
+            }.getOrNull() ?: continue
+            if (best == null || loc.time > best!!.time) best = loc
+        }
+        return best
+    }
+
     /**
      * Act on the two inbound channels the cluster uses as a remote control.
      *
@@ -523,6 +577,7 @@ class RideService : android.app.Service() {
         tearingDown = true
         reconnectJob?.cancel()
         reconnectJob = null
+        recordParkedIfPossible()
         linkJob?.cancel()
         linkJob = null
         bridge?.stopKeepalive()

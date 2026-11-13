@@ -152,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         ThemePrefs.load(this)
         val ridePrefs = RidePrefs.load(this)
         Session.attachRideLog(applicationContext)
+        Session.loadParked(applicationContext)
         // Restore the riding state so the toggle reflects what survived a
         // restart rather than silently reverting to off.
         Session.setRideMode(ridePrefs.rideMode)

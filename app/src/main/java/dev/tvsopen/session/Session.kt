@@ -6,6 +6,8 @@
 
 package dev.tvsopen.session
 
+import android.content.Context
+import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.DecodedFrame
 import dev.tvsopen.protocol.DriverRegistry
 import dev.tvsopen.protocol.Field
@@ -198,6 +200,14 @@ object Session {
     fun setRideMode(on: Boolean) { _rideMode.value = on }
 
     fun onParked(info: ParkedInfo) { _parked.value = info }
+
+    fun loadParked(context: Context) {
+        val p = RidePrefs.load(context)
+        val at = p.parkedAtMillis
+        if (at > 0L) {
+            _parked.value = ParkedInfo(atMillis = at, label = p.parkedLabel, distanceMeters = null)
+        }
+    }
 
     fun reset() {
         _telemetry.value = Telemetry()

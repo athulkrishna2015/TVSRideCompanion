@@ -93,6 +93,22 @@ class RidePrefs private constructor(private val ctx: Context) {
             }.apply()
         }
 
+    /** Last known parked spot, recorded locally when the link drops. */
+    var parkedAtMillis: Long
+        get() = sp.getLong(KEY_PARKED_AT, 0L)
+        private set(value) { sp.edit().putLong(KEY_PARKED_AT, value).apply() }
+
+    var parkedLabel: String?
+        get() = sp.getString(KEY_PARKED_LABEL, null)
+        private set(value) { sp.edit().putString(KEY_PARKED_LABEL, value).apply() }
+
+    fun saveParked(atMillis: Long, label: String?) {
+        sp.edit()
+            .putLong(KEY_PARKED_AT, atMillis)
+            .putString(KEY_PARKED_LABEL, label)
+            .apply()
+    }
+
     companion object {
         private const val NAME = "tvsride"
         private const val KEY_RIDE_MODE = "ride_mode"
@@ -104,6 +120,8 @@ class RidePrefs private constructor(private val ctx: Context) {
         private const val KEY_NAVIGATION_MIRRORING = "navigation_mirroring"
         private const val KEY_MIRROR_PHONE_CALLS = "mirror_phone_calls"
         private const val KEY_MIRROR_MESSAGES = "mirror_messages"
+        private const val KEY_PARKED_AT = "parked_at"
+        private const val KEY_PARKED_LABEL = "parked_label"
         private const val KEY_SELECTED_MODEL_PREFIX = "selected_model_"
 
         private fun modelKey(address: String) = "$KEY_SELECTED_MODEL_PREFIX$address"
