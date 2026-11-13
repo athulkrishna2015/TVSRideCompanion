@@ -278,19 +278,27 @@ class ScooterBleService(private val context: Context) {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            val svc = g.getService(UUID.fromString(Gatt.SERVICE))
+            val svc = resolveVerifiedService(g)
             if (svc == null) {
-                Log.w(TAG, "service ${Gatt.SERVICE} not found on ${g.device.address}")
+                Log.w(TAG, "no verified SmartXonnect service on ${g.device.address}")
                 return
             }
             val ch = svc.getCharacteristic(UUID.fromString(Gatt.WRITE))
             if (ch == null) {
+                // Unreachable after resolveVerifiedService, but the compiler
+                // needs the check and an explicit refusal beats a crash.
                 Log.w(TAG, "write characteristic ${Gatt.WRITE} missing")
                 return
             }
             writeChar = ch
-            Log.i(TAG, "service ready, write char props=0x${ch.properties.toString(16)}")
-            // Notified frames carry telemetry; subscribe when the cluster offers it.
+            Log.i(
+                TAG,
+                "service ready (${svc.uuid}), write char props=0x${ch.properties.toString(16)}",
+            )
+            // Listen before the CCCD write: the cluster can emit the 0x9A/0xF2
+            // challenge the instant the descriptor is written, and anything
+            // subscribed after that loses it. setCharacteristicNotification
+            // only arms the local callback; the descriptor write follows.
             enableNotifications(g, svc)
         }
 
@@ -371,6 +379,60 @@ class ScooterBleService(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun discoverServices(g: BluetoothGatt) {
         if (!g.discoverServices()) Log.w(TAG, "discoverServices refused")
+    }
+
+    /**
+     * Resolve the service that actually carries this protocol.
+     *
+     * The Scoot spec calls this the "verified-open gate", and the ordering
+     * matters:
+     *
+     *  1. The exact service UUID with both characteristics is the primary path.
+     *  2. If the service UUID is present but a characteristic is missing, that
+     *     is a **hard failure** — not a fallback. A cluster advertising the
+     *     service without the write characteristic cannot be driven, and
+     *     silently picking another service would drive the wrong one.
+     *  3. Only when the service UUID is absent entirely do we fall back to any
+     *     GATT service exposing both characteristic UUIDs. The characteristics
+     *     are the true protocol fingerprint: a variant cluster that moves the
+     *     service UUID still resolves.
+     *
+     * Observed on the owner's Ntorq: the cluster advertises **no service UUID**
+     * at all in its advertising payload, which is why scanning must be
+     * name-based. Discovery is a different question and this is where it is
+     * answered.
+     */
+    @SuppressLint("MissingPermission")
+    private fun resolveVerifiedService(g: BluetoothGatt): android.bluetooth.BluetoothGattService? {
+        val serviceUuid = UUID.fromString(Gatt.SERVICE)
+        val writeUuid = UUID.fromString(Gatt.WRITE)
+        val readUuid = UUID.fromString(Gatt.READ)
+
+        val exact = g.getService(serviceUuid)
+        if (exact != null) {
+            val hasBoth = exact.getCharacteristic(writeUuid) != null &&
+                exact.getCharacteristic(readUuid) != null
+            if (hasBoth) return exact
+            Log.e(
+                TAG,
+                "service $serviceUuid present but a characteristic is missing; " +
+                    "refusing the link (hard failure, no fallback)",
+            )
+            return null
+        }
+
+        val byCharacteristics = g.services?.firstOrNull {
+            it.getCharacteristic(writeUuid) != null && it.getCharacteristic(readUuid) != null
+        }
+        if (byCharacteristics == null) {
+            Log.e(TAG, "no service exposes both $writeUuid and $readUuid")
+        } else {
+            Log.w(
+                TAG,
+                "service UUID $serviceUuid absent; resolved by characteristics on ${byCharacteristics.uuid}",
+            )
+        }
+        return byCharacteristics
     }
 
     @SuppressLint("MissingPermission")

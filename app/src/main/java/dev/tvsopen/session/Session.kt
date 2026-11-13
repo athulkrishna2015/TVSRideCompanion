@@ -7,6 +7,7 @@
 package dev.tvsopen.session
 
 import dev.tvsopen.protocol.DecodedFrame
+import dev.tvsopen.protocol.DriverRegistry
 import dev.tvsopen.protocol.Field
 import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.transport.ConnectionState
@@ -221,6 +222,12 @@ object Session {
             frame.field(name)?.let { it / div }
 
         val cur = _telemetry.value
+        // The fuel byte's meaning is model-gated: the 125 family extracts the
+        // low nibble, the 110 family passes the raw byte through (dex-verified
+        // split behind JUPITER_U566). Read it from the current driver rather
+        // than hardcoding the Ntorq rule for every model.
+        val fuelLowNibble = DriverRegistry.forModel(_connection.value.model)
+            .capabilities.fuelLowNibble
         _telemetry.value = when (frame.dataId) {
             0x10 -> cur.copy(
                 speedKmh = frame.field(Field.SPEED)?.toInt() ?: cur.speedKmh,
@@ -244,7 +251,8 @@ object Session {
                 // the gauge says so. A genuine 0..6 still renders normally.
                 // Note the absence of `?: cur.fuelBars`: a rejected reading has
                 // to clear the previous one, not leave a stale level on screen.
-                fuelBars = frame.field(Field.FUEL_LEVEL)?.toInt()?.and(0x0F)
+                fuelBars = frame.field(Field.FUEL_LEVEL)?.toInt()
+                    ?.let { if (fuelLowNibble) it and 0x0F else it }
                     ?.takeIf { it in 0..Telemetry.FUEL_BAR_MAX },
                 averageSpeedKmh = frame.field(Field.AVERAGE_SPEED)?.toInt() ?: cur.averageSpeedKmh,
                 tripStatus = frame.field(Field.TRIP_STATUS)?.toInt() ?: cur.tripStatus,

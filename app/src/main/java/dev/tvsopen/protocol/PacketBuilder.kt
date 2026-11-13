@@ -197,16 +197,23 @@ object PacketBuilder {
      * ```
      * [0]  0x5A      start byte (90, START_BYTE_CONTROL)
      * [1]  0x4E      navigation control (78)
-     * [2..3] distance to turn, metres   (saturating 16-bit)
-     * [4..5] remaining time, minutes    (16-bit)
-     * [6..8] remaining distance, metres (24-bit; falls back to distance if <= 0)
+     * [2..3] distance to turn, metres   big-endian, saturating 16-bit
+     * [4..5] remaining time, minutes    big-endian 16-bit
+     * [6..8] remaining distance, metres big-endian 24-bit (falls back to distance if <= 0)
      * [9]  maneuver id (pictogram)
      * [10] text rows in use (1)
      * [11] active flag (1/0)
-     * [12..15] zero
-     * [16..19] zero
+     * [12..18] zero
      * [19] 0xFF terminator
      * ```
+     *
+     * **Big-endian.** An earlier revision built these three fields
+     * little-endian, from a report transcription. The Scoot protocol spec
+     * (dex-derived, and consistent with every other multi-byte field in this
+     * protocol) has them big-endian, and the vendor's own `DataParser` is
+     * big-endian throughout. The little-endian form is superseded; this is
+     * still unverified on the cluster itself, so it is the first thing a live
+     * navigation capture should confirm.
      *
      * **No checksum.** The control frame does not carry one — only the
      * outbound mobile-data packet does.
@@ -464,16 +471,20 @@ object PacketBuilder {
         return b
     }
 
-    // ---- little-endian helpers ----
+    // ---- big-endian helpers ----
+    //
+    // Every multi-byte protocol field is big-endian (the vendor DataParser, the
+    // odometer, trip, RPM, ISS and the Jupiter nav control all agree). These
+    // were little-endian; see navigationControl's note.
 
     private fun putUInt16(b: ByteArray, off: Int, v: Int) {
-        b[off] = (v and 0xFF).toByte()
-        b[off + 1] = ((v shr 8) and 0xFF).toByte()
+        b[off] = ((v shr 8) and 0xFF).toByte()
+        b[off + 1] = (v and 0xFF).toByte()
     }
 
     private fun putUInt24(b: ByteArray, off: Int, v: Int) {
-        b[off] = (v and 0xFF).toByte()
+        b[off] = ((v shr 16) and 0xFF).toByte()
         b[off + 1] = ((v shr 8) and 0xFF).toByte()
-        b[off + 2] = ((v shr 16) and 0xFF).toByte()
+        b[off + 2] = (v and 0xFF).toByte()
     }
 }

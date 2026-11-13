@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -48,6 +49,29 @@ class RideService : android.app.Service() {
     private var lastAddress: String? = null
     /** Driver for the current link; needed outside connect() by the rider-name send. */
     private var driver: ProtocolDriver? = null
+    /** Replays cluster media keys and call-switch presses on the phone. */
+    private var mediaKeys: MediaKeys? = null
+    private var callButtons: CallButtons? = null
+    /**
+     * Last call-switch value seen on 0x10 byte 12.
+     *
+     * The cluster repeats the switch inside a ~50 Hz stream, so acting on every
+     * frame would answer and hang up twenty times in half a second. Only a
+     * change from 0 to a command value is a press.
+     */
+    private var lastCallSwitch = 0
+    /**
+     * Unexpected-drop recovery.
+     *
+     * The cluster drops the link on its own schedule (ignition, range, a stack
+     * hiccup) and never reconnects to us. The official app retries with a
+     * 5/10/20/40/60-second backoff, capped at ten attempts, and only then
+     * gives up. Without it a ride that starts with one drop is over.
+     */
+    private var reconnectJob: Job? = null
+    private var reconnectAttempt = 0
+    /** Set by [teardown] so a deliberate disconnect does not trigger a retry. */
+    private var tearingDown = false
     /**
      * Held while connected, released on disconnect and on teardown.
      *
@@ -187,6 +211,10 @@ class RideService : android.app.Service() {
         // pings.
         linkJob?.cancel()
         linkJob = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempt = 0
+        tearingDown = false
         bridge?.stopKeepalive()
         bridge?.stopNavigation()
 
@@ -208,6 +236,9 @@ class RideService : android.app.Service() {
         val b = NavigationBridge(transport, scope, driver)
         bridge = b
         this.driver = driver
+        mediaKeys = mediaKeys ?: MediaKeys(applicationContext)
+        callButtons = callButtons ?: CallButtons(applicationContext)
+        lastCallSwitch = 0
         lastModel = model
         lastAddress = address
         RidePrefs.load(this).updateLastConnection(address, model.name)
@@ -282,7 +313,11 @@ class RideService : android.app.Service() {
                         Log.i(TAG, "answering cluster challenge")
                         transport.write(response)
                     } else {
-                        driver.decode(frame.bytes)?.let { Session.onFrame(it) }
+                        val decoded = driver.decode(frame.bytes)
+                        if (decoded != null) {
+                            Session.onFrame(decoded)
+                            handleClusterButton(driver, decoded)
+                        }
                     }
                 }
             }
@@ -296,6 +331,7 @@ class RideService : android.app.Service() {
                     Log.d(TAG, "state -> $st")
                     when (st) {
                         ConnectionState.CONNECTED -> {
+                            reconnectAttempt = 0
                             notify("Connected to ${model.displayName}")
                             holdWakeLock()
                             // Auto-start here, not only from the activity's
@@ -312,17 +348,20 @@ class RideService : android.app.Service() {
                             // the cluster shows it on ignition, and a name saved
                             // while disconnected goes out on the next connect.
                             sendRiderNameIfConnected()
-                            b.startKeepalive {
-                                DashState(
-                                    timeMillis = System.currentTimeMillis(),
-                                    batteryBars = batteryBars(),
-                                    signalBars = 4,
-                                )
+                            if (driver.capabilities.keepalive) {
+                                b.startKeepalive {
+                                    DashState(
+                                        timeMillis = System.currentTimeMillis(),
+                                        batteryBars = batteryBars(),
+                                        signalBars = 4,
+                                    )
+                                }
                             }
                         }
                         ConnectionState.DISCONNECTED -> {
                             releaseWakeLock()
                             notify("Disconnected")
+                            scheduleReconnect(address, model)
                         }
                         else -> Unit
                     }
@@ -369,7 +408,63 @@ class RideService : android.app.Service() {
         }
     }
 
+    /**
+     * Act on the two inbound channels the cluster uses as a remote control.
+     *
+     * `0x6B` carries media commands on both families (`0x54` is the ACK/doc
+     * channel, not a command). `0x10` byte 12 carries the call switch on the
+     * Jupiter; on the Ntorq the same offset is transcribed as a location tag,
+     * so the call path is gated on the driver's capability rather than on the
+     * id alone.
+     */
+    private fun handleClusterButton(driver: ProtocolDriver, frame: dev.tvsopen.protocol.DecodedFrame) {
+        if (frame.dataId == 0x6B && driver.capabilities.musicKeys) {
+            val cmd = frame.field(dev.tvsopen.protocol.Field.MUSIC_COMMAND)?.toInt() ?: return
+            mediaKeys?.handle(cmd)
+            return
+        }
+        if (frame.dataId == 0x10 && driver.capabilities.callButtons) {
+            val sw = frame.field(dev.tvsopen.protocol.Field.SWITCH_STATUS)?.toInt() ?: 0
+            // Edge-trigger: 0 means "no command", 1..4 is a press. The stream
+            // repeats the same value for tens of frames, so act only on the
+            // transition into a command.
+            if (sw in 1..4 && sw != lastCallSwitch) {
+                callButtons?.handle(sw)
+            }
+            lastCallSwitch = sw
+        }
+    }
+
+    /**
+     * Retry an unexpected drop with the official backoff.
+     *
+     * Launched on the service scope, not on `linkJob`: [connect] cancels
+     * `linkJob`, so a retry launched inside it would cancel itself the moment
+     * it fired. Ten attempts then stop; a deliberate disconnect never reaches
+     * here because [teardown] sets [tearingDown].
+     */
+    private fun scheduleReconnect(address: String, model: VehicleModel) {
+        if (tearingDown) return
+        if (reconnectJob?.isActive == true) return
+        if (reconnectAttempt >= RECONNECT_DELAYS_MS.size) {
+            Log.w(TAG, "giving up after ${RECONNECT_DELAYS_MS.size} reconnect attempts")
+            return
+        }
+        val attempt = reconnectAttempt
+        reconnectAttempt++
+        val wait = RECONNECT_DELAYS_MS[attempt]
+        Log.i(TAG, "unexpected drop; reconnect ${attempt + 1}/${RECONNECT_DELAYS_MS.size} in ${wait}ms")
+        reconnectJob = scope.launch {
+            delay(wait)
+            if (ble?.state?.value == ConnectionState.CONNECTED) return@launch
+            connect(address, model)
+        }
+    }
+
     private fun teardown() {
+        tearingDown = true
+        reconnectJob?.cancel()
+        reconnectJob = null
         linkJob?.cancel()
         linkJob = null
         bridge?.stopKeepalive()
@@ -461,6 +556,15 @@ class RideService : android.app.Service() {
 
         const val EXTRA_ADDRESS = "address"
         const val EXTRA_MODEL = "model"
+
+        /**
+         * Official reconnect backoff, seconds: 5, 10, 20, 40, then 60 for the
+         * remaining attempts. Indexed by attempt number.
+         */
+        private val RECONNECT_DELAYS_MS = longArrayOf(
+            5_000, 10_000, 20_000, 40_000,
+            60_000, 60_000, 60_000, 60_000, 60_000, 60_000,
+        )
     }
 }
 

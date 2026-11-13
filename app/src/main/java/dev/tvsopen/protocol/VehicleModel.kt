@@ -105,6 +105,21 @@ data class Capabilities(
     val timeSync: Boolean = true,
     val wifiPassword: Boolean = false,
     val calibration: Boolean = false,
+    /** Cluster accepts the `0x5A 0xF1` brightness frame. */
+    val brightness: Boolean = false,
+    /** Cluster accepts music metadata frames (0x61/0x62/0x65). */
+    val mediaMeta: Boolean = false,
+    /** Cluster sends media-key commands on 0x6B, replayed via AudioManager. */
+    val musicKeys: Boolean = false,
+    /** Cluster sends the call switch on 0x10 byte 12 (accept / reject). */
+    val callButtons: Boolean = false,
+    /** The link needs the 0x4A presence packet every couple of seconds. */
+    val keepalive: Boolean = true,
+    /**
+     * Fuel reading is the low nibble of 0x10 byte 6 (125-family) rather than
+     * the raw byte (110-family). Dex-verified split behind `JUPITER_U566`.
+     */
+    val fuelLowNibble: Boolean = true,
 )
 
 /**

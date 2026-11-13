@@ -81,6 +81,19 @@ object Keepalive {
     fun build(
         state: DashState,
         missedCalls: Int = 0,
+        /**
+         * Overspeed-alert limit in km/h at byte 3. Jupiter's official sender
+         * writes 120 by default (70 for Zest); the Ntorq sender leaves it zero
+         * unless the rider configured an alert, so the default here stays 0.
+         */
+        overspeedLimitKph: Int = 0,
+        /**
+         * Ambient temperature at byte 4 as `value + 40`. Null leaves the byte
+         * zero, which is what our Ntorq transcription of the official builder
+         * contains; the Jupiter sender puts the ambient temperature (or 0 C,
+         * i.e. 40, when unknown) there.
+         */
+        ambientTempC: Int? = null,
         /** Injectable for tests; defaults to the device's current time. */
         calendar: Calendar = Calendar.getInstance(),
     ): ByteArray {
@@ -89,14 +102,9 @@ object Keepalive {
         b[1] = DATA_ID_MOBILE_DATA.toByte()
 
         b[2] = packSignalBattery(state.signalBars, state.batteryBars)
-        // Overspeed-limit holder, empty when no alert is configured — which is
-        // always here, since this app never sets an overspeed limit. An earlier
-        // revision wrote the phone's call state into this byte, but nothing
-        // ever set it and the official layout carries the overspeed holder, so
-        // a nonzero value would be a surprise to the cluster, not information.
-        b[3] = 0
+        b[3] = overspeedLimitKph.coerceIn(0, 255).toByte()
 
-        b[4] = 0
+        b[4] = ambientTempC?.let { (it.coerceIn(-40, 215) + 40).toByte() } ?: 0
         b[5] = 2
 
         // The clock. This block is the entire point of the rewrite.
@@ -114,7 +122,12 @@ object Keepalive {
         // year, so 2026 -> 26. Modulo gives the same answer without allocating.
         b[14] = (calendar.get(Calendar.YEAR) % 100).toByte()
 
-        // [15..18] stay zero. Notably NOT a checksum — see the file comment.
+        // [15..16] stay zero. [17] is the find-my-scooter flag: one for the
+        // handful of packets after the rider taps the button, which is what the
+        // cluster uses to flash the indicators and beep. It was never written,
+        // so the find-my feature sent ordinary keepalives and did nothing.
+        b[17] = if (state.findMyScooter) 1 else 0
+        // [18] stays zero. Notably NOT a checksum — see the file comment.
         b[19] = END.toByte()
         return b
     }

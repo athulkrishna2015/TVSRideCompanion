@@ -81,6 +81,38 @@ interface ProtocolDriver {
     fun buildCallerInfo(number: String, name: String?, state: Int): ByteArray? = null
 
     /**
+     * Caller ID as the Jupiter cluster actually expects it: a three-packet
+     * `0x43` sequence (national number, country code, contact name).
+     *
+     * Defaults to wrapping [buildCallerInfo] so a driver that only knows the
+     * single-row form keeps working.
+     */
+    fun buildCallerFrames(
+        number: String,
+        countryCode: String?,
+        name: String?,
+    ): List<ByteArray> =
+        buildCallerInfo(number, name, Command.CALL_RINGING)?.let { listOf(it) } ?: emptyList()
+
+    /** `0x50` pictogram-by-name frame. 21 bytes; Jupiter only. */
+    fun buildPictogram(name: String): ByteArray? = null
+
+    /** `0x61` / `0x62` / `0x65` music metadata. Null when unsupported. */
+    fun buildMediaMeta(dataId: Int, text: String): ByteArray? = null
+
+    /** `0x5A 0xF1` cluster brightness, level 1..5. */
+    fun buildBrightness(level: Int): ByteArray? = null
+
+    /** `0x22` first-connection user id. Never sent automatically. */
+    fun buildUserId(id: Long): ByteArray? = null
+
+    /** `0x53` SMS notification. Model-gated upstream; off by default. */
+    fun buildSms(text: String): ByteArray? = null
+
+    /** `0x60` music play/pause state. */
+    fun buildPlayPauseState(stateByte: Int): ByteArray? = null
+
+    /**
      * Rider-name frame for the cluster greeting (`0x5B 0x52`).
      *
      * Null when the model has no greeting display. The ID is verified three

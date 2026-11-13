@@ -6,6 +6,7 @@
 package dev.tvsopen
 
 import dev.tvsopen.protocol.DriverRegistry
+import dev.tvsopen.protocol.JupiterDriver
 import dev.tvsopen.protocol.NtorqDriver
 import dev.tvsopen.protocol.VehicleModel
 
@@ -19,6 +20,11 @@ object Nucleus {
         for (m in VehicleModel.entries.filter { it.sharesNtorqProtocol() }) {
             DriverRegistry.register(NtorqDriver(m))
         }
+        // Jupiter 110/125 have a second, independent transcription now (the
+        // Scoot protocol spec). The wire protocol is the same for both
+        // variants; only the fuel-byte gate differs.
+        DriverRegistry.register(JupiterDriver(VehicleModel.JUPITER_110))
+        DriverRegistry.register(JupiterDriver(VehicleModel.JUPITER_125))
     }
 
     fun describe() = VehicleModel.entries.map { model ->

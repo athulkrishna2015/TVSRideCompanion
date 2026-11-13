@@ -751,3 +751,80 @@ through Android's normal input path.
    (`DATA_ID_NAVIGATION_CONTROL_2`)?
 
 All five need a capture — see `docs/CAPTURE.md`.
+
+## 9. Second source: the Scoot simulator spec (Jupiter)
+
+Added 2026-11-13. The Scoot companion app (`sudo-Mystic/Scoot`) is
+closed-source, but its public release feed ships an internal protocol spec and
+a working cluster simulator for the Jupiter family:
+
+- `sim/docs/PROTOCOL.md` — BLE byte maps, extracted from the Scoot app's
+  protocol layer and dex-verified against TVS Connect v8.12.4.
+- `sim/docs/tvs-addendum.md` — an independent second pass over the same dex.
+- `sim/src/engine/frames.js` — executable builders/decoders for every frame.
+
+The release APK this was compared against is Scoot 0.5.10, and its SHA-256
+(`58d74a4d…140a93`) matches that feed's manifest, so the spec and the binary
+describe the same build.
+
+This is a **second source**, not a replacement. Where it contradicts an
+observation from the owner's own Ntorq, the observation wins and the
+contradiction is recorded here.
+
+### What it adds that this app did not have
+
+| Area | Frame | Status here |
+| :--- | :--- | :--- |
+| Jupiter inbound decode maps | `0x10` / `0x11` / `0x18` / `0x19` | `JupiterFrames`, tested |
+| Caller ID as a 3-packet sequence | `0x5B 0x43` sub 1 / 3 / 2 | `ClusterFrames.callerFrames` |
+| Pictogram by name | `0x5B 0x50`, 21 bytes, `[FF, 00]` tail | `ClusterFrames.pictogram` |
+| Music metadata | `0x61` / `0x62` / `0x65` | `ClusterFrames.mediaMeta` |
+| Media keys from the cluster | `0x6B` byte 2 → AudioManager | `transport/ClusterButtons.kt` |
+| Call switch from the cluster | `0x10` byte 12: 1 accept, 2 reject, 3 reject+SMS, 4 voice | `CallButtons` |
+| Cluster brightness | `0x5A 0xF1`, level 1 → 1, levels 2–5 → ×2 | `ClusterFrames.vehicleControl` |
+| Play/pause state | `0x5B 0x60`, hour at 3, state at 7 | `ClusterFrames.playPauseState` |
+| First-connection user id | `0x5B 0x22`, **`0xFF` pad** | `ClusterFrames.userId`, never sent automatically |
+| SMS notification | `0x5B 0x53` | `ClusterFrames.sms`, not wired |
+| Calibration | `0x5B 0x73`, checksum over bytes 2–8, LE value | `ClusterFrames.calibration`, owner-initiated only |
+| Verified-open GATT gate | exact service, else both characteristics | `ScooterBleService.resolveVerifiedService` |
+| Reconnect backoff | 5/10/20/40/60 s, ten attempts | `RideService.scheduleReconnect` |
+| Find-me flag | `0x4A` byte 17 | was never written; now set from `DashState` |
+
+### Corrections it forced
+
+**Byte order of the navigation control frame.** `0x4E` bytes 2–3, 4–5 and 6–8
+are **big-endian**. This app built them little-endian, from a report
+transcription. Every other multi-byte field in the protocol is big-endian, the
+vendor's own `DataParser` is big-endian, and the Scoot spec is dex-derived, so
+the little-endian form is superseded. `NavTextRowTest` and `ProtocolTest` now
+pin the big-endian bytes. Still unverified on a cluster — this is the first
+thing a live navigation capture should confirm.
+
+**`0x50` has two meanings.** This app transcribed `0x5B 0x50` as the second
+navigation text row (`DATA_ID_NAVIGATIONDATA2`). The Scoot spec says `0x50` is
+the pictogram-by-name frame on Jupiter. Both may be true on different
+clusters, so this is resolved **per driver** rather than globally: the Ntorq
+driver keeps the text-row interpretation, and the Jupiter driver returns no
+second row and builds a pictogram instead. The two-row navigation path
+therefore still exists, but it is Ntorq-only.
+
+**Ntorq send-path deltas are deliberately not applied.** The Scoot spec says
+every Ntorq outbound frame is XOR-masked with `0xEB`, and that Ntorq has no
+keepalive ping loop at all. Our Ntorq link is verified on the owner's bike
+sending plaintext keepalives every two seconds, so the spec's Ntorq section is
+recorded as divergent and **not** implemented. Jupiter uses plaintext, per
+both sources.
+
+### What is still unverified
+
+- Jupiter `0x10` byte 2 speed mapping and the odometer `/10` scale (both
+  PROVISIONAL in the spec as well).
+- Jupiter fuel-bar interpretation. The 110/125 split of the *fuel byte* is
+  dex-verified; what the bars mean is not.
+- Cluster acceptance of `0x52` rider name, `0x53` SMS and `0x73` calibration.
+- Which of `0x61` / `0x62` / `0x65` is title, artist and album. Our official-
+  constants transcription and the Scoot spec disagree, so the builder takes
+  the data id explicitly.
+- Answering a call from the cluster. It needs the default-dialer role, which
+  this app does not take; `CallButtons` dispatches a headset-hook key event and
+  says so in its own log.

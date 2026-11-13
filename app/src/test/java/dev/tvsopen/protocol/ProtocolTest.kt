@@ -163,10 +163,16 @@ class ProtocolTest {
         )
         assertEquals(0x5A, p[0].toInt() and 0xFF)
         assertEquals(0x4E, p[1].toInt() and 0xFF)
-        assertEquals(350, (p[2].toInt() and 0xFF) or ((p[3].toInt() and 0xFF) shl 8))
-        assertEquals(12, (p[4].toInt() and 0xFF) or ((p[5].toInt() and 0xFF) shl 8))
-        assertEquals(4200, (p[6].toInt() and 0xFF) or
-            ((p[7].toInt() and 0xFF) shl 8) or ((p[8].toInt() and 0xFF) shl 16))
+        // Big-endian: 350 is 0x015E, so the high byte comes first. The
+        // little-endian form this test used to assert is superseded — see
+        // PacketBuilder.navigationControl's note and docs/PROTOCOL.md.
+        assertEquals(0x01, p[2].toInt() and 0xFF)
+        assertEquals(0x5E, p[3].toInt() and 0xFF)
+        assertEquals(0x00, p[4].toInt() and 0xFF)
+        assertEquals(0x0C, p[5].toInt() and 0xFF)
+        assertEquals(0x00, p[6].toInt() and 0xFF)
+        assertEquals(0x10, p[7].toInt() and 0xFF)
+        assertEquals(0x68, p[8].toInt() and 0xFF)
         assertEquals(3, p[9].toInt())
         assertEquals(1, p[10].toInt())
         assertEquals(1, p[11].toInt())
@@ -180,8 +186,9 @@ class ProtocolTest {
         val p = PacketBuilder.navigationControl(
             NavStep(-1, 0, 0, 7, ""),
         )
-        val d = (p[2].toInt() and 0xFF) or ((p[3].toInt() and 0xFF) shl 8)
-        assertEquals(0, d)
+        // Big-endian 16-bit zero.
+        assertEquals(0, p[2].toInt())
+        assertEquals(0, p[3].toInt())
     }
 
     @Test

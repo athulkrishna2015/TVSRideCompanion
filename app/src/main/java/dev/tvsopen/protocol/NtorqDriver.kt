@@ -345,6 +345,13 @@ class NtorqDriver(
         timeSync = true,
         wifiPassword = true,
         calibration = true,
+        // Stock Ntorq is the one family that wires the 0x6B media map
+        // (`BluetoothUtil.processMusicControlsUseBtData`); Jupiter's parse path
+        // only logs it. Replaying those keys is therefore Ntorq-safe.
+        musicKeys = true,
+        // The 0x10 byte-12 accept/reject values are UNVERIFIED on Ntorq, so the
+        // call switch stays off until a capture shows it.
+        callButtons = false,
     )
 
     override fun confidence() = mapOf(
