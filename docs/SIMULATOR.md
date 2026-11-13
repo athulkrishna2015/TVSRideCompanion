@@ -85,6 +85,35 @@ Scenarios: `idle` (key off, ignition byte 64), `ride` (0→42 km/h sweep, then
 coast), `fuel-low` (3 bars, short DTE), `fault` (service reminder + MIL blink
 code 3).
 
+## Verified on 2026-11-13 (Galaxy Tab A7 Lite, no scooter)
+
+The whole chain ran against the fake cluster: bridge advertising `Jupiter-SIM`,
+bench on `--scenario ride`, app freshly installed from CI.
+
+| Observed | Frame | Bench value | Phone |
+| :--- | :--- | :--- | :--- |
+| Speed | `0x10` byte 2 | 42 | 42 (frame `5A 10 2A …`) |
+| Odometer | `0x10` bytes 3-5, `/10` | 1234.5 km | 1234.8 km, growing |
+| Fuel | `0x10` byte 6 = `0x35`, 125 nibble | 5 bars | "5 of 6 bars" |
+| Trip | `0x10` bytes 14-16, `/10` | 0.1 km | "This connection 0.2" |
+| RPM | `0x10` bytes 17-18 | 3570 | 2890/3570, live |
+| Battery | `0x18` byte 11 = `0x7E` | 12.6 V | no UI field yet |
+| Coolant / intake | `0x18` bytes 8 / 7 | 87 / 35 (+40) | no UI field yet |
+| DTE | `0x19` bytes 11-12 | 180 km | no UI field yet |
+| Keepalive | `0x4A`, checksum at 18 | — | sent every 2 s, checksum valid |
+
+Two bugs the bench found immediately, both fixed:
+
+1. **Discovery was issued before the MTU exchange finished**, so
+   `onServicesDiscovered` never fired and the link sat at "connected" with no
+   write characteristic. The Ntorq never exposed this; the bridge did.
+2. **The Jupiter keepalive had no checksum** at byte 18. That is right for the
+   Ntorq, whose official builder leaves it zero, but the Jupiter spec checksums
+   every outbound frame. It is now applied in `JupiterDriver.buildPing` only.
+
+Screenshots: `docs/reference/images/sim-scan-found.png`,
+`sim-model-picker.png`, `sim-overview-verified.png`.
+
 ## What it cannot verify
 
 - Cluster acceptance of `0x52`, `0x53`, `0x73`.
