@@ -38,6 +38,7 @@ import time
 SERVICE = "5456534d-5647-5341-5342-454e544f5251"
 SIZE = 20
 END = 0xFF
+STARTED = time.monotonic()
 INBOUND_START = 0x5A
 OUTBOUND_START = 0x5B
 
@@ -439,11 +440,19 @@ async def run(args) -> int:
 
 
 def record(path: str, direction: str, frame: bytes) -> None:
-    """Append one JSONL line in the sim recorder's own shape."""
+    """Append one JSONL line in the sim recorder's own shape.
+
+    `t` is milliseconds since the bench started, matching the upstream
+    recorder, so a recording replays with the original timing.
+    """
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(
             json.dumps(
-                {"t": int(time.time() * 1000), "dir": direction, "hex": frame.hex()}
+                {
+                    "t": int((time.monotonic() - STARTED) * 1000),
+                    "dir": direction,
+                    "hex": frame.hex(),
+                }
             )
             + "\n"
         )
