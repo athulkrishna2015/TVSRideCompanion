@@ -252,7 +252,7 @@ class MapsNotificationListener : NotificationListenerService() {
     @Suppress("DEPRECATION")
     private fun extractMessagingStyle(extras: Bundle): Notification.MessagingStyle? {
         val p = extras.getParcelable<android.os.Parcelable>("android.messagingStyle")
-            ?: extras.getParcelable<android.os.Parcelable>(Notification.EXTRA_MESSAGING_STYLE)
+            ?: extras.getParcelable<android.os.Parcelable>(EXTRA_MESSAGING_STYLE_KEY)
         return p as? Notification.MessagingStyle
     }
 
@@ -319,6 +319,8 @@ class MapsNotificationListener : NotificationListenerService() {
             "com.android.mms",
             "org.thoughtcrime.securesms", // Signal
         )
+
+        private const val EXTRA_MESSAGING_STYLE_KEY = "android.messagingStyle"
 
         /**
          * How long a cancelled navigation notification is given to be replaced.

@@ -73,8 +73,8 @@ evidence as in the display.
 
 ## Download
 
-- **Debug APK (every push/PR):** open the latest successful [Android Actions run](https://github.com/tvsopen/TVSRideCompanion/actions/workflows/android.yml), download the **`app-debug`** artifact, and install `app-debug.apk` (`adb install -r app-debug.apk`). This is the debug-signed build used for development and `run-as` log access.
-- **Tagged releases:** a `v*` tag (or a manual workflow dispatch) also attaches the same APK to a [GitHub Release](https://github.com/tvsopen/TVSRideCompanion/releases).
+- **Debug APK (every push/PR):** open the latest successful [Android Actions run](https://github.com/athulkrishna2015/TVSRideCompanion/actions/workflows/android.yml), download the **`app-debug`** artifact, and install `app-debug.apk` (`adb install -r app-debug.apk`). This is the debug-signed build used for development and `run-as` log access.
+- **Tagged releases:** a `v*` tag (or a manual workflow dispatch) also attaches the same APK to a [GitHub Release](https://github.com/athulkrishna2015/TVSRideCompanion/releases).
 
 ### Tested on a phone. Never connected to a scooter.
 
