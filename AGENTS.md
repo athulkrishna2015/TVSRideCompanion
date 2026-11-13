@@ -295,6 +295,12 @@ Two rules learned the hard way, both about the same thing:
 - **Flush the file writer.** `PrintWriter` over a `BufferedWriter` reports
   `File.length() == 0` for a log that already has hundreds of lines, and loses
   everything on `kill -9`. Flush every 16 records and before reporting a size.
+- **Frame dumps are paced to one per data id per second, and the Log tab opens
+  on INFO.** A fake cluster at ~80 Hz produced 2337 records in two and a half
+  minutes — identical-payload collapsing alone does not help, because a live
+  cluster never repeats a payload (odometer and runtime counter move every
+  frame). The suppressed count is reported on the next line as `(+N more)`.
+  Do not raise the rate to "catch" frames; the counter already counts them.
 
 ## Testing against real hardware
 
