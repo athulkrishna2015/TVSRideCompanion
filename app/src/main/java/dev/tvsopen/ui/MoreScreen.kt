@@ -47,9 +47,13 @@ import dev.tvsopen.Nucleus
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.Confidence
 import dev.tvsopen.protocol.Pictograms
+import dev.tvsopen.session.Ride
 import dev.tvsopen.transport.label
 import dev.tvsopen.ui.theme.ThemeMode
 import dev.tvsopen.ui.theme.ThemePrefs
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -64,6 +68,9 @@ import kotlinx.coroutines.launch
 fun MoreScreen(
     connection: dev.tvsopen.session.ConnectionState1,
     riderName: String?,
+    rides: List<Ride>,
+    totalRides: Int,
+    totalRideDistanceKm: Double,
     onRiderNameChange: (String?) -> Unit,
     notificationAccessGranted: Boolean,
     onOpenNotificationAccess: () -> Unit,
@@ -93,6 +100,19 @@ fun MoreScreen(
 
         item { RiderNameCard(name = riderName, onNameChange = onRiderNameChange) }
 
+        item {
+            Text("RIDES", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        item {
+            RidesCard(
+                rides = rides,
+                totalRides = totalRides,
+                totalDistanceKm = totalRideDistanceKm,
+            )
+        }
 
         item {
             Text("CONNECTION", style = MaterialTheme.typography.labelMedium,
@@ -394,6 +414,60 @@ private fun DozeCard() {
                     "Reconnect automatically after a reboot",
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RidesCard(rides: List<Ride>, totalRides: Int, totalDistanceKm: Double) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "$totalRides rides · ${String.format(Locale.US, "%.1f", totalDistanceKm)} km total",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                "Recorded on this phone from the cluster's odometer. No account, no cloud.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (rides.isEmpty()) {
+                Text(
+                    "No rides yet. Connect to the scooter and ride.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                rides.take(5).forEach { ride ->
+                    val df = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+                    val whenText = df.format(Date(ride.startedAt))
+                    val dist = String.format(Locale.US, "%.1f km", ride.distanceKm)
+                    val dur = if (ride.inProgress) {
+                        "In progress · ${ride.durationMinutes()} min"
+                    } else {
+                        "${ride.durationMinutes()} min"
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                whenText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                dur,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(dist, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
         }
     }

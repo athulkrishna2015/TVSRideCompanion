@@ -188,7 +188,7 @@ fun OverviewScreen(
                 Modifier.weight(1f),
                 Icons.Filled.Warning,
                 when (telemetry.milOn) {
-                    true -> "On"
+                    true -> telemetry.milBlinkCode?.takeIf { it > 0 }?.let { "On ($it)" } ?: "On"
                     false -> "Off"
                     null -> "—"
                 },
@@ -199,6 +199,21 @@ fun OverviewScreen(
                 Icons.Filled.Speed,
                 telemetry.avgEconomyKmpl?.let { "$it kmpl" } ?: "—",
                 "Avg economy",
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.Speed,
+                telemetry.instantEconomyKmpl?.let { "$it kmpl" } ?: "—",
+                "Instant economy",
+            )
+            DistanceStat(
+                Modifier.weight(1f),
+                Icons.Filled.Build,
+                telemetry.softwareVersion ?: "—",
+                "Firmware",
             )
         }
 

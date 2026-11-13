@@ -37,6 +37,8 @@ data class Telemetry(
     val serviceDue: Boolean? = null,      // SM2 idx 4
     /** MIL / check-engine lamp, from 0x11 diagnostics byte bit 2. */
     val milOn: Boolean? = null,
+    /** Blink-code count from 0x11 byte 8 when the MIL is reporting a fault. */
+    val milBlinkCode: Int? = null,
     val softwareVersion: String? = null,  // SM2 idx 7
     val avgEconomyKmpl: Int? = null,      // SM3 idx 8
     val instantEconomyKmpl: Int? = null,  // SM3 idx 9
@@ -273,6 +275,8 @@ object Session {
                     ?: cur.serviceDue,
                 milOn = (frame.field(Field.VEHICLE_DIAGNOSTICS)?.toInt()
                     ?.let { (it and 0x04) != 0 }) ?: cur.milOn,
+                milBlinkCode = frame.field(Field.MIL_BLINK_CODE)?.toInt()
+                    ?: cur.milBlinkCode,
                 softwareVersion = frame.field(Field.SOFTWARE_VERSION)?.toInt()
                     ?.let { "0x%X".format(it) } ?: cur.softwareVersion,
                 lastFrameAt = now,
