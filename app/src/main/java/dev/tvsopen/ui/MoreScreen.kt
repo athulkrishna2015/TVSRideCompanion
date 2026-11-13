@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.tvsopen.Nucleus
+import dev.tvsopen.data.DataExport
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.Confidence
 import dev.tvsopen.protocol.Pictograms
@@ -112,6 +113,37 @@ fun MoreScreen(
                 totalRides = totalRides,
                 totalDistanceKm = totalRideDistanceKm,
             )
+        }
+
+        item {
+            Text("YOUR DATA", style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        item {
+            val ctx = LocalContext.current
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Export rides, settings and the last parked spot as JSON. " +
+                            "Everything stays on your device unless you share it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = {
+                        val json = DataExport.buildJson(ctx)
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_SUBJECT, "TVSRide export")
+                            putExtra(Intent.EXTRA_TEXT, json)
+                        }
+                        ctx.startActivity(Intent.createChooser(intent, "Export data"))
+                    }) {
+                        Text("Export & share")
+                    }
+                }
+            }
         }
 
         item {
