@@ -48,5 +48,16 @@ wrapper.log
 # regenerate — hours of CPU on a 2-core budget — so it is kept on disk but
 # never committed. The two APKs it came from live in the parent folder and
 # are referenced by SHA-256 in research/SOURCES.md.
-research/vendor/
+#
+# Exception: the Scoot simulator. The upstream repository has no licence file,
+# so it is vendored deliberately and attributed in
+# research/vendor/scoot-sim/NOTICE.md rather than silently republished.
+# Its virtualenv is build output and stays out.
+research/vendor/*
+!research/vendor/scoot-sim/
+research/vendor/scoot-sim/.venv/
+# Personal captures. The rider's own screenshots carry their name and the
+# scooter's SmartXonnect identifier, so they stay local even when kept next to
+# the reference material they illustrate.
+docs/reference/images/Screenshot_*
 docs/FORUM_POSTS.md

@@ -17,6 +17,8 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import dev.tvsopen.log.Log
 import dev.tvsopen.protocol.Gatt
@@ -92,6 +94,13 @@ class ScooterBleService(private val context: Context) {
     private var gatt: BluetoothGatt? = null
     private var writeChar: BluetoothGattCharacteristic? = null
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Set once per connection, so the MTU callback and the fallback timer
+     * cannot both start discovery. */
+    @Volatile
+    private var discoveryStarted = false
+
     /**
      * Whether the current link outage has already been reported.
      *
@@ -161,9 +170,13 @@ class ScooterBleService(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun closeGatt(g: BluetoothGatt) {
         writeChar = null
+        mainHandler.removeCallbacksAndMessages(null)
+        if (gatt === g) {
+            gatt = null
+            discoveryStarted = false
+        }
         runCatching { g.close() }
             .onFailure { Log.w(TAG, "gatt close: ${it.message}") }
-        if (gatt === g) gatt = null
     }
 
     /**
@@ -257,8 +270,20 @@ class ScooterBleService(private val context: Context) {
                     Log.i(TAG, "GATT connected (status=$status)")
                     _state.value = ConnectionState.CONNECTED
                     try {
-                        g.requestMtu(Gatt.REQUESTED_MTU)
-                        discoverServices(g)
+                        // Discovery must NOT be issued while the MTU exchange is
+                        // in flight: the stack answers it with BUSY and
+                        // `onServicesDiscovered` is then never called, so the
+                        // link sits "connected" with no write characteristic
+                        // forever. This was invisible on the Ntorq and showed up
+                        // on the first peripheral that took the MTU seriously.
+                        if (g.requestMtu(Gatt.REQUESTED_MTU)) {
+                            mainHandler.postDelayed(
+                                { startDiscovery(g) },
+                                DISCOVERY_FALLBACK_MS,
+                            )
+                        } else {
+                            startDiscovery(g)
+                        }
                     } catch (e: SecurityException) {
                         Log.e(TAG, "post-connect setup refused: ${e.message}")
                     }
@@ -323,6 +348,10 @@ class ScooterBleService(private val context: Context) {
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             Log.i(TAG, "MTU=$mtu status=$status")
+            // The MTU exchange is done, so discovery is safe now. Calling this
+            // here rather than from onConnectionStateChange is what makes
+            // onServicesDiscovered actually fire.
+            startDiscovery(g)
         }
 
         override fun onDescriptorWrite(
@@ -377,8 +406,26 @@ class ScooterBleService(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun discoverServices(g: BluetoothGatt) {
-        if (!g.discoverServices()) Log.w(TAG, "discoverServices refused")
+    private fun discoverServices(g: BluetoothGatt): Boolean {
+        val ok = g.discoverServices()
+        if (!ok) Log.w(TAG, "discoverServices refused")
+        return ok
+    }
+
+    /**
+     * Start service discovery exactly once per connection.
+     *
+     * Two callers race here on purpose: [onMtuChanged] in the normal case, and
+     * the fallback timer posted at connect for stacks that never report an MTU.
+     * A stale `g` from a previous connection is ignored so a reconnect can
+     * never inherit its predecessor's attempt.
+     */
+    @SuppressLint("MissingPermission")
+    private fun startDiscovery(g: BluetoothGatt) {
+        if (g !== gatt || discoveryStarted) return
+        discoveryStarted = true
+        mainHandler.removeCallbacksAndMessages(null)
+        if (!discoverServices(g)) discoveryStarted = false
     }
 
     /**
@@ -458,6 +505,15 @@ class ScooterBleService(private val context: Context) {
 
     companion object {
         private const val TAG = "ScooterBle"
+
+        /**
+         * How long to wait for `onMtuChanged` before starting discovery anyway.
+         *
+         * Long enough for a slow peripheral to answer the MTU exchange, short
+         * enough that a stack which never reports it does not stall the link.
+         */
+        private const val DISCOVERY_FALLBACK_MS = 2500L
+
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         /**
