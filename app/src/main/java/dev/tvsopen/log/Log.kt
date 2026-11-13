@@ -110,9 +110,6 @@ object Log {
      */
     private const val UI_RECORD_CAP = 500
 
-    /** Full dumps kept per distinct payload before it is counted instead. */
-    private const val FRAME_FIRST_N = 3
-
     /** Occurrences between tally lines for an already-counted payload. */
     private const val FRAME_TALLY_EVERY = 200
 
@@ -421,9 +418,9 @@ object Log {
             val sameAsLast = gate.lastBytes?.contentEquals(bytes) == true
             gate.pending++
             emit = if (sameAsLast) {
-                // An unchanged payload keeps the old rule: a few full dumps,
-                // then a countable tally.
-                seen <= FRAME_FIRST_N
+                // Already written down: count it instead. The tally below
+                // reports it every [FRAME_TALLY_EVERY] occurrences.
+                false
             } else {
                 // A changed payload is what matters, but writing every one of
                 // them is what flooded the log. Pace them. The first frame of a
