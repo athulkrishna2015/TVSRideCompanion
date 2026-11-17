@@ -119,11 +119,15 @@ jobs:
       - name: Verify the BLE and notification permissions are present
         run: |
           set -euo pipefail
+
           for p in android.permission.BLUETOOTH_CONNECT \
-                   android.permission.BLUETOOTH_SCAN \
-                   android.permission.POST_NOTIFICATIONS \
-                   android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS \
-                   android.permission.RECEIVE_BOOT_COMPLETED; do
+            android.permission.BLUETOOTH_SCAN \
+            android.permission.POST_NOTIFICATIONS \
+            android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS \
+            android.permission.RECEIVE_BOOT_COMPLETED \
+            android.permission.ACCESS_FINE_LOCATION \
+            android.permission.ACCESS_COARSE_LOCATION \
+            android.permission.FOREGROUND_SERVICE_LOCATION; do
             grep -q "$p" permissions.txt || { echo "::error::missing $p"; exit 1; }
           done
           echo "OK: expected BLE permissions present"

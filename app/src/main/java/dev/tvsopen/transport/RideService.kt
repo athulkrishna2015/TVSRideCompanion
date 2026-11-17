@@ -40,6 +40,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import dev.tvsopen.location.GpsCollector
+import dev.tvsopen.sensor.ImuCollector
+
 
 /**
  * Keeps the BLE link and the HUD alive for as long as the session runs.
@@ -64,6 +67,9 @@ class RideService : android.app.Service() {
     /** Replays cluster media keys and call-switch presses on the phone. */
     private var mediaKeys: MediaKeys? = null
     private var callButtons: CallButtons? = null
+    private lateinit var imu: ImuCollector
+    private lateinit var gps: GpsCollector
+    private var sensorsRunning = false
     /**
      * Last call-switch value seen on 0x10 byte 12.
      *
@@ -116,6 +122,11 @@ class RideService : android.app.Service() {
     }
 
     override fun onCreate() {
+        imu = ImuCollector(this)
+        gps = GpsCollector(this)
+        Log.enableFileSink(java.io.File(filesDir, "logs"))
+        // Add this line:
+        Log.enableCsvSink(java.io.File(filesDir, "logs/ride_data.csv"))
         super.onCreate()
         // Logs go to the app's own files so a crash can still be diagnosed.
         Log.enableFileSink(java.io.File(filesDir, "logs"))
@@ -598,6 +609,22 @@ class RideService : android.app.Service() {
             }
         }
         bridge = null
+    }
+
+        private fun startSensors() {
+        if (sensorsRunning) return
+        sensorsRunning = true
+        Log.i(TAG, "starting IMU + GPS collectors")
+        imu.start()
+        gps.start()
+    }
+
+    private fun stopSensors() {
+        if (!sensorsRunning) return
+        sensorsRunning = false
+        Log.i(TAG, "stopping IMU + GPS collectors")
+        imu.stop()
+        gps.stop()
     }
 
     override fun onDestroy() {

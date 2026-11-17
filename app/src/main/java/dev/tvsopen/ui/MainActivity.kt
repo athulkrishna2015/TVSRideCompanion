@@ -114,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             missing += Manifest.permission.BLUETOOTH_SCAN
             missing += Manifest.permission.BLUETOOTH_CONNECT
+            missing += Manifest.permission.ACCESS_FINE_LOCATION 
         } else {
             missing += Manifest.permission.ACCESS_FINE_LOCATION
         }
@@ -421,6 +422,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             needed += Manifest.permission.BLUETOOTH_SCAN
             needed += Manifest.permission.BLUETOOTH_CONNECT
+            needed += Manifest.permission.ACCESS_FINE_LOCATION
         } else {
             needed += Manifest.permission.ACCESS_FINE_LOCATION
         }
@@ -464,7 +466,7 @@ class MainActivity : AppCompatActivity() {
     /** True when both runtime BLE permissions are already granted. */
     private fun hasBlePermission(): Boolean {
         val needed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+            listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION,)
         } else {
             listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         }

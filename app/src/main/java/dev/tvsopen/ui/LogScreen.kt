@@ -108,7 +108,7 @@ fun LogScreen(modifier: Modifier = Modifier) {
                         } else {
                             Toast.makeText(
                                 ctx,
-                                "Saved to ${out.absolutePath}",
+                                "Saved to ${out.absolutePath}\n(Includes ride_data.csv)",
                                 Toast.LENGTH_LONG,
                             ).show()
                             Log.i(TAG, "exported logs to ${out.absolutePath}")

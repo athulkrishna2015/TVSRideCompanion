@@ -24,6 +24,9 @@ import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
 import java.util.Locale
+import java.io.BufferedWriter
+import java.io.FileWriter
+import java.io.IOException
 
 enum class Level(val short: Char, val androidPriority: Int) {
     VERBOSE('V', AndroidLog.VERBOSE),
@@ -174,6 +177,8 @@ object Log {
     val frameCount: StateFlow<Long> = _frameCount.asStateFlow()
 
     private var fileDir: File? = null
+    private var csvFile: File? = null
+    private var csvWriter: BufferedWriter? = null
     private var writer: PrintWriter? = null
     private var fileBytes = 0L
     private var sinceFlush = 0
@@ -202,6 +207,22 @@ object Log {
                 )
                 fileBytes = f.length()
             }.onFailure { v("log", "file sink unavailable: ${it.message}") }
+        }
+    }
+        @Synchronized
+    fun enableCsvSink(file: File) {
+        if (csvWriter != null) return // already open
+        try {
+            val isNew = !file.exists() || file.length() == 0L
+            csvWriter = BufferedWriter(FileWriter(file, true))
+            csvFile = file
+            if (isNew) {
+                // Write standard header
+                csvWriter?.write("timestamp,level,tag,message\n")
+                csvWriter?.flush()
+            }
+        } catch (e: IOException) {
+            AndroidLog.e(TAG, "Failed to open CSV sink", e)
         }
     }
 
@@ -308,6 +329,31 @@ object Log {
         val record = LogRecord(System.currentTimeMillis(), level, tag, message, sw)
 
         AndroidLog.println(level.androidPriority, "$TAG/$tag", message)
+                // Write to CSV if enabled and it's a data record
+        if (level >= Level.INFO && t == null) {
+            csvWriter?.let { writer ->
+                synchronized(lock) {
+                    try {
+                        // Escape commas and quotes in the message for valid CSV
+                        val escapedMessage = "\"${message.replace("\"", "\"\"")}\""
+                        writer.write("${record.atMillis},${level.name},$tag,$escapedMessage\n")
+                        writer.flush()
+                    } catch (e: IOException) {
+                        // Silently ignore or log to Android
+                    }
+                }
+            }
+        }
+
+        fun getCsvUri(context: android.content.Context): android.net.Uri? {
+            val file = File(exportDir(context), "ride_data.csv") // Or wherever we saved it
+            if (!file.exists()) return null
+            return androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+        }
 
         synchronized(lock) {
             if (ring.size >= RING_CAPACITY) ring.pollFirst()

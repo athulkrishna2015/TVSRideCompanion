@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- Map tiles, route search and turn-by-turn routing for the embedded map.
          Introduced for on-device OpenStreetMap navigation (see docs/MAPS.md).
@@ -81,9 +82,7 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-
-    <!-- Parked location, only when the user asks for it -->
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
 
     <!-- No TVS contact, enforced by architecture rather than by audit.
          The app holds INTERNET solely for map tiles and routing (see the
@@ -117,7 +116,7 @@
         <service
             android:name=".transport.RideService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="connectedDevice|location" />
 
         <!-- Re-attach after reboot. Gated on the user having left the app in a
              riding state; see BootReceiver. -->
