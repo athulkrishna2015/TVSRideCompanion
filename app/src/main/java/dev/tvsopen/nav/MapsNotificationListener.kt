@@ -134,6 +134,10 @@ class MapsNotificationListener : NotificationListenerService() {
         val parsed = NavParsing.parse(title, text, bigText, subText)
         val distance = parsed.distanceMeters
         val category = n.notification?.category
+        // Kept at DEBUG: the Log tab is the evidence base for why a given
+        // notification did or did not reach the cluster.
+        Log.d(TAG, "notification posted pkg=$pkg category=$category " +
+            "ongoing=$ongoing title='$title'")
 
         // Trust known maps packages and explicit navigation extras. For unknown
         // packages, require CATEGORY_NAVIGATION as well as distance-like content:
