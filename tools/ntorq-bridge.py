@@ -290,6 +290,8 @@ def decode_outbound(b: bytes) -> dict | None:
                 "text": b[2:19].decode("ascii", "replace").rstrip("\x00\x20")}
     if start == START_PHONE and data_id == 0x43:
         return {"kind": "caller", "text": b[2:19].decode("ascii", "replace").rstrip("\x00\x20")}
+    if start == START_PHONE and data_id == 0x53:
+        return {"kind": "message", "text": b[2:19].decode("ascii", "replace").rstrip("\x00\x20")}
     return {"kind": "unknown", "start": start, "dataId": data_id,
             "hex": b.hex(" ")}
 
