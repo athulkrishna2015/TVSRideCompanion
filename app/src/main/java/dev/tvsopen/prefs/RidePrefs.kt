@@ -83,6 +83,21 @@ class RidePrefs private constructor(private val ctx: Context) {
         get() = sp.getStringSet(KEY_EXTRA_MAPS_PACKAGES, emptySet()) ?: emptySet()
         set(value) { sp.edit().putStringSet(KEY_EXTRA_MAPS_PACKAGES, value).apply() }
 
+    /** Apps whose notifications are mirrored as messages, in addition to the built-in list. */
+    var extraMessagePackages: Set<String>
+        get() = sp.getStringSet(KEY_EXTRA_MESSAGE_PACKAGES, emptySet()) ?: emptySet()
+        set(value) { sp.edit().putStringSet(KEY_EXTRA_MESSAGE_PACKAGES, value).apply() }
+
+    /** Apps whose call notifications are mirrored, in addition to the built-in list. */
+    var extraCallPackages: Set<String>
+        get() = sp.getStringSet(KEY_EXTRA_CALL_PACKAGES, emptySet()) ?: emptySet()
+        set(value) { sp.edit().putStringSet(KEY_EXTRA_CALL_PACKAGES, value).apply() }
+
+    /** Mirror any app's notifications, not just known maps/message/call apps. */
+    var mirrorAnyAppNotifications: Boolean
+        get() = sp.getBoolean(KEY_MIRROR_ANY_APP_NOTIFICATIONS, false)
+        set(value) { sp.edit().putBoolean(KEY_MIRROR_ANY_APP_NOTIFICATIONS, value).apply() }
+
     /** Keep the screen awake while the app is open — for testing only. */
     var keepScreenOn by mutableStateOf(sp.getBoolean(KEY_KEEP_SCREEN_ON, false))
         private set
@@ -135,6 +150,9 @@ class RidePrefs private constructor(private val ctx: Context) {
         private const val KEY_MIRROR_PHONE_CALLS = "mirror_phone_calls"
         private const val KEY_MIRROR_MESSAGES = "mirror_messages"
         private const val KEY_EXTRA_MAPS_PACKAGES = "extra_maps_packages"
+        private const val KEY_EXTRA_MESSAGE_PACKAGES = "extra_message_packages"
+        private const val KEY_EXTRA_CALL_PACKAGES = "extra_call_packages"
+        private const val KEY_MIRROR_ANY_APP_NOTIFICATIONS = "mirror_any_app_notifications"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_PARKED_AT = "parked_at"
         private const val KEY_PARKED_LABEL = "parked_label"

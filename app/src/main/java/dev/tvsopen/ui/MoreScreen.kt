@@ -211,7 +211,19 @@ fun MoreScreen(
             }
         }
 
-        item { MapsAllowlistCard() }
+        item {
+            val ctx = LocalContext.current
+            val prefs = RidePrefs.load(ctx)
+            var extras by remember { mutableStateOf(prefs.extraMapsPackages) }
+            ExtraPackageCard(
+                title = "Extra maps apps",
+                description = "Turn-by-turn from these apps is mirrored too.",
+                packages = extras,
+                hints = listOf("map", "nav", "waze", "osm", "here", "tomtom", "route"),
+                onAdd = { extras = extras + it; prefs.extraMapsPackages = extras },
+                onRemove = { extras = extras - it; prefs.extraMapsPackages = extras },
+            )
+        }
 
         item {
             Text("TESTING", style = MaterialTheme.typography.labelMedium,
@@ -277,8 +289,58 @@ fun MoreScreen(
                             },
                         )
                     }
+                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Mirror any app's notifications",
+                                style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Show any app's notification on the cluster as a message. " +
+                                    "System notifications are skipped; the Messages switch still applies.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(
+                            checked = prefs.mirrorAnyAppNotifications,
+                            onCheckedChange = { prefs.mirrorAnyAppNotifications = it },
+                        )
+                    }
                 }
             }
+        }
+
+        item {
+            val ctx = LocalContext.current
+            val prefs = RidePrefs.load(ctx)
+            var extras by remember { mutableStateOf(prefs.extraMessagePackages) }
+            ExtraPackageCard(
+                title = "Extra message apps",
+                description = "Notifications from these apps are shown as messages.",
+                packages = extras,
+                hints = listOf("whatsapp", "telegram", "message", "messenger", "signal",
+                    "discord", "slack", "chat", "sms"),
+                onAdd = { extras = extras + it; prefs.extraMessagePackages = extras },
+                onRemove = { extras = extras - it; prefs.extraMessagePackages = extras },
+            )
+        }
+
+        item {
+            val ctx = LocalContext.current
+            val prefs = RidePrefs.load(ctx)
+            var extras by remember { mutableStateOf(prefs.extraCallPackages) }
+            ExtraPackageCard(
+                title = "Extra call apps",
+                description = "Incoming-call notifications from these apps are shown on the cluster.",
+                packages = extras,
+                hints = listOf("whatsapp", "telegram", "call", "phone", "dialer", "meet", "duo"),
+                onAdd = { extras = extras + it; prefs.extraCallPackages = extras },
+                onRemove = { extras = extras - it; prefs.extraCallPackages = extras },
+            )
         }
 
         item {
@@ -413,19 +475,22 @@ private data class InstalledApp(val label: String, val packageName: String)
 
 /** Compact entry point; the heavy picker only opens on demand. */
 @Composable
-private fun MapsAllowlistCard() {
-    val ctx = LocalContext.current
-    val prefs = RidePrefs.load(ctx)
-    var extras by remember { mutableStateOf(prefs.extraMapsPackages) }
+private fun ExtraPackageCard(
+    title: String,
+    description: String,
+    packages: Set<String>,
+    hints: List<String>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Extra maps apps", style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                if (extras.isEmpty())
-                    "None added. Built-in maps apps are still mirrored."
-                else "Added: ${extras.joinToString(", ")}",
+                if (packages.isEmpty()) description
+                else "Added: ${packages.joinToString(", ")}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -434,16 +499,12 @@ private fun MapsAllowlistCard() {
     }
 
     if (open) {
-        MapsPickerDialog(
-            current = extras,
-            onAdd = { pkg ->
-                extras = extras + pkg
-                prefs.extraMapsPackages = extras
-            },
-            onRemove = { pkg ->
-                extras = extras - pkg
-                prefs.extraMapsPackages = extras
-            },
+        PackagePickerDialog(
+            title = title,
+            current = packages,
+            hints = hints,
+            onAdd = onAdd,
+            onRemove = onRemove,
             onDismiss = { open = false },
         )
     }
@@ -451,8 +512,10 @@ private fun MapsAllowlistCard() {
 
 /** On-demand picker. Package enumeration is I/O and runs off the main thread. */
 @Composable
-private fun MapsPickerDialog(
+private fun PackagePickerDialog(
+    title: String,
     current: Set<String>,
+    hints: List<String>,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -480,13 +543,12 @@ private fun MapsPickerDialog(
     }
 
     val query = input.trim().lowercase()
-    val hints = listOf("map", "nav", "waze", "osm", "here", "tomtom", "route")
     val matches = remember(query, installed) {
         val pool = if (query.isEmpty()) {
             installed.filter { app ->
                 val text = "${app.label} ${app.packageName}".lowercase()
-                // "nav" also matches Android's own "Navigation Bar" system
-                // components; they cannot post a turn-by-turn notification.
+                // The "nav" hint also matches Android's own "Navigation Bar"
+                // system components, which cannot post a useful notification.
                 !app.packageName.startsWith("com.android.internal") &&
                     !text.contains("navigation bar") &&
                     !text.contains("navbar") &&
@@ -502,7 +564,7 @@ private fun MapsPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Extra maps apps") },
+        title = { Text(title) },
         text = {
             Column(
                 Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
@@ -540,7 +602,7 @@ private fun MapsPickerDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     matches.isEmpty() -> Text(
-                        if (query.isEmpty()) "No likely maps apps found — type a package name below."
+                        if (query.isEmpty()) "No likely matches — type a package name below."
                         else "No installed app matches — add the package manually below.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -154,9 +154,15 @@ class MapsNotificationListener : NotificationListenerService() {
         }
 
         val prefs = RidePrefs.load(this)
-        val isCall = category == Notification.CATEGORY_CALL ||
+        val structuralCall = category == Notification.CATEGORY_CALL ||
             extras.containsKey("android.telecom.extra.INCOMING_CALL_EXTRAS") ||
             extras.containsKey("android.telecom.extra.INCOMING_CALL_ADDRESS")
+        val selectedCall = pkg in prefs.extraCallPackages && looksLikeCall(title, text)
+        // Any-app mode still needs a call-shaped notification; otherwise every
+        // message from every app would be announced as an incoming call.
+        val anyAppCall = prefs.mirrorAnyAppNotifications &&
+            !isSystemNotification(pkg) && looksLikeCall(title, text)
+        val isCall = structuralCall || selectedCall || anyAppCall
         if (isCall) {
             // Phone dialer calls follow the phone-calls toggle; VoIP/app calls
             // (WhatsApp, Telegram, …) are mirrored when phone calls are enabled,
@@ -168,15 +174,28 @@ class MapsNotificationListener : NotificationListenerService() {
         }
 
         val hasMessageStyle = extractMessagingStyle(extras) != null
-        val isMessage = hasMessageStyle || category == Notification.CATEGORY_MESSAGE
+        val selectedMessage = pkg in prefs.extraMessagePackages
+        val anyAppMessage = prefs.mirrorAnyAppNotifications &&
+            !isSystemNotification(pkg) && !ongoing
+        val isMessage = hasMessageStyle || category == Notification.CATEGORY_MESSAGE ||
+            selectedMessage || anyAppMessage
         if (isMessage && prefs.mirrorMessages) {
-            // Only mirror messaging apps; a random app using MessagingStyle for
-            // progress would be noise. Known packages plus any app whose
-            // category is explicitly MESSAGE.
-            if (pkg in MESSAGE_PACKAGES || category == Notification.CATEGORY_MESSAGE || hasMessageStyle) {
-                postMessage(n.key, pkg, extras, title)
-            }
+            postMessage(n.key, pkg, extras, title)
         }
+    }
+
+    /** Never mirror the app's own or the system UI's notifications as messages. */
+    private fun isSystemNotification(pkg: String): Boolean =
+        pkg == packageName || pkg == "com.android.systemui" ||
+            pkg == "android" || pkg.startsWith("com.android.")
+
+    /** Call-shaped wording, for apps that do not set the telecom extras. */
+    private fun looksLikeCall(title: String, text: String): Boolean {
+        val s = "$title $text".lowercase()
+        return listOf(
+            "incoming call", "voice call", "video call", "is calling",
+            "calling...", "calling…", "ringing",
+        ).any { s.contains(it) }
     }
 
     private fun postNav(pkg: String, parsed: ParsedNav, key: String) {
@@ -210,9 +229,6 @@ class MapsNotificationListener : NotificationListenerService() {
         _instruction.value = step
         _navigating.value = true
     }
-
-    private fun isMessagingCall(pkg: String): Boolean =
-        pkg in APP_CALL_PACKAGES
 
     private fun postCall(key: String, pkg: String, extras: Bundle, title: String, text: String) {
         val number = extras.getString("android.telecom.extra.INCOMING_CALL_ADDRESS")
@@ -329,27 +345,9 @@ class MapsNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "MapsNavListener"
 
-        /** Apps commonly posting messages/calls that riders expect to see. */
-        private val APP_CALL_PACKAGES = setOf(
-            "com.whatsapp",
-            "org.telegram.messenger",
-            "org.telegram.messenger.web",
-            "com.facebook.orca",
-            "com.google.android.apps.tachyon", // Duo/Meet legacy
-            "com.instagram.android",
-        )
-
-        private val MESSAGE_PACKAGES = setOf(
-            "com.whatsapp",
-            "org.telegram.messenger",
-            "org.telegram.messenger.web",
-            "com.facebook.orca",
-            "com.instagram.android",
-            "com.google.android.apps.messaging",
-            "com.samsung.android.messaging",
-            "com.android.mms",
-            "org.thoughtcrime.securesms", // Signal
-        )
+        // Known message/call packages are no longer hard-coded here. Notification
+        // category, telecom extras, MessagingStyle and the rider's own selections
+        // in More decide what gets mirrored.
 
         private const val EXTRA_MESSAGING_STYLE_KEY = "android.messagingStyle"
 
