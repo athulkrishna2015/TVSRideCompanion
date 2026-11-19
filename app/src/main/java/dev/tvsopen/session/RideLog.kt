@@ -111,9 +111,12 @@ class RideLog(context: Context) {
      */
     fun update(distanceKm: Double) {
         val current = _rides.value
-        if (current.firstOrNull()?.inProgress != true) return
-        if (distanceKm < 0) return
-        _rides.value = listOf(current.first().copy(distanceKm = distanceKm)) + current.drop(1)
+        val open = current.firstOrNull() ?: return
+        if (!open.inProgress || distanceKm < 0) return
+        // The UI shows tenths of a kilometre. Publishing a new list on every
+        // telemetry frame made the whole More screen recompose once a second.
+        if ((distanceKm * 10).toLong() == (open.distanceKm * 10).toLong()) return
+        _rides.value = listOf(open.copy(distanceKm = distanceKm)) + current.drop(1)
     }
 
     /** Closes the open ride and folds it into the running totals. */

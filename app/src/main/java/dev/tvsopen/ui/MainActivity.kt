@@ -217,9 +217,6 @@ class MainActivity : AppCompatActivity() {
         val telemetry by Session.telemetry.collectAsStateWithLifecycle()
         val hud by Session.hud.collectAsStateWithLifecycle()
         val connection by Session.connection.collectAsStateWithLifecycle()
-        val rides by Session.rides.collectAsStateWithLifecycle()
-        val totalRides by Session.totalRides.collectAsStateWithLifecycle()
-        val totalRideDistanceKm by Session.totalRideDistanceKm.collectAsStateWithLifecycle()
 
         // Everything the UI shows comes from the process-scoped Session, which
         // the BLE service and the notification listener both write into. The
@@ -354,9 +351,6 @@ class MainActivity : AppCompatActivity() {
                         MoreScreen(
                             connection = connection,
                             riderName = RidePrefs.load(this@MainActivity).riderName,
-                            rides = rides,
-                            totalRides = totalRides,
-                            totalRideDistanceKm = totalRideDistanceKm,
                             onRiderNameChange = { name ->
                                 RidePrefs.load(this@MainActivity).riderName = name
                                 // Gate the send, not the save: without BLE

@@ -196,8 +196,11 @@ object Session {
         // backwards (cluster reset/swap); substituting 0.0 here used to wipe
         // the whole open ride when finish() folded it into the totals.
         val distance = _telemetry.value.connectedDistanceKm() ?: return
+        val before = log.rides.value
         log.update(distance)
-        _rides.value = log.rides.value
+        // RideLog only emits when the displayed tenth of a kilometre changed;
+        // mirror that change without re-publishing on every telemetry frame.
+        if (log.rides.value !== before) _rides.value = log.rides.value
     }
 
     fun setRideMode(on: Boolean) { _rideMode.value = on }

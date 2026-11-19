@@ -48,12 +48,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.Nucleus
 import dev.tvsopen.data.DataExport
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.protocol.Confidence
 import dev.tvsopen.protocol.Pictograms
 import dev.tvsopen.session.Ride
+import dev.tvsopen.session.Session
 import dev.tvsopen.transport.label
 import dev.tvsopen.ui.theme.ThemeMode
 import dev.tvsopen.ui.theme.ThemePrefs
@@ -76,9 +78,6 @@ import kotlinx.coroutines.launch
 fun MoreScreen(
     connection: dev.tvsopen.session.ConnectionState1,
     riderName: String?,
-    rides: List<Ride>,
-    totalRides: Int,
-    totalRideDistanceKm: Double,
     onRiderNameChange: (String?) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChange: (Boolean) -> Unit,
@@ -117,11 +116,12 @@ fun MoreScreen(
         }
 
         item {
-            RidesCard(
-                rides = rides,
-                totalRides = totalRides,
-                totalDistanceKm = totalRideDistanceKm,
-            )
+            // Collected here, not in MainActivity: ride distance changes with
+            // telemetry, and hoisting it recomposed the entire More screen.
+            val rides by Session.rides.collectAsStateWithLifecycle()
+            val totalRides by Session.totalRides.collectAsStateWithLifecycle()
+            val totalDistanceKm by Session.totalRideDistanceKm.collectAsStateWithLifecycle()
+            RidesCard(rides = rides, totalRides = totalRides, totalDistanceKm = totalDistanceKm)
         }
 
         item {
