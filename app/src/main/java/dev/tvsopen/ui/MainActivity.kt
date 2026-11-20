@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.Nucleus
 import dev.tvsopen.log.Log
@@ -204,12 +205,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         // A mutableStateOf-backed preference: reading it here makes the window
-        // flag follow the More-screen toggle without a restart.
+        // flag follow the More-screen toggle without a restart. Scoped to the
+        // resumed lifecycle, so leaving the app clears the flag at once — the
+        // toggle must never keep the screen awake from the background.
         val keepScreenOn = RidePrefs.load(this@MainActivity).keepScreenOn
-        LaunchedEffect(keepScreenOn) {
+        LifecycleResumeEffect(keepScreenOn) {
             if (keepScreenOn) {
                 this@MainActivity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            } else {
+            }
+            onPauseOrDispose {
                 this@MainActivity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         }
