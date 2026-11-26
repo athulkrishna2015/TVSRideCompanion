@@ -165,6 +165,7 @@ class MainActivity : AppCompatActivity() {
         // Restore the riding state so the toggle reflects what survived a
         // restart rather than silently reverting to off.
         Session.setRideMode(ridePrefs.rideMode)
+        autoConnectState = ridePrefs.autoConnect
         Log.i("App", "activity created; drivers registered; theme=${ThemePrefs.mode}")
 
         setContent {
@@ -173,13 +174,14 @@ class MainActivity : AppCompatActivity() {
             // colours and the inner one re-supplied them, so the two could
             // disagree after a theme change.
             AppRoot(
+                autoConnect = autoConnectState,
                 onFindMyChange = { send(it) },
                 onNavMirrorChange = { send(it) },
                 onScan = { openScanner() },
                 onDisconnect = { send(RideService.ACTION_DISCONNECT) },
                 onOpenNotificationAccess = { openNotificationAccess() },
                 onAutoConnectChange = { enabled ->
-                    autoConnect = enabled
+                    autoConnectState = enabled
                     val prefs = RidePrefs.load(this@MainActivity)
                     prefs.autoConnect = enabled
                     if (enabled) {
@@ -198,6 +200,7 @@ class MainActivity : AppCompatActivity() {
 
     @Composable
     private fun AppRoot(
+        autoConnect: Boolean,
         onFindMyChange: (String) -> Unit,
         onNavMirrorChange: (String) -> Unit,
         onScan: () -> Unit,
@@ -220,9 +223,6 @@ class MainActivity : AppCompatActivity() {
         // The toggle stays, because someone may want the cluster left alone.
         var navMirroring by rememberSaveable {
             mutableStateOf(RidePrefs.load(this@MainActivity).navigationMirroring)
-        }
-        var autoConnect by remember {
-            mutableStateOf(RidePrefs.load(this@MainActivity).autoConnect)
         }
 
         // A mutableStateOf-backed preference: reading it here makes the window
@@ -518,10 +518,12 @@ class MainActivity : AppCompatActivity() {
      * which is exactly when the user comes back from granting access.
      */
     private var notificationAccess by mutableStateOf(false)
+    private var autoConnectState by mutableStateOf(false)
 
     override fun onResume() {
         super.onResume()
         notificationAccess = hasNotificationAccess()
+        autoConnectState = RidePrefs.load(this).autoConnect
         if (isFirstRun && hasBlePermission()) {
             // BLE may already have been granted from the system permission
             // manager before this activity's first resume. Still ask for the
