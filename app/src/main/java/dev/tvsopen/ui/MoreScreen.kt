@@ -49,11 +49,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.tvsopen.Nucleus
 import dev.tvsopen.data.DataExport
 import dev.tvsopen.prefs.RidePrefs
-import dev.tvsopen.protocol.Confidence
-import dev.tvsopen.protocol.Pictograms
 import dev.tvsopen.session.Ride
 import dev.tvsopen.session.Session
 import dev.tvsopen.transport.label
@@ -409,115 +406,6 @@ fun MoreScreen(
                 onAdd = { extras = extras + it; prefs.extraCallPackages = extras },
                 onRemove = { extras = extras - it; prefs.extraCallPackages = extras },
             )
-        }
-
-        item {
-            Text("PROTOCOL TRANSPARENCY", style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        item {
-            Card(
-                Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "What is verified, and what still needs your scooter",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Nucleus.describe().forEachIndexed { index, (model, facts) ->
-                        if (index > 0) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        }
-                        Text(
-                            model.displayName,
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                        facts.forEach { (fact, confidence) ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    when (confidence) {
-                                        Confidence.VERIFIED_FROM_APK -> "●"
-                                        Confidence.INHERITED_UNVERIFIED -> "◐"
-                                        Confidence.NEEDS_CAPTURE -> "○"
-                                    },
-                                    color = when (confidence) {
-                                        Confidence.VERIFIED_FROM_APK -> MaterialTheme.colorScheme.primary
-                                        Confidence.INHERITED_UNVERIFIED -> MaterialTheme.colorScheme.tertiary
-                                        Confidence.NEEDS_CAPTURE -> MaterialTheme.colorScheme.outline
-                                    },
-                                    modifier = Modifier.padding(end = 8.dp),
-                                )
-                                Text(fact, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "● verified from the official APK   " +
-                            "◐ inherited, unverified   ○ needs capture",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
-        }
-
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Pictograms (${Pictograms.ids.size})",
-                        style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Official app table. Two tables disagree upstream — " +
-                            "see docs/NAVIGATION.md if an arrow renders wrong.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Navigation display", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Every instruction is compressed before it is sent: " +
-                            "Turn left onto Example Road becomes <- LFT to Example Rd.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        "The arrow prefix marks the turn at a glance " +
-                            "(<- left, -> right, ^ straight, U U-turn, O roundabout).",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        "Text wider than the row scrolls one window per send " +
-                            "instead of clipping its tail.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        "Both cluster lines go out together (0x4F + 0x50, rows = 2); " +
-                            "a single alternating line when the second has nothing to show.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        "Compression, arrows and scrolling run on the phone and are " +
-                            "unit-tested. Whether the Ntorq renders both lines at once " +
-                            "still needs your scooter.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
         }
 
         item {

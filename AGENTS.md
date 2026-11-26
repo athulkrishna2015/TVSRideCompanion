@@ -230,7 +230,7 @@ trusting the bounds.
 
 - Home shows `—` in every telemetry tile, not `0`.
 - Dashboard header reads "Disconnected" and "Unknown SmartXonnect vehicle".
-- More renders the protocol-transparency panel.
+- More renders the connection, permissions, alert and settings cards.
 - Log shows startup records and a non-zero `File:` size.
 - A `RideService` foreground notification appears only once a connect is asked for.
 

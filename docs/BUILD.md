@@ -76,7 +76,7 @@ Each of these cost a build cycle; recorded so nobody repeats them.
 ## Next steps
 
 1. Install on a device and smoke-test **without** a scooter: the app should
-   start, the More tab should render the transparency panel, permissions should
+   start, the More tab should render its connection and settings cards, permissions should
    prompt, and the dashboard should show `—` rather than zeroes.
 2. Wire the UI to live service state — `MainActivity` still uses
    `remember { Telemetry() }`, a hardcoded empty object.
