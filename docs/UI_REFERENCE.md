@@ -70,8 +70,6 @@ redacted.
 - **No cloud screens.** Rides, community, shop, and account sections are absent
   entirely rather than stubbed, because they cannot exist without TVS's
   servers.
-- **Transparency panel.** The More tab states which protocol facts are verified
-  and which still need hardware confirmation, plus a navigation-display card
-  describing what the app does to each instruction (short codes, arrow
-  prefixes, rolling, two lines). A reverse-engineering app that
-  hides its uncertainty is worse than useless.
+- **No transparency panel.** Verification confidence is documented in
+  `docs/PROTOCOL.md` and `docs/NAVIGATION.md`; the More tab stays focused on
+  connection, permissions, alert and ride settings.
