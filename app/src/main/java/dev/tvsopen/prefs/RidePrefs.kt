@@ -98,6 +98,21 @@ class RidePrefs private constructor(private val ctx: Context) {
         get() = sp.getBoolean(KEY_MIRROR_ANY_APP_NOTIFICATIONS, false)
         set(value) { sp.edit().putBoolean(KEY_MIRROR_ANY_APP_NOTIFICATIONS, value).apply() }
 
+    /** Opt-in: connect when Android sees the associated vehicle in range. */
+    var autoConnect: Boolean
+        get() = sp.getBoolean(KEY_AUTO_CONNECT, false)
+        set(value) { sp.edit().putBoolean(KEY_AUTO_CONNECT, value).apply() }
+
+    /** Address currently watched through CompanionDeviceManager. */
+    var observedCompanion: String?
+        get() = sp.getString(KEY_OBSERVED_COMPANION, null)
+        set(value) { sp.edit().putString(KEY_OBSERVED_COMPANION, value).apply() }
+
+    /** Addresses for which the system association dialog was already shown. */
+    var companionAsked: Set<String>
+        get() = sp.getStringSet(KEY_COMPANION_ASKED, emptySet()) ?: emptySet()
+        set(value) { sp.edit().putStringSet(KEY_COMPANION_ASKED, value).apply() }
+
     /** Keep the screen awake while the app is open — for testing only. */
     var keepScreenOn by mutableStateOf(sp.getBoolean(KEY_KEEP_SCREEN_ON, false))
         private set
@@ -153,6 +168,9 @@ class RidePrefs private constructor(private val ctx: Context) {
         private const val KEY_EXTRA_MESSAGE_PACKAGES = "extra_message_packages"
         private const val KEY_EXTRA_CALL_PACKAGES = "extra_call_packages"
         private const val KEY_MIRROR_ANY_APP_NOTIFICATIONS = "mirror_any_app_notifications"
+        private const val KEY_AUTO_CONNECT = "auto_connect"
+        private const val KEY_OBSERVED_COMPANION = "observed_companion"
+        private const val KEY_COMPANION_ASKED = "companion_asked"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_PARKED_AT = "parked_at"
         private const val KEY_PARKED_LABEL = "parked_label"

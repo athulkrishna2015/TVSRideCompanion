@@ -1,7 +1,12 @@
 package dev.tvsopen.ui
 
 import android.Manifest
+import android.bluetooth.le.ScanFilter
+import android.companion.AssociationRequest
+import android.companion.BluetoothLeDeviceFilter
+import android.companion.CompanionDeviceManager
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -9,6 +14,7 @@ import android.provider.Settings
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material.icons.Icons
@@ -46,6 +52,7 @@ import dev.tvsopen.transport.ScooterPairing
 import dev.tvsopen.transport.ScooterScanner
 import dev.tvsopen.ui.theme.ThemePrefs
 import dev.tvsopen.ui.theme.TVSRideTheme
+import java.util.Locale
 
 /**
  * Single-activity host: bottom navigation between Home and More.
@@ -171,6 +178,16 @@ class MainActivity : AppCompatActivity() {
                 onScan = { openScanner() },
                 onDisconnect = { send(RideService.ACTION_DISCONNECT) },
                 onOpenNotificationAccess = { openNotificationAccess() },
+                onAutoConnectChange = { enabled ->
+                    autoConnect = enabled
+                    val prefs = RidePrefs.load(this@MainActivity)
+                    prefs.autoConnect = enabled
+                    if (enabled) {
+                        prefs.lastAddress?.let { setUpCompanion(it) }
+                    } else {
+                        stopObservingCompanion()
+                    }
+                },
                 // Re-read on every recomposition: the user grants notification
                 // access in system settings and comes back, so a value sampled
                 // once in onCreate is permanently stale.
@@ -186,6 +203,7 @@ class MainActivity : AppCompatActivity() {
         onScan: () -> Unit,
         onDisconnect: () -> Unit,
         onOpenNotificationAccess: () -> Unit,
+        onAutoConnectChange: (Boolean) -> Unit,
         hasNotificationAccess: Boolean,
     ) {
         var tab by rememberSaveable { mutableStateOf(0) }
@@ -202,6 +220,9 @@ class MainActivity : AppCompatActivity() {
         // The toggle stays, because someone may want the cluster left alone.
         var navMirroring by rememberSaveable {
             mutableStateOf(RidePrefs.load(this@MainActivity).navigationMirroring)
+        }
+        var autoConnect by remember {
+            mutableStateOf(RidePrefs.load(this@MainActivity).autoConnect)
         }
 
         // A mutableStateOf-backed preference: reading it here makes the window
@@ -369,6 +390,8 @@ class MainActivity : AppCompatActivity() {
                             onKeepScreenOnChange = {
                                 RidePrefs.load(this@MainActivity).updateKeepScreenOn(it)
                             },
+                            autoConnect = autoConnect,
+                            onAutoConnectChange = onAutoConnectChange,
                             notificationAccessGranted = hasNotificationAccess,
                             onOpenNotificationAccess = onOpenNotificationAccess,
                             onScan = onScan,
@@ -528,6 +551,22 @@ class MainActivity : AppCompatActivity() {
 
     private var autoConnectTried = false
 
+    private var pendingCompanionAddress: String? = null
+    private var afterCompanion: (() -> Unit)? = null
+
+    private val companionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            val address = pendingCompanionAddress
+            pendingCompanionAddress = null
+            if (result.resultCode == RESULT_OK && address != null) {
+                startObservingCompanion(address)
+            } else {
+                Log.w("MainActivity", "vehicle association was not completed")
+            }
+            afterCompanion?.invoke()
+            afterCompanion = null
+        }
+
     /**
      * Scan state lives on the activity, not inside AppRoot.
      *
@@ -587,6 +626,101 @@ class MainActivity : AppCompatActivity() {
             ?: VehicleModel.NTORQ
         Log.i("MainActivity", "auto-connecting to ${model.displayName}")
         connectToRememberedCluster()
+        // Opt-in only: register with Android so a later ignition can connect
+        // without the app being opened first.
+        prefs.lastAddress?.let { setUpCompanion(it) }
+    }
+
+    /** System association for presence-based auto-connect (Android 12+). */
+    private fun isCompanionAssociated(address: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val cdm = getSystemService(CompanionDeviceManager::class.java) ?: return false
+        return runCatching {
+            @Suppress("DEPRECATION")
+            cdm.associations.any { it.equals(address, ignoreCase = true) }
+        }.getOrDefault(false)
+    }
+
+    private fun startObservingCompanion(address: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val cdm = getSystemService(CompanionDeviceManager::class.java) ?: return
+        runCatching { cdm.startObservingDevicePresence(address) }
+            .onSuccess {
+                RidePrefs.load(this).observedCompanion = address
+                Log.i("MainActivity", "Android is watching for the vehicle")
+            }
+            .onFailure { Log.w("MainActivity", "could not watch for the vehicle: ${it.message}") }
+    }
+
+    private fun stopObservingCompanion() {
+        val observed = RidePrefs.load(this).observedCompanion ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                getSystemService(CompanionDeviceManager::class.java)
+                    ?.stopObservingDevicePresence(observed)
+            }
+        }
+        RidePrefs.load(this).observedCompanion = null
+    }
+
+    private fun setUpCompanion(address: String, then: () -> Unit = {}) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            then()
+            return
+        }
+        val prefs = RidePrefs.load(this)
+        if (!prefs.autoConnect) {
+            then()
+            return
+        }
+        val cdm = getSystemService(CompanionDeviceManager::class.java)
+        if (cdm == null) {
+            Log.w("MainActivity", "no Companion Device Manager on this phone")
+            then()
+            return
+        }
+        if (isCompanionAssociated(address)) {
+            startObservingCompanion(address)
+            then()
+            return
+        }
+        prefs.companionAsked = prefs.companionAsked + address
+        val filter = BluetoothLeDeviceFilter.Builder()
+            .setScanFilter(
+                ScanFilter.Builder().setDeviceAddress(address.uppercase(Locale.ROOT)).build(),
+            )
+            .build()
+        val request = AssociationRequest.Builder()
+            .addDeviceFilter(filter)
+            .setSingleDevice(true)
+            .build()
+        pendingCompanionAddress = address
+        afterCompanion = then
+        val callback = object : CompanionDeviceManager.Callback() {
+            override fun onAssociationPending(intentSender: IntentSender) {
+                companionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            }
+
+            @Suppress("DEPRECATION")
+            override fun onDeviceFound(intentSender: IntentSender) {
+                companionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            }
+
+            override fun onFailure(error: CharSequence?) {
+                pendingCompanionAddress = null
+                afterCompanion = null
+                Log.w("MainActivity", "vehicle association failed: $error")
+                then()
+            }
+        }
+        Log.i("MainActivity", "asking to associate the vehicle for auto-connect")
+        runCatching { cdm.associate(request, callback, null) }
+            .onFailure {
+                pendingCompanionAddress = null
+                afterCompanion = null
+                Log.w("MainActivity", "vehicle association refused: ${it.message}")
+                then()
+            }
     }
 
     private fun hasNotificationAccess(): Boolean =

@@ -81,6 +81,8 @@ fun MoreScreen(
     onRiderNameChange: (String?) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChange: (Boolean) -> Unit,
+    autoConnect: Boolean,
+    onAutoConnectChange: (Boolean) -> Unit,
     notificationAccessGranted: Boolean,
     onOpenNotificationAccess: () -> Unit,
     onScan: () -> Unit,
@@ -178,6 +180,24 @@ fun MoreScreen(
                         OutlinedButton(onClick = onDisconnect, modifier = Modifier.weight(1f)) {
                             Text("Disconnect")
                         }
+                    }
+                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Auto-connect near vehicle",
+                                style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Android 12+: connect when the paired cluster becomes " +
+                                    "reachable, without opening the app.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(checked = autoConnect, onCheckedChange = onAutoConnectChange)
                     }
                 }
             }

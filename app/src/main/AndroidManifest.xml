@@ -47,6 +47,11 @@
     <!-- Discovers which navigation app is actually installed, so mirroring is
          not limited to a hardcoded package list. Read-only; sees no app data. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Opt-in companion-device presence: lets Android wake the app when the
+         associated cluster becomes reachable, without a constant scan. -->
+    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
 
     <!-- "Last Parked" has to be recorded while the phone is in a pocket with
          the screen off, which only a background location grant permits. -->
@@ -133,6 +138,15 @@
 
         <!-- The whole point: read turn-by-turn from Google Maps or any other
              maps app without an account anywhere. -->
+        <service
+            android:name=".transport.VehiclePresenceService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".nav.MapsNotificationListener"
             android:exported="true"
