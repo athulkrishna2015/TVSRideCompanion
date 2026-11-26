@@ -98,6 +98,16 @@ class RidePrefs private constructor(private val ctx: Context) {
         get() = sp.getBoolean(KEY_MIRROR_ANY_APP_NOTIFICATIONS, false)
         set(value) { sp.edit().putBoolean(KEY_MIRROR_ANY_APP_NOTIFICATIONS, value).apply() }
 
+    /** Opt-in: put SMS body text on the cluster instead of sender/count only. */
+    var mirrorMessageText: Boolean
+        get() = sp.getBoolean(KEY_MIRROR_MESSAGE_TEXT, false)
+        set(value) { sp.edit().putBoolean(KEY_MIRROR_MESSAGE_TEXT, value).apply() }
+
+    /** Opt-in: add call type (missed/outgoing) to the caller line. */
+    var mirrorCallDetails: Boolean
+        get() = sp.getBoolean(KEY_MIRROR_CALL_DETAILS, false)
+        set(value) { sp.edit().putBoolean(KEY_MIRROR_CALL_DETAILS, value).apply() }
+
     /** Opt-in: connect when Android sees the associated vehicle in range. */
     var autoConnect: Boolean
         get() = sp.getBoolean(KEY_AUTO_CONNECT, false)
@@ -168,6 +178,8 @@ class RidePrefs private constructor(private val ctx: Context) {
         private const val KEY_EXTRA_MESSAGE_PACKAGES = "extra_message_packages"
         private const val KEY_EXTRA_CALL_PACKAGES = "extra_call_packages"
         private const val KEY_MIRROR_ANY_APP_NOTIFICATIONS = "mirror_any_app_notifications"
+        private const val KEY_MIRROR_MESSAGE_TEXT = "mirror_message_text"
+        private const val KEY_MIRROR_CALL_DETAILS = "mirror_call_details"
         private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_OBSERVED_COMPANION = "observed_companion"
         private const val KEY_COMPANION_ASKED = "companion_asked"

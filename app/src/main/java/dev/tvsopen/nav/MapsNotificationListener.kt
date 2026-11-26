@@ -239,7 +239,17 @@ class MapsNotificationListener : NotificationListenerService() {
             ?: extras.getString("android.text")
             ?: text.takeIf { it.isNotBlank() }
             ?: ""
-        val name = title.ifBlank { number }.ifBlank { "Incoming call" }
+        val type = if (RidePrefs.load(this).mirrorCallDetails) {
+            when {
+                title.contains("missed", ignoreCase = true) -> "Missed "
+                title.contains("outgoing", ignoreCase = true) ||
+                    extras.getString("android.telecom.extra.CALL_TYPE") == "2" -> "Out "
+                else -> ""
+            }
+        } else {
+            ""
+        }
+        val name = "$type${title.ifBlank { number }.ifBlank { "Incoming call" }}"
         val label = appLabel(pkg).takeUnless { it == "Phone" } ?: ""
         Log.i(TAG, "call from $pkg: '$name' '$number'")
         Session.onAlert(
@@ -255,7 +265,10 @@ class MapsNotificationListener : NotificationListenerService() {
     private fun postMessage(key: String, pkg: String, extras: Bundle, title: String) {
         val info = extractMessageInfo(extras, title)
         val app = appLabel(pkg)
+        val withText = RidePrefs.load(this).mirrorMessageText && info.body.isNotBlank()
         val display = when {
+            withText && app.isNotBlank() -> "${info.body} ($app)"
+            withText -> info.body
             info.title.isNotBlank() && info.count > 1 -> "${info.title} ($app ${info.count})"
             info.title.isNotBlank() && app.isNotBlank() -> "${info.title} ($app)"
             info.title.isNotBlank() -> info.title
@@ -273,7 +286,7 @@ class MapsNotificationListener : NotificationListenerService() {
         )
     }
 
-    private data class MessageInfo(val title: String, val count: Int)
+    private data class MessageInfo(val title: String, val count: Int, val body: String = "")
 
     private fun extractMessageInfo(extras: Bundle, fallbackTitle: String): MessageInfo {
         val style = extractMessagingStyle(extras)
@@ -281,12 +294,14 @@ class MapsNotificationListener : NotificationListenerService() {
             val conv = style.conversationTitle?.toString()?.trim().orEmpty()
             val messages = style.messages
             val count = messages.size
+            val newest = messages.lastOrNull()
             val sender = conv.ifBlank {
-                messages.lastOrNull()?.senderPerson?.name?.toString()?.trim().orEmpty()
+                newest?.senderPerson?.name?.toString()?.trim().orEmpty()
             }
-            return MessageInfo(sender.ifBlank { fallbackTitle }, count.coerceAtLeast(1))
+            val body = newest?.text?.toString()?.trim().orEmpty()
+            return MessageInfo(sender.ifBlank { fallbackTitle }, count.coerceAtLeast(1), body)
         }
-        return MessageInfo(fallbackTitle, 1)
+        return MessageInfo(fallbackTitle, 1, fallbackTitle)
     }
 
     @Suppress("DEPRECATION")

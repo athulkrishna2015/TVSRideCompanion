@@ -264,6 +264,8 @@ fun MoreScreen(
             val prefs = remember { RidePrefs.load(ctx) }
             var mirrorCalls by remember { mutableStateOf(prefs.mirrorPhoneCalls) }
             var mirrorMessages by remember { mutableStateOf(prefs.mirrorMessages) }
+            var mirrorText by remember { mutableStateOf(prefs.mirrorMessageText) }
+            var callDetails by remember { mutableStateOf(prefs.mirrorCallDetails) }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -328,6 +330,52 @@ fun MoreScreen(
                         AppSwitch(
                             checked = prefs.mirrorAnyAppNotifications,
                             onCheckedChange = { prefs.mirrorAnyAppNotifications = it },
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Show SMS text", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Put the message body on the cluster instead of just the " +
+                                    "sender and count. The text is sanitised and clipped to " +
+                                    "the cluster row; nothing leaves the phone.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(
+                            checked = mirrorText,
+                            onCheckedChange = {
+                                mirrorText = it
+                                prefs.mirrorMessageText = it
+                            },
+                        )
+                    }
+                    HorizontalDivider()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Show call type", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Prefix the caller with Missed or Out when the notification says so.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AppSwitch(
+                            checked = callDetails,
+                            onCheckedChange = {
+                                callDetails = it
+                                prefs.mirrorCallDetails = it
+                            },
                         )
                     }
                 }
