@@ -125,7 +125,22 @@ class ScooterBleService(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun connect(address: String, config: GattConfig = GattConfig.DEFAULT): Boolean {
-        if (gatt != null) return false
+        if (gatt != null) {
+            if (_state.value == ConnectionState.CONNECTED ||
+                _state.value == ConnectionState.CONNECTING
+            ) {
+                return false
+            }
+            // A dropped link can leave a GATT client behind. The old code
+            // refused every later connect while it was held, so the UI showed
+            // Connected but writes went nowhere and the user had to reconnect
+            // manually. Close the stale client and carry on.
+            Log.w(TAG, "closing stale GATT client before reconnect")
+            runCatching { gatt?.close() }
+                .onFailure { Log.w(TAG, "stale gatt close: ${it.message}") }
+            gatt = null
+            writeChar = null
+        }
         val a = adapter ?: return false
         val device: BluetoothDevice = try {
             a.getRemoteDevice(address)

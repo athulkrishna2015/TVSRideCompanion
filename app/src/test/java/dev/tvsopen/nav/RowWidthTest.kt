@@ -262,4 +262,37 @@ class RowWidthTest {
         assertEquals("", step.metricsLine())
         assertEquals("ETA 4m", step.copy(etaMinutes = 4).metricsLine())
     }
+
+    @Test
+    fun `maneuver and place occupy separate rolling lines`() {
+        val step = NavInstruction(
+            title = "Turn left onto Hill View Road",
+            street = "Example Road - Hill Route",
+            distanceMeters = 2320,
+            etaMinutes = 3,
+            pictogram = 0,
+            provider = "test",
+        )
+        assertEquals("<- LFT to", step.maneuverLine().take(10))
+        // The place and metrics roll on line 2 rather than being clipped.
+        val head = step.streetLine()
+        assertEquals(RowChars.NTORQ_LINE_2, head.length)
+        assertTrue("line 2 must show the street", head.contains("Example"))
+        val moved = step.streetLine(tick = 5)
+        assertTrue("line 2 must scroll", moved != head)
+    }
+
+    @Test
+    fun `a distance only title never puts the place on line one`() {
+        val step = NavInstruction(
+            title = "",
+            street = "Example Road",
+            distanceMeters = 6900,
+            etaMinutes = 16,
+            pictogram = null,
+            provider = "test",
+        )
+        assertEquals("GO", step.maneuverLine())
+        assertTrue("place belongs on line 2", step.streetLine().contains("Example"))
+    }
 }

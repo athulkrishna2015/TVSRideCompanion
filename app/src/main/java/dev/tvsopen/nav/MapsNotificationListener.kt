@@ -59,6 +59,29 @@ data class NavInstruction(
         return RollingText.window(full, maxChars, tick)
     }
 
+    /** Line 1: the maneuver only, with its arrow. Place names belong on line 2. */
+    fun maneuverLine(maxChars: Int = RowChars.NTORQ_LINE_1, tick: Int = 0): String {
+        // Maps often posts only a distance as the title. Line 1 still has to
+        // say something; never fall back to the street, that belongs on line 2.
+        val maneuver = title.takeIf { it.isNotBlank() } ?: "GO"
+        val compressed = NavShortCodes.compress(maneuver)
+        val arrow = NavShortCodes.asciiArrow(pictogram)
+        val full = if (arrow.isNotEmpty()) "$arrow $compressed".trim() else compressed
+        return RollingText.window(full, maxChars, tick)
+    }
+
+    /** Line 2: the place/street, with ETA and distance when known. */
+    fun streetLine(maxChars: Int = RowChars.NTORQ_LINE_2, tick: Int = 0): String {
+        val raw = listOf(
+            street,
+            if (etaMinutes > 0) "ETA ${etaMinutes}m" else "",
+            if (distanceMeters >= 1000)
+                "${distanceMeters / 1000}Km ${distanceMeters % 1000}m"
+            else if (distanceMeters > 0) "${distanceMeters}m" else "",
+        ).filter { it.isNotEmpty() }.joinToString(" ")
+        return RollingText.window(NavShortCodes.compress(raw), maxChars, tick)
+    }
+
     /**
      * The ETA / distance line, in TVS's own rendering.
      *
@@ -187,6 +210,14 @@ class MapsNotificationListener : NotificationListenerService() {
             postMessage(n.key, pkg, extras, title)
         }
     }
+
+    @Suppress("DEPRECATION")
+    private fun hasLiveNavNotification(pkg: String): Boolean = runCatching {
+        activeNotifications.any { sbn ->
+            sbn.packageName == pkg && sbn.isOngoing &&
+                sbn.notification?.category == Notification.CATEGORY_NAVIGATION
+        }
+    }.getOrDefault(false)
 
     /** Never mirror the app's own or the system UI's notifications as messages. */
     private fun isSystemNotification(pkg: String): Boolean =
@@ -336,6 +367,13 @@ class MapsNotificationListener : NotificationListenerService() {
         activeNavKey = null
         pendingClear?.let { handler.removeCallbacks(it) }
         pendingClear = Runnable {
+            // Maps cancels and reposts its notification constantly. A removal
+            // alone used to wipe the HUD mid-route; only clear when no other
+            // ongoing nav notification from that app remains.
+            if (hasLiveNavNotification(removed.packageName)) {
+                Log.i(TAG, "nav notification replaced; keeping the step")
+                return@Runnable
+            }
             Log.i(TAG, "navigation ended (${removed.packageName})")
             Session.onHud { it.copy(active = false) }
             _navigating.value = false
@@ -377,7 +415,10 @@ class MapsNotificationListener : NotificationListenerService() {
          * it. Long enough to survive a refresh, short enough that genuinely
          * ending a route clears the cluster promptly.
          */
-        private const val CLEAR_GRACE_MS = 12_000L
+        // Maps can drop and repost its notification with a new key at any
+        // time. A short grace wiped a live route whenever the gap exceeded a
+        // few seconds; only give up after a long silence.
+        private const val CLEAR_GRACE_MS = 300_000L
 
         val DEFAULT_MAPS_PACKAGES = setOf(
             "com.google.android.apps.maps",       // Google Maps

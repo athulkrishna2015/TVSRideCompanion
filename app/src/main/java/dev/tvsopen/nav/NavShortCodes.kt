@@ -14,6 +14,7 @@ object NavShortCodes {
 
     private val HTML_TAG = Regex("<[^>]+>")
     private val SPACES = Regex("\\s+")
+    private val DASH_RUN = Regex("-+")
 
     private fun ci(pattern: String): Regex =
         Regex(pattern, RegexOption.IGNORE_CASE)
@@ -141,7 +142,10 @@ object NavShortCodes {
         // A sentence-final full stop is never a decimal point. The sanitiser
         // would fold it to a space on the wire anyway; dropping it here keeps
         // one more column for the road name.
-        return out.replace(SPACES, " ").trim().removeSuffix(".")
+        // Maps names frequently contain " - ". A rolling window that meets
+        // the separator can show "--", so collapse dash runs and trim edges.
+        val clean = out.replace(SPACES, " ").replace(DASH_RUN, "-").trim().removeSuffix(".")
+        return clean.trim('-', ' ')
     }
 
     // ASCII arrow prefix for the cluster text line. Only uses characters the
@@ -208,7 +212,10 @@ object RollingText {
     fun window(text: String, width: Int, tick: Int): String {
         if (width <= 0) return ""
         if (text.length <= width) return text
-        val loop = text + GAP
+        // Trim the join edges so the separator cannot double a dash that is
+        // already at the end of the instruction.
+        val body = text.trim(' ', '-')
+        val loop = body + GAP
         val off = ((tick % loop.length) + loop.length) % loop.length
         return (loop + loop).substring(off, off + width)
     }

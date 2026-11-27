@@ -155,8 +155,10 @@ class NavigationBridge(
                     // The maneuver goes on line 1 (10 chars); the street /
                     // ETA row on line 2 (12). These were passed backwards, so
                     // the turn was built for a 12-cell row and clipped.
-                    val maneuver = step.displayLine(firstTextRowChars, scrollTick)
-                    val fullMetrics = step.metricsLine(secondTextRowChars, scrollTick)
+                    // Rider's layout: line 1 is the maneuver (turn / U-turn),
+                    // line 2 is the place name and trip metrics, both rolling.
+                    val maneuver = step.maneuverLine(firstTextRowChars, scrollTick)
+                    val fullMetrics = step.streetLine(secondTextRowChars, scrollTick)
 
                     // Two lines when the driver has a second row, else alternate.
                     //
