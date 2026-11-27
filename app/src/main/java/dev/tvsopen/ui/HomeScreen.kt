@@ -75,6 +75,7 @@ fun HomeScreen(
     connection: ConnectionState1,
     parked: ParkedInfo?,
     findMyEnabled: Boolean,
+    showFindMy: Boolean,
     navMirroring: Boolean,
     rideMode: Boolean,
     onFindMyChange: (Boolean) -> Unit,
@@ -125,8 +126,13 @@ fun HomeScreen(
         SectionLabel("While riding")
 
         MirrorNavCard(navMirroring, hud, onNavMirrorChange)
-        Spacer(Modifier.height(12.dp))
-        FindMyCard(findMyEnabled, onFindMyChange)
+        // The Ntorq 125 has no verified find-my packet: the keepalive flag is
+        // inherited from the Jupiter and was never confirmed on this cluster,
+        // so do not offer a control that may do nothing (or overwrite data).
+        if (showFindMy) {
+            Spacer(Modifier.height(12.dp))
+            FindMyCard(findMyEnabled, onFindMyChange)
+        }
         Spacer(Modifier.height(12.dp))
         LastParkedCard(parked) {
             openParkedLocation(ctx, parked)

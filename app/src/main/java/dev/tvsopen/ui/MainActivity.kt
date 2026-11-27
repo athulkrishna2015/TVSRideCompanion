@@ -335,6 +335,9 @@ class MainActivity : AppCompatActivity() {
                             parked = parked,
                             rideMode = rideMode,
                             findMyEnabled = findMy,
+                            showFindMy = connection.model != VehicleModel.NTORQ_125_RACE &&
+                                RidePrefs.load(this@MainActivity).lastModelId !=
+                                VehicleModel.NTORQ_125_RACE.name,
                             navMirroring = navMirroring,
                             onFindMyChange = { on ->
                                 findMy = on
