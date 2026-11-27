@@ -108,6 +108,18 @@ class RidePrefs private constructor(private val ctx: Context) {
         get() = sp.getBoolean(KEY_MIRROR_CALL_DETAILS, false)
         set(value) { sp.edit().putBoolean(KEY_MIRROR_CALL_DETAILS, value).apply() }
 
+    /** User override for Home cards; null means use the model defaults. */
+    var homeCardsOverride: Set<String>?
+        get() = if (sp.contains(KEY_HOME_CARDS))
+            sp.getStringSet(KEY_HOME_CARDS, emptySet()) ?: emptySet()
+        else null
+        set(value) {
+            sp.edit().apply {
+                if (value == null) remove(KEY_HOME_CARDS)
+                else putStringSet(KEY_HOME_CARDS, value)
+            }.apply()
+        }
+
     /** Opt-in: connect when Android sees the associated vehicle in range. */
     var autoConnect: Boolean
         get() = sp.getBoolean(KEY_AUTO_CONNECT, false)
@@ -180,6 +192,7 @@ class RidePrefs private constructor(private val ctx: Context) {
         private const val KEY_MIRROR_ANY_APP_NOTIFICATIONS = "mirror_any_app_notifications"
         private const val KEY_MIRROR_MESSAGE_TEXT = "mirror_message_text"
         private const val KEY_MIRROR_CALL_DETAILS = "mirror_call_details"
+        private const val KEY_HOME_CARDS = "home_cards"
         private const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_OBSERVED_COMPANION = "observed_companion"
         private const val KEY_COMPANION_ASKED = "companion_asked"

@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.net.Uri
+import dev.tvsopen.prefs.RidePrefs
+import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.ConnectionState1
 import dev.tvsopen.session.HudState
 import dev.tvsopen.session.ParkedInfo
@@ -75,7 +77,7 @@ fun HomeScreen(
     connection: ConnectionState1,
     parked: ParkedInfo?,
     findMyEnabled: Boolean,
-    showFindMy: Boolean,
+    vehicleModel: VehicleModel,
     navMirroring: Boolean,
     rideMode: Boolean,
     onFindMyChange: (Boolean) -> Unit,
@@ -87,6 +89,14 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val connected = connection.state == ConnectionState.CONNECTED
+    val ctx0 = LocalContext.current
+    val visibleCards = HomeCard.supported(vehicleModel).let { supported ->
+        val override = RidePrefs.load(ctx0).homeCardsOverride
+            ?.let { HomeCard.fromKeys(it) }
+            ?: HomeCard.defaults(vehicleModel)
+        override intersect supported
+    }
+    fun shows(card: HomeCard) = card in visibleCards
 
     Column(
         modifier
@@ -101,48 +111,52 @@ fun HomeScreen(
             NavigationStrip(hud)
         }
 
-        Spacer(Modifier.height(20.dp))
-        SectionLabel("Your scooter")
-
-        // Card navigation rather than a value grid, mirroring the official app's
-        // dashboard. The values live on the Overview tab where they belong.
         val ctx = LocalContext.current
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NavCard(Modifier.weight(1f), Icons.Filled.Speed, "Overview", onOpenOverview)
-            NavCard(Modifier.weight(1f), Icons.Filled.Place, "Last parked") {
-                if (!openParkedLocation(ctx, parked)) onOpenParked()
+
+        if (shows(HomeCard.SHORTCUTS)) {
+            Spacer(Modifier.height(20.dp))
+            SectionLabel("Your scooter")
+            // Card navigation rather than a value grid, mirroring the official
+            // app's dashboard. Values live on the Overview tab.
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NavCard(Modifier.weight(1f), Icons.Filled.Speed, "Overview", onOpenOverview)
+                NavCard(Modifier.weight(1f), Icons.Filled.Place, "Last parked") {
+                    if (!openParkedLocation(ctx, parked)) onOpenParked()
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        ConnectCard(connected, connection.state.label, onConnect)
-        Spacer(Modifier.height(12.dp))
-        // Ride Mode has to stay reachable. BootReceiver reads
-        // RidePrefs.resumeOnBoot and RidePrefs.rideMode to decide whether to
-        // re-attach after a reboot, so with no toggle the resume path is dead
-        // code that can never fire.
-        RideModeCard(rideMode, onRideModeChange)
+        if (shows(HomeCard.CONNECT)) {
+            Spacer(Modifier.height(12.dp))
+            ConnectCard(connected, connection.state.label, onConnect)
+        }
+        // BootReceiver reads RidePrefs.rideMode to decide whether to re-attach
+        // after a reboot; hiding this card does not change that behaviour.
+        if (shows(HomeCard.RIDE_MODE)) {
+            Spacer(Modifier.height(12.dp))
+            RideModeCard(rideMode, onRideModeChange)
+        }
 
-        Spacer(Modifier.height(20.dp))
-        SectionLabel("While riding")
-
-        MirrorNavCard(navMirroring, hud, onNavMirrorChange)
-        // The Ntorq 125 has no verified find-my packet: the keepalive flag is
-        // inherited from the Jupiter and was never confirmed on this cluster,
-        // so do not offer a control that may do nothing (or overwrite data).
-        if (showFindMy) {
+        if (shows(HomeCard.MIRROR_NAV) || shows(HomeCard.FIND_MY) || shows(HomeCard.PARKED)) {
+            Spacer(Modifier.height(20.dp))
+            SectionLabel("While riding")
+        }
+        if (shows(HomeCard.MIRROR_NAV)) MirrorNavCard(navMirroring, hud, onNavMirrorChange)
+        if (shows(HomeCard.FIND_MY)) {
             Spacer(Modifier.height(12.dp))
             FindMyCard(findMyEnabled, onFindMyChange)
         }
-        Spacer(Modifier.height(12.dp))
-        LastParkedCard(parked) {
-            openParkedLocation(ctx, parked)
+        if (shows(HomeCard.PARKED)) {
+            Spacer(Modifier.height(12.dp))
+            LastParkedCard(parked) { openParkedLocation(ctx, parked) }
         }
 
         // Telemetry freshness is the number that actually tells you whether the
         // link is alive. The frame counter belongs in the Log tab, not here.
-        Spacer(Modifier.height(20.dp))
-        SectionLabel("Link")
-        LinkCard(telemetry)
+        if (shows(HomeCard.LINK)) {
+            Spacer(Modifier.height(20.dp))
+            SectionLabel("Link")
+            LinkCard(telemetry)
+        }
 
         Spacer(Modifier.height(28.dp))
     }

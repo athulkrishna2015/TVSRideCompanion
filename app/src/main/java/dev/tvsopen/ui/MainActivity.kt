@@ -273,6 +273,16 @@ class MainActivity : AppCompatActivity() {
         val parked by Session.parked.collectAsStateWithLifecycle()
         val rideMode by Session.rideMode.collectAsStateWithLifecycle()
 
+        // The remembered model is the one the rider chose; the connection's
+        // model is UNKNOWN before a link exists, so use the stored value then.
+        val activeModel = if (connection.model != VehicleModel.UNKNOWN) {
+            connection.model
+        } else {
+            RidePrefs.load(this@MainActivity).lastModelId
+                ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
+                ?: VehicleModel.UNKNOWN
+        }
+
         TVSRideTheme(mode = ThemePrefs.mode, darkTheme = isSystemInDarkTheme()) {
             Scaffold(
                 bottomBar = {
@@ -335,9 +345,7 @@ class MainActivity : AppCompatActivity() {
                             parked = parked,
                             rideMode = rideMode,
                             findMyEnabled = findMy,
-                            showFindMy = connection.model != VehicleModel.NTORQ_125_RACE &&
-                                RidePrefs.load(this@MainActivity).lastModelId !=
-                                VehicleModel.NTORQ_125_RACE.name,
+                            vehicleModel = activeModel,
                             navMirroring = navMirroring,
                             onFindMyChange = { on ->
                                 findMy = on
@@ -378,6 +386,7 @@ class MainActivity : AppCompatActivity() {
                     } else if (tab == 1) {
                         MoreScreen(
                             connection = connection,
+                            vehicleModel = activeModel,
                             riderName = RidePrefs.load(this@MainActivity).riderName,
                             onRiderNameChange = { name ->
                                 RidePrefs.load(this@MainActivity).riderName = name

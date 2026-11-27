@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.data.DataExport
 import dev.tvsopen.prefs.RidePrefs
+import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.Ride
 import dev.tvsopen.session.Session
 import dev.tvsopen.transport.label
@@ -74,6 +75,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MoreScreen(
     connection: dev.tvsopen.session.ConnectionState1,
+    vehicleModel: VehicleModel,
     riderName: String?,
     onRiderNameChange: (String?) -> Unit,
     keepScreenOn: Boolean,
@@ -249,6 +251,45 @@ fun MoreScreen(
         }
 
         item { KeepScreenOnCard(enabled = keepScreenOn, onChange = onKeepScreenOnChange) }
+
+        item {
+            val ctx = LocalContext.current
+            val prefs = RidePrefs.load(ctx)
+            var chosen by remember {
+                mutableStateOf(
+                    prefs.homeCardsOverride?.let { HomeCard.fromKeys(it) }
+                        ?: HomeCard.defaults(vehicleModel),
+                )
+            }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Home screen cards", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Choose which cards appear on Home. Only cards supported by " +
+                            "${vehicleModel.displayName} can be enabled.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HomeCard.supported(vehicleModel).forEach { card ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(card.label, style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f).padding(end = 12.dp))
+                            AppSwitch(
+                                checked = card in chosen,
+                                onCheckedChange = { on ->
+                                    chosen = if (on) chosen + card else chosen - card
+                                    prefs.homeCardsOverride = chosen.map { it.key }.toSet()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
         item {
             Text("ALERTS", style = MaterialTheme.typography.labelMedium,
