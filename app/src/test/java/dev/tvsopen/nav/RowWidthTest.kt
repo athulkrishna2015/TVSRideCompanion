@@ -273,7 +273,8 @@ class RowWidthTest {
             pictogram = 0,
             provider = "test",
         )
-        assertEquals("<- LFT to", step.maneuverLine().take(10))
+        assertTrue("line 1 must start with the turn arrow and code, got '${step.maneuverLine()}'",
+            step.maneuverLine().startsWith("<- LFT"))
         // The place and metrics roll on line 2 rather than being clipped.
         val head = step.streetLine()
         assertEquals(RowChars.NTORQ_LINE_2, head.length)
