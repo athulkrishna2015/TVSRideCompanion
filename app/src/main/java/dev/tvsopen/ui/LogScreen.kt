@@ -101,11 +101,13 @@ fun LogScreen(modifier: Modifier = Modifier) {
         records.filter { it.level >= minLevel }
     }
 
-    // Turning Follow back on jumps to the tail even if the rider had scrolled
-    // away. A plain scroll (not animateScrollToItem): animating on every publish
-    // kept a frame-sized coroutine running continuously during capture and made
-    // the list fight the rider's own scroll.
-    LaunchedEffect(autoScroll) {
+    // Turning Follow back on, or changing the filter, jumps to the tail even if
+    // the rider had scrolled away. A plain scroll (not animateScrollToItem):
+    // animating on every publish kept a frame-sized coroutine running
+    // continuously during capture and made the list fight the rider's scroll.
+    // minLevel is a key because a filter change replaces the whole list; the
+    // near-bottom check below would otherwise see the old layout and refuse.
+    LaunchedEffect(autoScroll, minLevel) {
         if (autoScroll && visible.isNotEmpty()) {
             listState.scrollToItem(visible.lastIndex)
         }
