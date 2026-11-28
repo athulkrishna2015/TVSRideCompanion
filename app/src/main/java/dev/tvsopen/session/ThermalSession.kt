@@ -15,8 +15,8 @@ class ThermalSession(
     private var sessionStarted = false
     private var startedBelowWarm = false
     private var warmedUpDone = false
-    private var aboveHotSince = 0L
-    private var lastHotAlert = 0L
+    private var aboveHotSince: Long? = null
+    private var lastHotAlert: Long? = null
     private var lastReadingAt = 0L
 
     /** Returns zero or more labels for this reading. */
@@ -34,17 +34,17 @@ class ThermalSession(
             events += "WARMED UP"
         }
         if (tempC >= hotC) {
-            if (aboveHotSince == 0L) {
+            if (aboveHotSince == null) {
                 aboveHotSince = now
                 events += "ENGINE HOT"
                 lastHotAlert = now
-            } else if (now - lastHotAlert >= HOT_REPEAT_MS) {
+            } else if (now - (lastHotAlert ?: 0L) >= HOT_REPEAT_MS) {
                 events += "ENGINE HOT"
                 lastHotAlert = now
             }
-        } else if (aboveHotSince != 0L && tempC <= hotC - HYSTERESIS_C) {
-            aboveHotSince = 0L
-            lastHotAlert = 0L
+        } else if (aboveHotSince != null && tempC <= hotC - HYSTERESIS_C) {
+            aboveHotSince = null
+            lastHotAlert = null
         }
         return events
     }
@@ -54,8 +54,8 @@ class ThermalSession(
         sessionStarted = true
         startedBelowWarm = tempC in 1 until warmUpC
         warmedUpDone = false
-        aboveHotSince = 0L
-        lastHotAlert = 0L
+        aboveHotSince = null
+        lastHotAlert = null
         lastReadingAt = now
     }
 
