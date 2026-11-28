@@ -418,31 +418,6 @@ to 12. Keep `RowChars.NTORQ_LINE_1` and `NTORQ_LINE_2` distinct. The 17-byte wir
 payload does not imply a 17-character physical row. A hardware check of wrap /
 scroll behavior remains impossible while the scooter battery is flat.
 
-## This is a clean-room interoperability project
-
-**This repository is public. Never commit anything derived from the owner's
-actual location, route, device identifiers, or home map.** In practice that
-means: invent street names in tests and comments (`Example Road`), never paste a
-real nav notification or captured street into a source file, and redact the
-street and distance out of any log excerpt before it goes into an issue. The
-app's own log records the maneuver text verbatim, so an unredacted export is a
-route. `captures/README.md` says the same thing in more detail.
-
-The goal is a third-party companion app for the **user's own** TVS vehicle that
-speaks the instrument cluster's Bluetooth LE protocol directly. TVS's servers,
-accounts and cloud APIs are explicitly **out of scope** — see `docs/SCOPE.md`.
-
-- Work only from the user's own hardware and the two local APKs.
-- Never authenticate to, intercept, or replay traffic against TVS servers.
-- Never use the published CVEs. They are background reading, not a design input.
-- Do not redistribute the official APK. It stays in the parent folder, outside
-  this repo, referenced only by SHA-256.
-- `INTERNET` **is** declared deliberately for embedded OpenStreetMap tiles,
-  place search and routing (`docs/MAPS.md`). The no-account property is now
-  enforced by code: network call sites live only in `dev.tvsopen.nav.maps`,
-  and the app still talks to no TVS server and needs no account. Do not remove
-  the permission — CI asserts it is present in the merged manifest.
-
 ## Code review gotchas seen in this repo
 
 All of these cost a real build cycle. Check for them before blaming the toolchain.
