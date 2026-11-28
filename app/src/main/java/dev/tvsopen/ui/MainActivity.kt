@@ -179,6 +179,7 @@ class MainActivity : AppCompatActivity() {
                 onNavMirrorChange = { send(it) },
                 onScan = { openScanner() },
                 onDisconnect = { send(RideService.ACTION_DISCONNECT) },
+                onExit = { exitApp() },
                 onOpenNotificationAccess = { openNotificationAccess() },
                 onAutoConnectChange = { enabled ->
                     autoConnectState = enabled
@@ -205,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         onNavMirrorChange: (String) -> Unit,
         onScan: () -> Unit,
         onDisconnect: () -> Unit,
+        onExit: () -> Unit,
         onOpenNotificationAccess: () -> Unit,
         onAutoConnectChange: (Boolean) -> Unit,
         hasNotificationAccess: Boolean,
@@ -409,6 +411,7 @@ class MainActivity : AppCompatActivity() {
                             onOpenNotificationAccess = onOpenNotificationAccess,
                             onScan = onScan,
                             onDisconnect = onDisconnect,
+                            onExit = onExit,
                         )
                     } else if (tab == 2) {
                         // Must match the nav bar order: Home, More, Overview,
@@ -743,6 +746,18 @@ class MainActivity : AppCompatActivity() {
                 Log.w("MainActivity", "vehicle association refused: ${it.message}")
                 then()
             }
+    }
+
+    /**
+     * Explicit exit: stop the foreground service, release companion presence
+     * observation (otherwise Android can relaunch the service when the cluster
+     * appears), then close every activity. Preferences and rides are kept.
+     */
+    private fun exitApp() {
+        stopObservingCompanion()
+        runCatching { stopService(Intent(this, RideService::class.java)) }
+            .onFailure { Log.w("MainActivity", "could not stop ride service: ${it.message}") }
+        finishAffinity()
     }
 
     private fun hasNotificationAccess(): Boolean =
