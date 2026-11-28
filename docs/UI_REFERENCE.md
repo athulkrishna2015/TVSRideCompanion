@@ -64,12 +64,18 @@ redacted.
   identity. This project is unaffiliated, so borrowing it would imply
   endorsement. The pastel palette comes from the Jupiter companion under its
   licence, which is also well suited to a glance.
-- **Three tabs, not two.** The Jupiter companion has Home and More. This app
-  adds a Log tab, because for a protocol reverse-engineering tool the live frame
-  log is a primary surface, not a debug leftover.
+- **Four tabs, not two.** The Jupiter companion has Home and More. This app adds
+  Overview and Log, because for a protocol reverse-engineering tool the live
+  frame log is a primary surface, not a debug leftover.
 - **No cloud screens.** Rides, community, shop, and account sections are absent
   entirely rather than stubbed, because they cannot exist without TVS's
   servers.
-- **No transparency panel.** Verification confidence is documented in
+- **No in-app confidence panel.** Verification confidence is documented in
   `docs/PROTOCOL.md` and `docs/NAVIGATION.md`; the More tab stays focused on
-  connection, permissions, alert and ride settings.
+  connection, permissions, alerts and settings. It does report one live fact:
+  “Notification access: granted and receiving” appears only when the listener
+  is actually bound, not merely granted in Settings.
+- **Model-aware cards.** Home telemetry cards are configurable in More, limited
+  to what the connected model supports. `Exit app` stops the foreground service
+  and companion observation before closing the app; `Keep screen on` is
+  foreground-scoped and off by default.

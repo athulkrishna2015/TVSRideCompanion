@@ -2,16 +2,18 @@
 
 ## Current state
 
-**The app builds.** `:app:assembleDebug` succeeds with zero warnings and
-produces `app/build/outputs/apk/debug/app-debug.apk` (~17 MB, 8 DEX files).
+**The app builds in CI.** As of **v0.3.0** (versionCode 19, 2026-11-28) the
+`app-debug` artifact is attached to every successful run and to the
+[v0.3.0 release](https://github.com/athulkrishna2015/TVSRideCompanion/releases/tag/v0.3.0).
+It has been installed and driven on a real phone, and the owner's Ntorq 125 was
+connected on 2026-10-13; the cluster is currently out of service.
 
-Verified in the built artifact's merged manifest: **no
-`android.permission.INTERNET`**. The full permission set is BLUETOOTH (legacy,
-SCAN, CONNECT), location (coarse + fine), notification-listener binding,
-foreground service, post-notifications and wake lock — no network capability of
-any kind. The no-account claim is enforced by the build, not promised.
-
-Not yet done: installed on a device, or exercised against a scooter.
+The merged manifest declares `android.permission.INTERNET` **deliberately** for
+embedded map tiles, place search and routing (fixed hosts only). CI asserts it
+is present, along with `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT` and
+`POST_NOTIFICATIONS`, and asserts `ANSWER_PHONE_CALLS` and `CALL_PHONE` remain
+absent. There is **no TVS account, no TVS server and no telemetry upload** —
+the no-TVS-contact guarantee is a code property, not a manifest rule.
 
 ## Prerequisites
 
@@ -28,16 +30,36 @@ dependency set (Compose BOM 2024.09.03, core-ktx 1.13.1) is the newest that
 compiles against it. Raising to 35 needs platform 35 installed *and* those
 bumped together.
 
-## CPU budget — read this before building
+## Builds are CI-only
+
+The rider asked for local builds to stop: this machine is theirs and in use, so
+the compiler is `.github/workflows/android.yml`. Push, then take the APK from
+CI:
+
+```bash
+git push origin master
+gh run list --limit 1                 # wait for 'completed  success'
+gh run download <run-id> -n app-debug -D /tmp/apk
+adb install -r /tmp/apk/app-debug.apk
+```
+
+CI runs `:app:testDebugUnitTest :app:assembleDebug --max-workers=2
+--no-parallel --no-daemon`. A full cycle is about 90 seconds and costs the
+laptop nothing. Do **not** run Gradle locally, not even to check one file.
+
+## CPU budget (if a local build is ever unavoidable)
 
 Per [AGENTS.md](../AGENTS.md) the machine has 4 cores and the owner needs the
-laptop usable while a build runs.
+laptop usable while a build runs. The limit is **not** in `gradle.properties`:
+a committed `workers.max`/`daemon=false` would also throttle CI. Pass it on
+every invocation, and pin the forked daemon immediately:
 
 ```bash
 export JAVA_HOME=~/.local/share/mise/installs/java/21.0.2
 export ANDROID_HOME=~/Android/Sdk
 setsid nohup nice -n 15 taskset -c 0,1 \
-  ./gradlew :app:assembleDebug --no-daemon --max-workers=2 --no-parallel \
+  ./gradlew :app:testDebugUnitTest :app:assembleDebug \
+  --no-daemon --max-workers=2 --no-parallel \
   > build.log 2>&1 < /dev/null &
 disown
 
@@ -45,18 +67,13 @@ disown
 for p in $(pgrep -f GradleDaemon); do
   taskset -cpc 0,1 "$p"; renice -n 15 -p "$p"
 done
-```
-
-That last loop is not optional. Gradle forks a single-use daemon, and
-observation showed it coming up on **all four cores** despite the launcher
-being pinned. Pin it right after launch, then verify:
-
-```bash
 taskset -pc $(pgrep -f GradleDaemon | head -1)   # expect: 0,1
 ```
 
-`gradle.properties` already sets `org.gradle.workers.max=2`,
-`org.gradle.daemon=false` and `kotlin.compiler.execution.strategy=in-process`.
+`kotlin.compiler.execution.strategy=in-process` stays in `gradle.properties`:
+it avoids a second JVM for the Kotlin compiler daemon. Check comment balance
+before pushing (`grep -c '/\*'` vs `grep -c '\*/'` per file) — with no local
+compiler a stray KDoc opener is invisible until CI.
 
 ## Gotchas encountered
 
@@ -73,19 +90,21 @@ Each of these cost a build cycle; recorded so nobody repeats them.
 | `Comparable<Nothing> & Serializable` | `writeCharacteristic`/`writeDescriptor` return `Int`; mixing one branch with a `Boolean` branch makes the `if/else` unify to `Comparable & Serializable` |
 | `suspend fun withLock ... only from a coroutine` | `disconnect()` called `withLock` but was not `suspend` |
 
-## Next steps
+## Verify a downloaded APK
 
-1. Install on a device and smoke-test **without** a scooter: the app should
-   start, the More tab should render its connection and settings cards, permissions should
-   prompt, and the dashboard should show `—` rather than zeroes.
-2. Wire the UI to live service state — `MainActivity` still uses
-   `remember { Telemetry() }`, a hardcoded empty object.
-3. Scan for and connect to a scooter.
-4. Then follow [CAPTURE.md](CAPTURE.md).
+CI attaches `assembleDebug`, which installs with a plain `adb install` and stays
+debuggable for `run-as` log access. Smoke-test with no scooter: Home shows `—`
+in every telemetry tile (never `0`), the header reads "Disconnected", More
+renders its connection/permissions/alert/settings cards, and the Log tab shows
+startup records with a non-zero `File:` size. Then follow
+[CAPTURE.md](CAPTURE.md) or [SIMULATOR.md](SIMULATOR.md).
 
 ## If the build pulls too hard on the CPU
 
 ```bash
-ionice -c 3 nice -n 19 taskset -c 0 gradle :app:assembleDebug \
+ionice -c 3 nice -n 19 taskset -c 0,1 ./gradlew :app:assembleDebug \
   --no-daemon --max-workers=1 --no-parallel
 ```
+
+Remember to pin the forked daemon as shown above — this is still a fallback,
+not the normal workflow.

@@ -306,13 +306,55 @@ every few seconds, which is the only path known to reach a display. The
 reference Jupiter app alternated on a 5-second boundary
 (`(System.currentTimeMillis() / 5000) % 2`; street on one phase,
 `time` + padding + `distance` on the other); that cadence survives only in the
-fallback.
+fallback. The live layout puts the maneuver on the **10-character line 1** and
+the place name / ETA rolling on the **12-character line 2**, with two
+independent rolling windows so a Maps repost with a smaller distance does not
+reset the street scroll back to its head.
+
+### Language, providers and alerts (v0.3.0)
+
+- **Spanish is content-driven, not a UI locale switch.** `NavParsing` reads
+  Spanish ETA units (`minuto(s)`, `hora(s)`) and arrival clocks such as
+  `Llegada: 11:53 a.m.`; `NavShortCodes` shortens Spanish wording from the
+  notification itself — `gira a la izquierda` → `IZQ`,
+  `muy a la derecha` → `M-DER`, `rotonda`/`glorieta` → `RND`,
+  `toma la salida` → `SAL`, `has llegado` → `LLEG`. The same rules apply whatever
+  language the phone is set to.
+- **Roundabout exits 1–7** are recognised in English (`first`…`seventh`,
+  `1st`…`7th`) and Spanish (`primera salida`, `1a salida` / `1. salida`) and mapped to the
+  vendor's seven clockwise bearing pictograms (ids 65–71); a bare roundabout
+  uses 68. Exit rules are checked before the generic roundabout rule so
+  “second exit at the roundabout” does not collapse to a plain roundabout.
+- **Street-name road words are abbreviated** to fit the rows: English
+  `Street/Road/Avenue/Highway` → `St/Rd/Ave/Hwy`, Spanish
+  `Calle/Avenida/Carrera/Diagonal/Transversal/Autopista` →
+  `Cll/Av/Cra/Dg/Tv/Autop`. Filler words are dropped last, after the content
+  rules have matched.
+- **Providers are selectable in More.** Extra maps apps, extra message apps and
+  extra call apps can be added by package name. Calls and messages are still
+  classified structurally (telecom extras and `MessagingStyle`) rather than by
+  a hard-coded package list.
+- **Notification-repost dedup:** mirrored call/message alerts are keyed by the
+  Android notification key (`AlertDedup`); no caller number or message body is
+  retained, hashed or logged. Navigation removal keeps a 12 s grace period for
+  Maps' cancel/repost cycle (above).
+- **Stale-nav watchdog:** if no new navigation step arrives for 60 s, the HUD is
+  cleared, because some maps apps leave the notification up after the ride
+  ends. A distance-less “Starting navigation…” repost is ignored while a live
+  step is active, so it cannot blank the cluster.
+- **Listener state is reported honestly:** More shows “Notification access:
+  granted and receiving” only when the listener is actually bound; “granted,
+  reader not bound” means the Settings toggle is on but Android has not bound
+  the service. If the listener is killed, the app requests a rebind.
 
 ## What still needs the Ntorq
 
-The layout is proven on the Jupiter. The open question is whether the Ntorq's
-larger TFT accepts the same 17-character text field or expects more, and whether
-its pictogram set matches. See `docs/CAPTURE.md` §3.
+The frame layouts are proven on the Jupiter and the control/text frames were
+observed on the owner's Ntorq on 2026-10-13. What is still open is whether that
+cluster places a 17-byte packet across its confirmed 10-/12-character rows the
+way the app assumes (wrap, scroll, truncate or one line), which pictogram table
+it uses, and whether it prefers big- or little-endian navigation control bytes
+(`docs/PROTOCOL.md` §4c). See `docs/CAPTURE.md` §3.
 
 ## Pictogram IDs
 

@@ -14,7 +14,8 @@ finished driver still connect and report raw frames instead of failing. Only the
 Ntorq has been confirmed against a real scooter so far; see
 `research/SOURCES.md` §4 for what each other model still needs.
 
-No account. No TVS server. No cloud.
+No TVS account and no TVS server. `INTERNET` is declared only for embedded map
+tiles, place search and routing to fixed hosts; nothing is uploaded to TVS.
 
 ## Explicitly out of scope
 
@@ -38,11 +39,15 @@ phone is physically on the scooter.
 Dropping the cloud dependency is what makes "no login" possible at all, and it
 is also what removes the failure modes the official app is criticised for.
 
-## Legal posture
+## Project posture
 
-Interoperability work on hardware you own is legitimate. This repo is
-non-commercial and publishes the protocol documentation it derives, which is
-the part that helps other owners. See `LICENSE`.
+This project takes the view that interoperability work on hardware you own is
+reasonable; that is a project stance, not legal advice. Riders in the community
+have raised warranty and terms-of-service concerns about talking to a
+proprietary cluster — those are reported as opinions in
+`docs/FORUM_POSTS.md`, not as legal findings. The repo is non-commercial and
+publishes the protocol documentation it derives, which is the part that helps
+other owners. See `LICENSE`.
 
 Derived documentation in `docs/PROTOCOL.md` reuses prose and the maneuver
 byte table from `overclock98/JupiterRideCompanion` (CC BY-NC 4.0), under

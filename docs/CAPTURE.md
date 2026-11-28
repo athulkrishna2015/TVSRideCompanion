@@ -37,7 +37,8 @@ is no longer on the critical path.
 | Step | Outcome |
 | :--- | :--- |
 | Ignition on, **no pair mode, no bonding** | Cluster appeared in an unfiltered scan as `TVSBT<digits>` |
-| "Only SmartXonnect clusters" **on** (the default) | **Nothing.** The cluster advertises no service UUID |
+| "Only SmartXonnect clusters" **off** (the default) | Cluster appears by name as `TVSBT<digits>` |
+| "Only SmartXonnect clusters" **on** | **Nothing.** The cluster advertises no service UUID |
 | Selected Ntorq 125 Race, Connect | GATT up in ~0.4 s, MTU 65, 20-byte frames streaming |
 | Ignored the UI toggles | Battery and other values appeared on the cluster |
 | Toggled a few UI switches | App could not reconnect afterwards — **a bug, now fixed** |
@@ -101,14 +102,15 @@ on a low state of charge.
 The cluster advertises for a **short window** once it is in pair mode, so have
 the scan ready before you press the button.
 
-**With the cluster in pair mode:**
+**With the cluster advertising:**
 
-1. Home → **Connect**. The scan filters on the SmartXonnect service UUID
-   `5456534D-5647-5341-5342-454E544F5251` for 20 s.
-2. If nothing appears, switch off **Only SmartXonnect clusters** and scan again.
-   That is the diagnostic: it tells us the cluster is not advertising the
-   service we expect, which is a protocol finding in itself.
-3. Pick the device, choose the model, connect.
+1. Home → **Connect**. The scan is **unfiltered by default**
+   (“Only SmartXonnect clusters” off) and matches the `TVSBT…` name. This is the
+   only mode that found the owner's Ntorq.
+2. Turning **Only SmartXonnect clusters** on is a diagnostic, not the normal
+   path: it filters on `5456534D-5647-5341-5342-454E544F5251` and finds nothing
+   on this vehicle, because the UUID is absent from the advertisement.
+3. Pick the device, choose the model (Ntorq 125 is preselected), connect.
 4. Read the **Log** tab. Inbound frames appear as `IN <hex>`.
 
 What each outcome settles:
@@ -121,35 +123,38 @@ What each outcome settles:
 | Connects, then `GATT disconnected` | Link established then dropped — check the keepalive is being accepted |
 | Connects, frames arrive, values wrong | Byte offsets are wrong; the hex dump is the evidence |
 
-The app's own log file can be pulled without a debugger, because the release
-APK is debuggable:
+For a clean session, use the helper: it restarts the app, clears logcat, waits
+for you to connect and ride, then pulls the app's own log:
+
+```bash
+tools/capture-session.sh [output.log]
+```
+
+The underlying pulls work without root because the APK is debuggable:
 
 ```bash
 adb exec-out run-as dev.tvsopen cat files/logs/tvsride.log > session.log
 ```
 
-Or from the Log tab, **Export**, which bundles every rotated file into one
-timestamped copy under `getExternalFilesDir("logs")` — app-scoped, so it needs
-no storage permission and **no root**:
+From the Log tab, **Export…** opens the system *Create Document* (SAF) picker;
+the rider chooses where the timestamped, redacted bundle is saved. An older,
+still-working app-scoped route needs no storage permission:
 
 ```bash
 adb pull /sdcard/Android/data/dev.tvsopen/files/logs/tvsride-<stamp>.log
 tools/decode-snoop.py   # n/a — this is text, read it directly
 ```
 
-Verified on device 2026-10-12: exported and pulled 98 lines, rotation history
-intact. Prefer this on any phone you cannot root, which is most of them.
+An early version of that path produced 98 lines with rotation history intact.
+The export is redacted: MACs, navigation text, caller/message details, rider
+name and parked coordinates are replaced before the copy is written. The JSON
+data export drops rider name and coordinates too. The live on-device log is
+unchanged, so `run-as ... cat files/logs/tvsride.log` remains the full evidence
+source when you need it. **More → TESTING → Keep screen on** is foreground-scoped
+(the screen stays awake only while the app is open); turn it off afterwards.
 
-The export is redacted: MACs, navigation text, caller/message details and
-parked coordinates are replaced before the copy is written. The live on-device
-log is unchanged, so `run-as ... cat files/logs/tvsride.log` remains the full
-evidence source when you need it. **More → TESTING → Keep screen on** is there
-if the display keeps timing out mid-capture; turn it off again afterwards.
-
-**This has never been run against a real cluster.** Everything the scanner does
-is verified only in that the platform accepts the scan and the UI renders. The
-first question it answers is simply whether the Ntorq advertises the UUID we
-filter on.
+This scan path was exercised on the owner's Ntorq on 2026-10-13 (§0b), but only
+on that one vehicle. The remaining questions below still need a scooter.
 
 ## 1. HCI snoop log — the highest-value capture
 
@@ -422,13 +427,13 @@ The packet layout is **no longer an open question** — `0x5A 0x4E` control and
 service. What remains is whether the Ntorq's **5-inch TFT** behaves the same:
 
 1. Does it accept the control frame at all, or ignore it?
-2. **Character width — now the key question.** A photograph of this cluster
-   shows a **three-row text area** of roughly 9-10 characters per row, while the
-   proven Jupiter layout uses a single 17-character row. Determine what this
-   cluster actually accepts:
-   - send a known 17-character ASCII string and count what appears;
-   - check whether `0x5B 0x63` (99) selects a row;
-   - test whether rows 2 and 3 need separate packets.
+2. **Character placement — now the key question.** The rider and the manual's
+   rendered strings agree on an asymmetric layout: **10 characters on line 1,
+   12 on line 2**, while the wire payload is 17 bytes. Determine what the
+   cluster actually does with the extra bytes:
+   - send a known 17-character ASCII string and count what appears on each line;
+   - check whether it wraps, scrolls, truncates, or uses only one line;
+   - confirm the maneuver appears on line 1 and the rolling place/ETA on line 2.
 3. **Pictogram table.** The official app's table and the Jupiter companion's
    disagree on ids 5, 7, 13, 15, 21, 41 and the roundabout block. If arrows
    render wrong, that is the first suspect — both tables are recorded side by
@@ -450,12 +455,14 @@ Getting this right tells us which pictogram table is authoritative.
 
 ## 5. Handshake
 
-- Does the Ntorq emit a `9B F2` challenge at all?
-- If yes, what does the official app send back? `byteArrayForUnLock` builds
+- **Answered on the owner's Ntorq (2026-10-13): no `9B F2` challenge, no pairing
+  mode, no bonding.** The response path is built but unused on that vehicle.
+- Still open for other variants: if a cluster does emit a challenge, what does
+  the official app send back? `byteArrayForUnLock` builds
   `START_BYTE_9A + DATA_ID_F1 + … + shortHandByteArray`, padded to 20 with a
   `-1` terminator. `U388ChallengeFrameData` shows the challenge shape.
 - The Jupiter report documents an AES-128-CTR response with a published key.
-  Confirm whether the Ntorq uses the same key or skips it.
+  Confirm whether another model uses the same key or skips it.
 
 ## 6. Button gestures
 

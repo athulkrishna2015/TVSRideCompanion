@@ -7,7 +7,7 @@ verification is impossible right now. Two software paths stand in:
 | :--- | :--- | :--- |
 | Tool | `tools/jupiter-bridge.sh` + `tools/jupiter-bench.py` (vendored Scoot sim) | `tools/ntorq-bridge.py` (clean-room, in-repo) |
 | Targets | Scoot/Jupiter byte layout & checksum rules | **This app's** Ntorq driver (`NtorqDriver` / `Keepalive`) and the `docs/PROTOCOL.md` capture |
-| BLE name / discovery | advertises `Jupiter-SIM` + service UUID | advertises `TVSBT…` with **no service UUID** by default (real Ntorq behaviour) |
+| BLE name / discovery | advertises `Jupiter-SIM` + service UUID | advertises `TVSBT800450` with **no service UUID** by default (real Ntorq behaviour) |
 | WS port | 8765 | 8766 |
 
 **Both are evidence about the app, not about the scooter.** A simulator passing

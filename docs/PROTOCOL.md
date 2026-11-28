@@ -1,10 +1,10 @@
 # SmartXonnect BLE protocol — Ntorq (125 / 150)
 
-**Status: largely UNVERIFIED for the Ntorq.** Everything below is either
-(a) transcribed from the Jupiter reverse-engineering report in the parent folder,
-or (b) pending confirmation against the user's own scooter. Provenance is
-marked per section. Do not treat the Jupiter facts as Ntorq facts until
-`docs/CAPTURE.md` has been run.
+**Status: mixed.** Inbound telemetry and the link/discovery facts were confirmed
+against the owner's Ntorq on 2026-10-13 (§4a, §4b); most outbound details are
+still transcribed from the Jupiter report or from APK analysis and remain
+UNVERIFIED on the Ntorq. Provenance is marked per section. Do not treat a
+Jupiter fact as an Ntorq fact just because the frame layout is shared.
 
 Provenance tags: `[JUPITER]` = from the Jupiter report, `[UNVERIFIED]` =
 assumed shared with Ntorq, `[NATORQ]` = confirmed for Ntorq.
@@ -382,10 +382,10 @@ wire for the first time:
 text row. They alternate on a short interval so the display shows the street and
 the metrics in turn.
 
-**Byte order is unresolved.** The app currently writes big-endian
-(`PacketBuilder.navigationControl`), and its unit test pins that choice using a
-frame built by the same encoder. The only captured outbound control frame above
-reads `26 02` / `9B 01` / `26 02`, which is 550 m / 411 min / 550 m in
+**Byte order is unresolved (still open in v0.3.0).** The app currently writes
+big-endian (`PacketBuilder.navigationControl`), and its unit test pins that
+choice using a frame built by the same encoder. The only captured outbound
+control frame above reads `26 02` / `9B 01` / `26 02`, which is 550 m / 411 min / 550 m in
 **little-endian** and matches the companion text row exactly; big-endian would
 read 9730 m / 39681 min / 2490368 m. No capture has confirmed that the cluster
 accepts either form, so this stays open rather than being declared settled.
@@ -443,11 +443,11 @@ asserts their continued absence so they are not added on a hunch.
 ### 4b. Discovery and handshake — measured, and both assumptions were wrong
 
 - **The cluster advertises no service UUID.** `5456534D-…` is absent from its
-  advertisement packet, so the default "only SmartXonnect clusters" scan filter
-  finds nothing and the device must be found by name. It advertises as
-  `TVSBT<digits>`, which is what the name-based fallback in `ScooterScanner`
-  matches. Without that fallback the cluster is invisible to a filtered scan —
-  it has to be connected to before the UUID can appear in the GATT table.
+  advertisement packet, so the "only SmartXonnect clusters" scan filter finds
+  nothing; that filter is **off by default** and the device must be found by
+  name. It advertises as `TVSBT<digits>`, which is what the name-based fallback
+  in `ScooterScanner` matches. Without that fallback the cluster is invisible to
+  a filtered scan — the UUID appears only in the GATT table after connecting.
 - **No pairing mode was needed**, and **no `9B F2` challenge was ever sent**.
   The handshake in §2 is built and wired, but this cluster does not use it.
 
@@ -749,21 +749,25 @@ through Android's normal input path.
 
 1. ~~GATT service UUID — identical, or a variant?~~ **Answered:** identical,
    verified in `NtorqBLEConnectionConfig`.
-2. Does the Ntorq require the `0x9A` handshake? `byteArrayForUnLock` builds
-   `START_BYTE_9A + DATA_ID_F1 + … + shortHandByteArray` padded to 20 with a
-   `-1` terminator, and `U388ChallengeFrameData` shows the challenge shape.
-   Whether Ntorq enforces it is untested — the TechEnclave consensus is that
-   there is effectively no real key.
+2. ~~Does the Ntorq require the `0x9A` handshake?~~ **Answered on the owner's
+   bike:** no pairing, no bonding and no `9B F2` challenge; the response path in
+   §2 is built and unused. It remains open for other variants, where
+   `byteArrayForUnLock` builds `START_BYTE_9A + DATA_ID_F1 + … +
+   shortHandByteArray` padded to 20 with a `-1` terminator (challenge shape in
+   `U388ChallengeFrameData`). The TechEnclave consensus is that there is
+   effectively no real key.
 3. Pictogram byte table — the official table is in `Pictogram.kt`, but
    `ManeuverUtils.getShortInstruction()` branches on
    `KEYS.VEHICLETYPEID == "22"` with a *different* table. Which branch the
    Ntorq takes is the open question.
-4. Does the Ntorq accept `0x4C`/`0x63` text packets, and how many characters
-   fit? The Jupiter's 17 is unlikely to hold on a 5-inch TFT.
+4. Does the Ntorq accept `0x4C`/`0x63` text packets, and how does it place a
+   17-byte payload on its asymmetric 10-/12-character rows? The widths are now
+   known from the rider and the manual; the placement still needs a capture.
 5. Navigation data id: `0x4E` (`DATA_ID_NAVIGATION_CONTROL`) or `0x49`
    (`DATA_ID_NAVIGATION_CONTROL_2`)?
 
-All five need a capture — see `docs/CAPTURE.md`.
+Items 3–5 still need a capture; item 2 was settled by the one hardware pass.
+See `docs/CAPTURE.md`.
 
 ## 9. Second source: the Scoot simulator spec (Jupiter)
 
@@ -848,10 +852,11 @@ both sources.
   upstream feed: every file, what it is evidence for, and what was adopted or
   deliberately skipped.
 - `docs/reference/jupiter-scoot.md` — the frame tables themselves.
-- `docs/SIMULATOR.md` — running the upstream simulator locally. It works on
-  this laptop: the bridge advertises the real Jupiter service UUID, so the app
-  can be exercised end-to-end with **no scooter in range**, and
-  `tools/jupiter-bench.py` supplies the telemetry.
+- `docs/SIMULATOR.md` — running the simulators locally. The Jupiter bridge
+  advertises the real service UUID and `tools/jupiter-bench.py` supplies
+  telemetry; `tools/ntorq-bridge.py` exercises this app's Ntorq driver over
+  `ws://127.0.0.1:8766`, advertising `TVSBT800450` with no UUID. Both are
+  development aids, not hardware verification.
 
 Two facts from that material that are easy to get wrong:
 
