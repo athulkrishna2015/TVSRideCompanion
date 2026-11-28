@@ -31,8 +31,10 @@ class ThermalSessionTest {
         val s = ThermalSession(warmUpC = 60, hotC = 100, nowMs = { 0L })
         val temps = MutableList(70) { 100 } + listOf(96, 97, 100, 100)
         val events = feed(s, temps)
-        assertEquals(1, events.count { "ENGINE HOT" in it })
-        assert(!events.last().contains("ENGINE HOT"))
+        val firedAt = events.mapIndexedNotNull { i, e -> if ("ENGINE HOT" in e) i else null }
+        // First crossing, the 5-minute repeat, then a new crossing after
+        // cooling below hot-3 re-armed the alert.
+        assertEquals(listOf(0, 60, 72), firedAt)
     }
 
     @Test
