@@ -45,15 +45,20 @@ object OutboundId {
     const val CHALLENGE = 0xF2
 }
 
-/** Music/call command bytes, from `BluetoothConstants`. */
+/** Music/call command bytes for cluster -> phone commands. */
 object Command {
-    const val VOL_UP = 0
-    const val VOL_DOWN = 1
-    const val PLAY = 2
-    const val PAUSE = 3
-    const val TOGGLE = 4
-    const val NEXT = 5
-    const val PREV = 6
+    // Dex-verified against com.tvs.bluetooth.core.utils.BluetoothUtil
+    // .getMusicCommandType in TVS Connect 8.14.1 (REA ev_0b6f9092…):
+    // 0 play, 1 pause, 2 toggle, 3 next, 4 previous, 5 vol+, 6 vol-.
+    // The old values here were the outbound phone -> cluster map and are
+    // never referenced; corrected so a future caller cannot invert controls.
+    const val PLAY = 0
+    const val PAUSE = 1
+    const val TOGGLE = 2
+    const val NEXT = 3
+    const val PREV = 4
+    const val VOL_UP = 5
+    const val VOL_DOWN = 6
 
     const val CALL_NEUTRAL = 0
     const val CALL_RINGING = 0

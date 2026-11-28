@@ -125,7 +125,9 @@ class ScooterPairing(private val context: Context) {
     }
 
     fun isBonded(address: String): Boolean =
-        adapter?.bondedDevices?.any { it.address == address } == true
+        adapter?.bondedDevices?.any {
+            it.address.equals(address, ignoreCase = true)
+        } == true
 
     /** Addresses the phone has already bonded, as MAC strings. */
     fun bondedAddresses(): Set<String> =
