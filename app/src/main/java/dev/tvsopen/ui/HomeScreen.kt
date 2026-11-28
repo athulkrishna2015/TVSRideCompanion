@@ -31,6 +31,7 @@ import dev.tvsopen.ui.theme.AppSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -41,6 +42,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import android.content.Intent
 import android.net.Uri
 import dev.tvsopen.prefs.RidePrefs
@@ -48,6 +53,7 @@ import dev.tvsopen.protocol.VehicleModel
 import dev.tvsopen.session.ConnectionState1
 import dev.tvsopen.session.HudState
 import dev.tvsopen.session.ParkedInfo
+import dev.tvsopen.session.Session
 import dev.tvsopen.session.Telemetry
 import dev.tvsopen.transport.ConnectionState
 import dev.tvsopen.transport.label
@@ -72,8 +78,6 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun HomeScreen(
-    telemetry: Telemetry,
-    hud: HudState,
     connection: ConnectionState1,
     parked: ParkedInfo?,
     findMyEnabled: Boolean,
@@ -106,10 +110,10 @@ fun HomeScreen(
     ) {
         Header(connection, connected)
 
-        if (hud.active) {
-            Spacer(Modifier.height(10.dp))
-            NavigationStrip(hud)
-        }
+        // Collected in this small section, not in MainActivity: the HUD is
+        // updated per navigation step, and a root collection recomposed every
+        // tab on each step even while the rider was reading the Log tab.
+        HudNavigationSection()
 
         val ctx = LocalContext.current
 
@@ -140,7 +144,7 @@ fun HomeScreen(
             Spacer(Modifier.height(20.dp))
             SectionLabel("While riding")
         }
-        if (shows(HomeCard.MIRROR_NAV)) MirrorNavCard(navMirroring, hud, onNavMirrorChange)
+        if (shows(HomeCard.MIRROR_NAV)) MirrorNavCard(navMirroring, onNavMirrorChange)
         if (shows(HomeCard.FIND_MY)) {
             Spacer(Modifier.height(12.dp))
             FindMyCard(findMyEnabled, onFindMyChange)
@@ -155,7 +159,7 @@ fun HomeScreen(
         if (shows(HomeCard.LINK)) {
             Spacer(Modifier.height(20.dp))
             SectionLabel("Link")
-            LinkCard(telemetry)
+            LinkCard()
         }
 
         Spacer(Modifier.height(28.dp))
@@ -330,7 +334,8 @@ private fun Pill(text: String, on: Boolean) {
  * not a TVS server.
  */
 @Composable
-private fun MirrorNavCard(enabled: Boolean, hud: HudState, onChange: (Boolean) -> Unit) {
+private fun MirrorNavCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    val hud by Session.hud.collectAsStateWithLifecycle()
     ActionCard(
         background = LocalTilePalette.current.accent,
         icon = Icons.Filled.Navigation,
@@ -464,14 +469,22 @@ private fun ActionCard(
  * A 1 Hz tick so age labels keep advancing while no flow emits. A `remember`
  * keyed only on a timestamp froze "Telemetry live" on screen forever after a
  * link died, because no more frames arrived to change the key.
+ *
+ * Bound to RESUMED: an infinite LaunchedEffect(Unit) kept ticking in every tab
+ * and in the background, invalidating cards the rider was not looking at.
+ * repeatOnLifecycle cancels it on pause and restarts it on resume, so the label
+ * is still at most one second stale when the screen comes back.
  */
 @Composable
 private fun rememberTicker(): Long {
     val tick = remember { mutableStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1_000)
-            tick.value++
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(1_000)
+                tick.value++
+            }
         }
     }
     return tick.value
@@ -485,7 +498,11 @@ private fun rememberTicker(): Long {
  * looks identical whether the link is streaming or died a minute ago.
  */
 @Composable
-private fun LinkCard(telemetry: Telemetry) {
+private fun LinkCard() {
+    // Collected here, not at the root or in HomeScreen: telemetry is published
+    // on every inbound frame, and the freshness label is the only place on
+    // Home that needs it.
+    val telemetry by Session.telemetry.collectAsStateWithLifecycle()
     val tick = rememberTicker()
     val age = remember(telemetry.lastFrameAt, tick) {
         if (telemetry.lastFrameAt == 0L) null
@@ -504,6 +521,19 @@ private fun LinkCard(telemetry: Telemetry) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * The live turn strip. Collecting inside this section keeps a navigation update
+ * from recomposing the rest of Home, and keeps HUD state out of MainActivity.
+ */
+@Composable
+private fun HudNavigationSection() {
+    val hud by Session.hud.collectAsStateWithLifecycle()
+    if (hud.active) {
+        Spacer(Modifier.height(10.dp))
+        NavigationStrip(hud)
     }
 }
 

@@ -85,6 +85,11 @@ fun MoreScreen(
     onDisconnect: () -> Unit,
     onExit: () -> Unit,
 ) {
+    // One load for the whole screen. Several items used to call RidePrefs.load
+    // (and LocalContext.current) independently on every recomposition, which
+    // multiplied SharedPreferences reads on a screen that is already long.
+    val ctx = LocalContext.current
+    val prefs = remember { RidePrefs.load(ctx) }
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp),
@@ -96,7 +101,7 @@ fun MoreScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        item { DozeCard() }
+        item { DozeCard(prefs) }
 
         item {
             Text("APPEARANCE", style = MaterialTheme.typography.labelMedium,
@@ -130,7 +135,6 @@ fun MoreScreen(
         }
 
         item {
-            val ctx = LocalContext.current
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -232,8 +236,6 @@ fun MoreScreen(
         }
 
         item {
-            val ctx = LocalContext.current
-            val prefs = RidePrefs.load(ctx)
             var extras by remember { mutableStateOf(prefs.extraMapsPackages) }
             ExtraPackageCard(
                 title = "Extra maps apps",
@@ -254,8 +256,6 @@ fun MoreScreen(
         item { KeepScreenOnCard(enabled = keepScreenOn, onChange = onKeepScreenOnChange) }
 
         item {
-            val ctx = LocalContext.current
-            val prefs = RidePrefs.load(ctx)
             // Key on the model: a connection in the background can change it
             // while More is still composed, and the supported set with it.
             var chosen by remember(vehicleModel) {
@@ -302,8 +302,6 @@ fun MoreScreen(
         }
 
         item {
-            val ctx = LocalContext.current
-            val prefs = remember { RidePrefs.load(ctx) }
             var mirrorCalls by remember { mutableStateOf(prefs.mirrorPhoneCalls) }
             var mirrorMessages by remember { mutableStateOf(prefs.mirrorMessages) }
             var anyApp by remember { mutableStateOf(prefs.mirrorAnyAppNotifications) }
@@ -429,8 +427,6 @@ fun MoreScreen(
         }
 
         item {
-            val ctx = LocalContext.current
-            val prefs = RidePrefs.load(ctx)
             var extras by remember { mutableStateOf(prefs.extraMessagePackages) }
             ExtraPackageCard(
                 title = "Extra message apps",
@@ -444,8 +440,6 @@ fun MoreScreen(
         }
 
         item {
-            val ctx = LocalContext.current
-            val prefs = RidePrefs.load(ctx)
             var extras by remember { mutableStateOf(prefs.extraCallPackages) }
             ExtraPackageCard(
                 title = "Extra call apps",
@@ -458,7 +452,6 @@ fun MoreScreen(
         }
 
         item {
-            val ctx = LocalContext.current
             var showAbout by remember { mutableStateOf(false) }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -808,11 +801,10 @@ private fun RiderNameCard(name: String?, onNameChange: (String?) -> Unit) {
  * out, rather than pretending a button can do it.
  */
 @Composable
-private fun DozeCard() {
+private fun DozeCard(prefs: RidePrefs) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var exempt by remember { mutableStateOf(isDozeExempt(ctx)) }
-    val prefs = remember { RidePrefs.load(ctx) }
 
     // Re-read on every resume, not once. The grant happens in system settings,
     // so `remember` alone kept reporting "not exempt" until the process died.
@@ -877,6 +869,9 @@ private fun DozeCard() {
 
 @Composable
 private fun RidesCard(rides: List<Ride>, totalRides: Int, totalDistanceKm: Double) {
+    // SimpleDateFormat is not cheap and is not thread-safe to share; one
+    // remembered instance per card, not one per row on every recomposition.
+    val formatter = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
@@ -896,8 +891,7 @@ private fun RidesCard(rides: List<Ride>, totalRides: Int, totalDistanceKm: Doubl
             } else {
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 rides.take(5).forEach { ride ->
-                    val df = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
-                    val whenText = df.format(Date(ride.startedAt))
+                    val whenText = formatter.format(Date(ride.startedAt))
                     val dist = String.format(Locale.US, "%.1f km", ride.distanceKm)
                     val dur = if (ride.inProgress) {
                         "In progress · ${ride.durationMinutes()} min"

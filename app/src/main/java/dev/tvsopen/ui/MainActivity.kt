@@ -241,13 +241,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val telemetry by Session.telemetry.collectAsStateWithLifecycle()
-        val hud by Session.hud.collectAsStateWithLifecycle()
         val connection by Session.connection.collectAsStateWithLifecycle()
 
         // Everything the UI shows comes from the process-scoped Session, which
         // the BLE service and the notification listener both write into. The
-        // activity only observes.
+        // activity only observes. Telemetry and HUD are deliberately NOT
+        // collected here: telemetry republishes on every inbound BLE frame, so
+        // collecting it at the root recomposed every tab and the nav bar. The
+        // leaf composables that display those values collect them instead.
 
         // Start the mirror once a connection exists, because it defaults on.
         //
@@ -342,8 +343,6 @@ class MainActivity : AppCompatActivity() {
                         )
                     } else if (tab == 0) {
                         HomeScreen(
-                            telemetry = telemetry,
-                            hud = hud,
                             connection = connection,
                             parked = parked,
                             rideMode = rideMode,
@@ -418,7 +417,7 @@ class MainActivity : AppCompatActivity() {
                         // Log. These two destinations were swapped, so tapping
                         // Overview rendered the log and tapping Log rendered
                         // the dashboard.
-                        OverviewScreen(telemetry = telemetry)
+                        OverviewScreen()
                     } else {
                         LogScreen()
                     }

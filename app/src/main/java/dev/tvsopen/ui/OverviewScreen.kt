@@ -74,10 +74,11 @@ import androidx.compose.runtime.getValue
  * "Total Rides" and the ride list are also cloud data and are not shown.
  */
 @Composable
-fun OverviewScreen(
-    telemetry: Telemetry,
-    modifier: Modifier = Modifier,
-) {
+fun OverviewScreen(modifier: Modifier = Modifier) {
+    // Collected here, not in MainActivity: telemetry arrives on every BLE
+    // frame, so a root collection recomposed the nav bar, Home and Log as well.
+    // This screen is the only one showing these values.
+    val telemetry by Session.telemetry.collectAsStateWithLifecycle()
     Column(
         modifier
             .fillMaxSize()
@@ -132,19 +133,7 @@ fun OverviewScreen(
         Spacer(Modifier.height(20.dp))
         SectionLabel("Fuel")
         FuelGauge(telemetry.fuelBars)
-        val thermalAlert by Session.thermalAlert.collectAsStateWithLifecycle()
-        val lowFuelAlert by Session.lowFuelAlert.collectAsStateWithLifecycle()
-        val notices = listOfNotNull(thermalAlert, lowFuelAlert)
-        if (notices.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                notices.joinToString(" · "),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
-        }
+        AlertNotices()
 
         Spacer(Modifier.height(20.dp))
         SectionLabel("Distance Travelled")
@@ -254,6 +243,24 @@ private fun SectionLabel(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 10.dp),
     )
+}
+
+/** Alerts change rarely; keep their flows out of the telemetry-heavy screen. */
+@Composable
+private fun AlertNotices() {
+    val thermalAlert by Session.thermalAlert.collectAsStateWithLifecycle()
+    val lowFuelAlert by Session.lowFuelAlert.collectAsStateWithLifecycle()
+    val notices = listOfNotNull(thermalAlert, lowFuelAlert)
+    if (notices.isNotEmpty()) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            notices.joinToString(" · "),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+    }
 }
 
 @Composable

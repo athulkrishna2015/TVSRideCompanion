@@ -41,6 +41,14 @@ enum class Level(val short: Char, val androidPriority: Int) {
 
 /** One captured record. */
 data class LogRecord(
+    /**
+     * Monotonic id, used as the LazyColumn key. Several records can share a
+     * millisecond and a message (a burst of identical frames, a clear followed
+     * by immediate output), so timestamp+text is not a unique key. Without a
+     * stable key Compose rebinds rows when the head of the capped list falls
+     * off, which shows up as scroll jumps while capture is running.
+     */
+    val id: Long,
     val atMillis: Long,
     val level: Level,
     val tag: String,
@@ -148,6 +156,9 @@ object Log {
     private val ring = ArrayDeque<LogRecord>(RING_CAPACITY)
 
     private var lastPublishAt = 0L
+
+    /** Never reset on clear: ids must stay unique across the whole session. */
+    private val nextRecordId = java.util.concurrent.atomic.AtomicLong()
 
     private val frameCounts = HashMap<Int, Int>()
 
@@ -372,7 +383,14 @@ object Log {
     fun log(level: Level, tag: String, message: String, t: Throwable? = null) {
         if (level < minLevel) return
         val sw = t?.let { StringWriter().also { w -> it.printStackTrace(PrintWriter(w)) }.toString() }
-        val record = LogRecord(System.currentTimeMillis(), level, tag, message, sw)
+        val record = LogRecord(
+            nextRecordId.getAndIncrement(),
+            System.currentTimeMillis(),
+            level,
+            tag,
+            message,
+            sw,
+        )
 
         AndroidLog.println(level.androidPriority, "$TAG/$tag", message)
 
