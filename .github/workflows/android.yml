@@ -165,6 +165,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
+          # A tag push uses its own v* tag. A manual dispatch has no tag ref,
+          # so give it a unique one instead of a stale hard-coded release.
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v0.0.0-manual-{0}', github.run_number) }}
           files: app/build/outputs/apk/debug/app-debug.apk
           generate_release_notes: true
           body: |

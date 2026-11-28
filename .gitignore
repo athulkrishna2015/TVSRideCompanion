@@ -66,3 +66,6 @@ docs/FORUM_POSTS.md
 __pycache__/
 *.pyc
 *.pyo
+
+# Rider captures kept outside version control
+capturas para analizar/

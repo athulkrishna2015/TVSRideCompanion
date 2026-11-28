@@ -179,4 +179,11 @@ class NavParsingTest {
         assertEquals(1000, NavParsing.extractDistance("1,000 m"))
         assertEquals(2300, NavParsing.extractDistance("2,3 km"))
         assertEquals(1500, NavParsing.extractDistance("1.5 km"))
-    }}
+    }
+
+    @Test
+    fun `arrival clock does not require a fabricated zero minute duration`() {
+        val p = NavParsing.parse("Arrive", "Example Road", "", "9:00 PM", ninePm)
+        assertEquals(0, p.etaMinutes)
+    }
+}

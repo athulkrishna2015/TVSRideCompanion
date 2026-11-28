@@ -80,12 +80,17 @@ object NavParsing {
     private val DISTANCE_RE =
         Regex("""(\d+(?:[.,]\d+)?)\s*(km|mi|ft|m)(?![A-Za-z])""", RegexOption.IGNORE_CASE)
 
-    /** `1 min`, `25 mins`, `1 hr`, `2 hours`. */
-    private val ETA_RE =
-        Regex("""(\d+)\s*(min|mins|minute|minutes|hr|hrs|hour|hours)""", RegexOption.IGNORE_CASE)
+    /** `1 min`, `25 mins`, `1 hr`, `2 hours`, `1 h 25 min`, `2 horas`. */
+    private val ETA_RE = Regex(
+        """(\d+)\s*(min|mins|minute|minutes|minuto|minutos|hr|hrs|hour|hours|hora|horas|h)(?![A-Za-z])""",
+        RegexOption.IGNORE_CASE,
+    )
 
-    /** A standalone arrival time: `1:58 PM`, `09:04 am`. */
-    private val CLOCK_RE = Regex("""^\s*(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]\.?\s*$""")
+    /** Arrival clock, including Spanish `Llegada: 11:53 a.m.` with narrow spaces. */
+    private val CLOCK_RE = Regex(
+        """^\s*(?:(?:Llegada|ETA)\s*:?\s*)?(\d{1,2}):(\d{2})[\s\u00A0\u202F]*([AaPp])\.?[Mm]\.?\s*$""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /**
      * Parse the four notification string fields.
@@ -113,7 +118,10 @@ object NavParsing {
             etaMinutes = extractEtaMinutesAt(nowMinutes, subText, bigText, text, title),
             // Tier 2 resolution: the cluster icon table is closed, so fall back
             // to the words when the provider gives us no usable icon.
-            pictogram = ManeuverResolver.fromText("$maneuver $street"),
+            // Prefer the maneuver: an arrival-clock sub-text must not override
+            // the live turn with a destination pictogram.
+            pictogram = ManeuverResolver.fromText(maneuver)
+                ?: ManeuverResolver.fromText(street),
         )
     }
 
@@ -159,7 +167,7 @@ object NavParsing {
                 .mapNotNull { m ->
                     val n = m.groupValues[1].toIntOrNull() ?: return@mapNotNull null
                     when (m.groupValues[2].lowercase()) {
-                        "hr", "hrs", "hour", "hours" -> n * 60
+                        "hr", "hrs", "hour", "hours", "hora", "horas", "h" -> n * 60
                         else -> n
                     }
                 }
