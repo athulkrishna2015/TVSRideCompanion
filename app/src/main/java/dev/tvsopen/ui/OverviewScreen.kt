@@ -40,11 +40,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.tvsopen.session.Telemetry
+import dev.tvsopen.session.Session
 import dev.tvsopen.ui.theme.LocalTilePalette
 import dev.tvsopen.ui.theme.NumberStyle
 import java.util.Locale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * Vehicle Overview.
@@ -129,6 +131,17 @@ fun OverviewScreen(
         Spacer(Modifier.height(20.dp))
         SectionLabel("Fuel")
         FuelGauge(telemetry.fuelBars)
+        val thermalAlert by Session.thermalAlert.collectAsStateWithLifecycle()
+        if (thermalAlert != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                thermalAlert!!,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        }
 
         Spacer(Modifier.height(20.dp))
         SectionLabel("Distance Travelled")

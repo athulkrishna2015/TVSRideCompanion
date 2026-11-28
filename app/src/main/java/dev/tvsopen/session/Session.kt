@@ -149,6 +149,11 @@ object Session {
     private val _alert = MutableStateFlow<ClusterAlert?>(null)
     val alert: StateFlow<ClusterAlert?> = _alert.asStateFlow()
 
+    private val thermal = ThermalSession()
+    private val _thermalAlert = MutableStateFlow<String?>(null)
+    /** Warm-up / overheat labels computed from telemetry, never sent to the cluster. */
+    val thermalAlert: StateFlow<String?> = _thermalAlert.asStateFlow()
+
     private val _connection = MutableStateFlow(ConnectionState1())
     val connection: StateFlow<ConnectionState1> = _connection.asStateFlow()
 
@@ -243,6 +248,8 @@ object Session {
         // onFrame fills it from the first 0x10 that carries an odometer.
         if (isConnected && !wasConnected) {
             _telemetry.value = _telemetry.value.copy(odometerAtConnectKm = null)
+            thermal.reset()
+            _thermalAlert.value = null
             rideLog?.start()
             syncRideFlows()
         }
@@ -351,6 +358,13 @@ object Session {
         // the last frame of a short ride was never recorded.
         _telemetry.value = updated
         if (frame.dataId == 0x10) trackRideDistance()
+        if (frame.dataId == 0x18) {
+            val temp = frame.field(Field.ENGINE_TEMPRATURE)?.toInt()
+            if (temp != null) {
+                val events = thermal.onReading(temp, now)
+                if (events.isNotEmpty()) _thermalAlert.value = events.joinToString(" · ")
+            }
+        }
     }
 
     fun onHud(update: (HudState) -> HudState) {
