@@ -154,6 +154,10 @@ object Session {
     /** Warm-up / overheat labels computed from telemetry, never sent to the cluster. */
     val thermalAlert: StateFlow<String?> = _thermalAlert.asStateFlow()
 
+    private val lowFuel = LowFuelRule()
+    private val _lowFuelAlert = MutableStateFlow<String?>(null)
+    val lowFuelAlert: StateFlow<String?> = _lowFuelAlert.asStateFlow()
+
     private val _connection = MutableStateFlow(ConnectionState1())
     val connection: StateFlow<ConnectionState1> = _connection.asStateFlow()
 
@@ -250,6 +254,8 @@ object Session {
             _telemetry.value = _telemetry.value.copy(odometerAtConnectKm = null)
             thermal.reset()
             _thermalAlert.value = null
+            lowFuel.reset()
+            _lowFuelAlert.value = null
             rideLog?.start()
             syncRideFlows()
         }
@@ -357,7 +363,12 @@ object Session {
         // the assignment, so every distance update was one frame stale and
         // the last frame of a short ride was never recorded.
         _telemetry.value = updated
-        if (frame.dataId == 0x10) trackRideDistance()
+        if (frame.dataId == 0x10) {
+            trackRideDistance()
+            lowFuel.next(updated.fuelBars, Telemetry.FUEL_BAR_MAX)?.let {
+                _lowFuelAlert.value = it
+            }
+        }
         if (frame.dataId == 0x18) {
             val temp = frame.field(Field.ENGINE_TEMPRATURE)?.toInt()
             if (temp != null) {

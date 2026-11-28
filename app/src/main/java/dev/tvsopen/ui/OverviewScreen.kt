@@ -132,10 +132,12 @@ fun OverviewScreen(
         SectionLabel("Fuel")
         FuelGauge(telemetry.fuelBars)
         val thermalAlert by Session.thermalAlert.collectAsStateWithLifecycle()
-        if (thermalAlert != null) {
+        val lowFuelAlert by Session.lowFuelAlert.collectAsStateWithLifecycle()
+        val notices = listOfNotNull(thermalAlert, lowFuelAlert)
+        if (notices.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text(
-                thermalAlert!!,
+                notices.joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.tertiary,
                 modifier = Modifier.fillMaxWidth(),
