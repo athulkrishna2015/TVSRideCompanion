@@ -35,14 +35,10 @@ object NavShortCodes {
         for ((long, short) in ROAD_SHORT) {
             s = s.replace(Regex("\\b$long\\b", RegexOption.IGNORE_CASE), short)
         }
-        if (s.length <= max) return s
-        val words = s.split(' ').toMutableList()
-        var i = 0
-        while (words.joinToString(" ").length > max && i < words.size - 1) {
-            if (words[i].length > 1) words[i] = words[i].take(1)
-            i++
-        }
-        return words.joinToString(" ").take(max).trim()
+        // Do not initialise proper nouns: line 2 is a rolling window, so a
+        // long name is read over successive sends. Turning "Example Road"
+        // into "E RD" made the place unrecognisable on the first window.
+        return s
     }
     private val DASH_RUN = Regex("-+")
 
