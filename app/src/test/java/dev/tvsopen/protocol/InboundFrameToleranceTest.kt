@@ -12,11 +12,10 @@ class InboundFrameToleranceTest {
         ByteArray(20) { i -> bytes.getOrNull(i)?.toByte() ?: 0 }
 
     @Test
-    fun `all zero frame decodes without inventing fields`() {
+    fun `all zero connect frame is rejected without inventing fields`() {
+        // Start byte 0 is not a driver-approved lead, so the driver refuses it.
         val d = NtorqDriver().decode(ByteArray(20))
-        assertNotNull(d)
-        assertNull(d!!.field(Field.SPEED))
-        assertNull(d.field(Field.ODOMETER))
+        assertNull(d)
     }
 
     @Test
