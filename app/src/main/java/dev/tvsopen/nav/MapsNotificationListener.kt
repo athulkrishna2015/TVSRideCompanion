@@ -73,17 +73,18 @@ data class NavInstruction(
 
     /** Line 2: the place/street, with ETA and distance when known. */
     fun streetLine(maxChars: Int = RowChars.NTORQ_LINE_2, tick: Int = 0): String {
+        // Fit only the place name. Applying the dictionary to the combined
+        // metrics line abbreviated "Example Road" into an initial and lost the
+        // street entirely on a 12-character row.
+        val place = NavShortCodes.fitStreet(street, maxChars)
         val raw = listOf(
-            street,
+            place,
             if (etaMinutes > 0) "ETA ${etaMinutes}m" else "",
             if (distanceMeters >= 1000)
                 "${distanceMeters / 1000}Km ${distanceMeters % 1000}m"
             else if (distanceMeters > 0) "${distanceMeters}m" else "",
         ).filter { it.isNotEmpty() }.joinToString(" ")
-        // Shorten the place with a road-word dictionary before rolling, so a
-        // name that fits the row is shown whole instead of scrolled.
-        val fitted = NavShortCodes.fitStreet(NavShortCodes.compress(raw), maxChars)
-        return RollingText.window(fitted, maxChars, tick)
+        return RollingText.window(NavShortCodes.compress(raw), maxChars, tick)
     }
 
     /**
