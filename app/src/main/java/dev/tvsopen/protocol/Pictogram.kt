@@ -142,7 +142,11 @@ object ManeuverResolver {
             RegexOption.IGNORE_CASE,
         ) to 65,
         Regex("\\broundabout\\b.*\\b(?:second|2nd)\\s+exit\\b", RegexOption.IGNORE_CASE) to 66,
-        Regex("\\broundabout\\b.*\\b(?:third|3rd)\\s+exit\\b", RegexOption.IGNORE_CASE) to 67,
+        Regex("\\broundabout\\b.*\\b(?:third|3rd)\\s+exit\\b|\\b(?:third|3rd)\\s+exit\\b.*\\broundabout\\b", RegexOption.IGNORE_CASE) to 67,
+        Regex("\\broundabout\\b.*\\b(?:fourth|4th)\\s+exit\\b|\\b(?:fourth|4th)\\s+exit\\b.*\\broundabout\\b", RegexOption.IGNORE_CASE) to 68,
+        Regex("\\broundabout\\b.*\\b(?:fifth|5th)\\s+exit\\b|\\b(?:fifth|5th)\\s+exit\\b.*\\broundabout\\b", RegexOption.IGNORE_CASE) to 69,
+        Regex("\\broundabout\\b.*\\b(?:sixth|6th)\\s+exit\\b|\\b(?:sixth|6th)\\s+exit\\b.*\\broundabout\\b", RegexOption.IGNORE_CASE) to 70,
+        Regex("\\broundabout\\b.*\\b(?:seventh|7th)\\s+exit\\b|\\b(?:seventh|7th)\\s+exit\\b.*\\broundabout\\b", RegexOption.IGNORE_CASE) to 71,
         Regex("\\broundabout\\b|\\brotonda\\b|\\bglorieta\\b", RegexOption.IGNORE_CASE) to 68,
         Regex(
             "\\bsharp left\\b|\\bmuy a la izquierda\\b|\\bgiro cerrado a la izquierda\\b",

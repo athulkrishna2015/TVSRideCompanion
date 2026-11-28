@@ -14,6 +14,36 @@ object NavShortCodes {
 
     private val HTML_TAG = Regex("<[^>]+>")
     private val SPACES = Regex("\\s+")
+
+    // Indian road names are long; shorten the type words first, then fall back
+    // to initials for leading proper nouns so a name fits the 12-char row
+    // instead of being scrolled when it could have been read at a glance.
+    private val ROAD_SHORT = listOf(
+        "NATIONAL HIGHWAY" to "NH", "STATE HIGHWAY" to "SH",
+        "EXPRESSWAY" to "EXPWY", "HIGHWAY" to "HWY", "AVENUE" to "AVE",
+        "JUNCTION" to "JN", "CIRCLE" to "CIR", "SERVICE" to "SVC",
+        "FLYOVER" to "FLYOVR", "BRIDGE" to "BR", "SECTOR" to "SEC",
+        "NAGAR" to "NGR", "CROSS" to "X", "STREET" to "ST", "ROAD" to "RD",
+        "MARG" to "MG", "MAIN" to "MN", "LANE" to "LN", "SOUTH" to "S",
+        "NORTH" to "N", "EAST" to "E", "WEST" to "W",
+    )
+
+    /** Shorten a place name to [max] characters, preserving the input case. */
+    fun fitStreet(text: String, max: Int): String {
+        var s = text.replace(Regex("[^A-Za-z0-9 ]"), " ")
+            .replace(SPACES, " ").trim()
+        for ((long, short) in ROAD_SHORT) {
+            s = s.replace(Regex("\\b$long\\b", RegexOption.IGNORE_CASE), short)
+        }
+        if (s.length <= max) return s
+        val words = s.split(' ').toMutableList()
+        var i = 0
+        while (words.joinToString(" ").length > max && i < words.size - 1) {
+            if (words[i].length > 1) words[i] = words[i].take(1)
+            i++
+        }
+        return words.joinToString(" ").take(max).trim()
+    }
     private val DASH_RUN = Regex("-+")
 
     private fun ci(pattern: String): Regex =

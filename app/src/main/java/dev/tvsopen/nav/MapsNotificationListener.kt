@@ -80,7 +80,10 @@ data class NavInstruction(
                 "${distanceMeters / 1000}Km ${distanceMeters % 1000}m"
             else if (distanceMeters > 0) "${distanceMeters}m" else "",
         ).filter { it.isNotEmpty() }.joinToString(" ")
-        return RollingText.window(NavShortCodes.compress(raw), maxChars, tick)
+        // Shorten the place with a road-word dictionary before rolling, so a
+        // name that fits the row is shown whole instead of scrolled.
+        val fitted = NavShortCodes.fitStreet(NavShortCodes.compress(raw), maxChars)
+        return RollingText.window(fitted, maxChars, tick)
     }
 
     /**
@@ -276,6 +279,7 @@ class MapsNotificationListener : NotificationListenerService() {
     }
 
     private fun postCall(key: String, pkg: String, extras: Bundle, title: String, text: String) {
+        if (replaying) return
         // Telecom puts a Uri here, not a String — getString() always returned
         // null and the number was taken from the notification text instead.
         val addr = extras.get("android.telecom.extra.INCOMING_CALL_ADDRESS")
@@ -308,6 +312,7 @@ class MapsNotificationListener : NotificationListenerService() {
     }
 
     private fun postMessage(key: String, pkg: String, extras: Bundle, title: String) {
+        if (replaying) return
         val info = extractMessageInfo(extras, title)
         val app = appLabel(pkg)
         val withText = RidePrefs.load(this).mirrorMessageText && info.body.isNotBlank()
@@ -402,8 +407,18 @@ class MapsNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        // A route may already be running when the listener (re)binds. Replay
+        // current notifications so the cluster picks it up immediately; old
+        // call/message alerts are deliberately not sent as new ones.
+        replaying = true
+        runCatching { activeNotifications }
+            .getOrDefault(emptyArray())
+            .forEach { onNotificationPosted(it) }
+        replaying = false
         Log.i(TAG, "listener connected; ${allowedPackages().size} allowed maps packages")
     }
+
+    private var replaying = false
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()

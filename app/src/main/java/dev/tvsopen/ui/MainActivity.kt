@@ -760,17 +760,38 @@ class MainActivity : AppCompatActivity() {
         finishAffinity()
     }
 
-    private fun hasNotificationAccess(): Boolean =
-        Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+    private fun hasNotificationAccess(): Boolean {
+        // Entries are "package/class" (or ComponentInfo{package/class}), never a
+        // bare package name. Comparing the whole entry to packageName always
+        // returned false, so the More screen claimed access was missing even
+        // after the rider granted it.
+        val entries = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
             ?.split(':')
-            ?.any { it.equals(packageName, ignoreCase = true) } == true
+            ?: return false
+        return entries.any { entry ->
+            val pkg = android.content.ComponentName.unflattenFromString(entry)?.packageName
+                ?: entry.removePrefix("ComponentInfo{").substringBefore('/')
+            pkg.equals(packageName, ignoreCase = true)
+        }
+    }
 
     private fun openNotificationAccess() {
-        val i = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-        runCatching { startActivity(i) }
-            .onFailure {
-                Toast.makeText(this, "Open notification access from system settings", Toast.LENGTH_LONG).show()
-            }
+        val component = android.content.ComponentName(
+            this,
+            dev.tvsopen.nav.MapsNotificationListener::class.java,
+        )
+        val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+            .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component)
+        runCatching { startActivity(detail) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+                .onFailure {
+                    Toast.makeText(
+                        this,
+                        "Open notification access from system settings",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+        }
     }
 
     private companion object {

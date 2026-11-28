@@ -455,6 +455,62 @@ fun MoreScreen(
         }
 
         item {
+            val ctx = LocalContext.current
+            var showAbout by remember { mutableStateOf(false) }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("How it works & privacy", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "What the app can and cannot do, and where your data stays.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = { showAbout = true }) { Text("Read") }
+                }
+            }
+            if (showAbout) {
+                AlertDialog(
+                    onDismissRequest = { showAbout = false },
+                    title = { Text("How it works & privacy") },
+                    text = {
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            Text(
+                                "This app talks to your TVS instrument cluster over Bluetooth LE " +
+                                    "directly. There is no TVS account, no cloud and no telemetry upload.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "INTERNET is used only for embedded map tiles, place search and " +
+                                    "routing to a fixed list of hosts. Nothing is sent to TVS.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "Caller and sender names stay on your phone and are rendered as " +
+                                    "bytes on the cluster. Message text is off by default; " +
+                                    "when enabled it is clipped to the cluster row and never leaves " +
+                                    "the device.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "Exported logs omit the cluster MAC, street names, call details " +
+                                    "and coordinates. The Ntorq shows 10 characters on line 1 and " +
+                                    "12 on line 2. Caller ID and SMS display are not yet confirmed " +
+                                    "on real hardware.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        OutlinedButton(onClick = { showAbout = false }) { Text("Close") }
+                    },
+                )
+            }
+        }
+
+        item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.Science, null)

@@ -136,4 +136,13 @@ class NavShortCodesTest {
     fun `sharp right is not drawn as straight ahead in the phone UI`() {
         assertEquals("\u21C9", NavShortCodes.uiArrow(4))
         assertTrue(NavShortCodes.uiArrow(4) != NavShortCodes.uiArrow(7))
-    }}
+    }
+
+    @Test
+    fun `long street names are shortened to fit the row`() {
+        assertEquals("M GANDHI RD", NavShortCodes.fitStreet("Mahatma Gandhi Road", 12))
+        assertEquals("NH 48", NavShortCodes.fitStreet("National Highway 48", 12))
+        assertEquals("Example RD", NavShortCodes.fitStreet("Example Road", 12))
+        assertTrue(NavShortCodes.fitStreet("Mahatma Gandhi Road", 12).length <= 12)
+    }
+}
