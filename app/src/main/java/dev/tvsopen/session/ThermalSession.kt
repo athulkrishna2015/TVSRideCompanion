@@ -12,7 +12,7 @@ class ThermalSession(
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
     private val temps = ArrayDeque<Pair<Long, Int>>()
-    private var sessionStart = 0L
+    private var sessionStarted = false
     private var startedBelowWarm = false
     private var warmedUpDone = false
     private var aboveHotSince = 0L
@@ -23,7 +23,7 @@ class ThermalSession(
     fun onReading(tempC: Int, now: Long = nowMs()): List<String> {
         if (tempC <= 0) return emptyList() // 0 means "no reading" / limit off
         if (hotC <= 0) return emptyList()
-        if (sessionStart == 0L || now - lastReadingAt > GAP_MS) reset(now, tempC)
+        if (!sessionStarted || now - lastReadingAt > GAP_MS) reset(now, tempC)
         lastReadingAt = now
         temps.addLast(now to tempC)
         while (temps.isNotEmpty() && now - temps.first().first > WINDOW_MS) temps.removeFirst()
@@ -51,7 +51,7 @@ class ThermalSession(
 
     fun reset(now: Long = nowMs(), tempC: Int = 0) {
         temps.clear()
-        sessionStart = now
+        sessionStarted = true
         startedBelowWarm = tempC in 1 until warmUpC
         warmedUpDone = false
         aboveHotSince = 0L
