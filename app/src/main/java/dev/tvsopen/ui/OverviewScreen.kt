@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import dev.tvsopen.session.Telemetry
 import dev.tvsopen.ui.theme.LocalTilePalette
 import dev.tvsopen.ui.theme.NumberStyle
+import java.util.Locale
 
 /**
  * Vehicle Overview.
