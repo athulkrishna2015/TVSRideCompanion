@@ -37,8 +37,8 @@ android {
         applicationId = "dev.tvsopen"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "0.2.13"
+        versionCode = 17
+        versionName = "0.2.14"
     }
 
     signingConfigs {
