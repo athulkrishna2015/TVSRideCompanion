@@ -453,7 +453,7 @@ class RideService : android.app.Service() {
                 val name = alert.title.takeIf { it.isNotBlank() && it != number }
                 val frames = driver.buildCallerFrames(number, null, name)
                 if (frames.isNotEmpty()) {
-                    Log.i(TAG, "cluster call alert: '$name' '$number' (${frames.size} frames)")
+                    Log.i(TAG, "cluster call alert: mirrored (${frames.size} frames)")
                     frames.forEach { transport.write(it) }
                 } else {
                     // Generic fallback: a plain text row with the caller.
@@ -463,7 +463,7 @@ class RideService : android.app.Service() {
             }
             ClusterAlert.Kind.MESSAGE -> {
                 val text = alert.title.take(17)
-                Log.i(TAG, "cluster message alert: '$text'")
+                Log.i(TAG, "cluster message alert: mirrored")
                 val frame = driver.buildSms(text) ?: PacketBuilder.textRow(OutboundId.SMS, text)
                 transport.write(frame)
             }
@@ -500,7 +500,8 @@ class RideService : android.app.Service() {
         val info = ParkedInfo(System.currentTimeMillis(), label, null)
         RidePrefs.load(this).saveParked(info.atMillis, info.label)
         Session.onParked(info)
-        Log.i(TAG, "parked spot saved: $label")
+        // Coordinates are exact home/work locations; keep them in prefs/UI only.
+        Log.i(TAG, "parked spot saved")
     }
 
     @SuppressLint("MissingPermission")

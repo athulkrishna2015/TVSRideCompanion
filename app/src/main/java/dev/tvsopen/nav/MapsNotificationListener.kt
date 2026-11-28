@@ -10,6 +10,7 @@ import dev.tvsopen.log.Log
 import dev.tvsopen.prefs.RidePrefs
 import dev.tvsopen.session.ClusterAlert
 import dev.tvsopen.session.Session
+import dev.tvsopen.transport.ConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -147,6 +148,10 @@ class MapsNotificationListener : NotificationListenerService() {
         val pkg = n.packageName
         val extras = n.notification?.extras ?: return
         if (pkg.isBlank()) return
+        // The listener sees *every* notification on the phone. With no scooter
+        // connected there is nothing to mirror, and recording them for hours
+        // would turn the log into a diary of unrelated personal notifications.
+        if (Session.connection.value.state != ConnectionState.CONNECTED) return
 
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
@@ -159,7 +164,7 @@ class MapsNotificationListener : NotificationListenerService() {
         val category = n.notification?.category
         // Kept at DEBUG: the Log tab is the evidence base for why a given
         // notification did or did not reach the cluster.
-        Log.d(TAG, "notification posted pkg=$pkg category=$category ongoing=$ongoing")
+        Log.d(TAG, "notification posted category=$category ongoing=$ongoing")
 
         // Trust known maps packages and explicit navigation extras. For unknown
         // packages, require CATEGORY_NAVIGATION as well as distance-like content:
@@ -237,7 +242,7 @@ class MapsNotificationListener : NotificationListenerService() {
         // Replacing a usable step with it blanks the cluster until the next
         // post; keep the live turn instead.
         if (parsed.distanceMeters < 0 && Session.hud.value.active) {
-            Log.i(TAG, "ignoring distance-less nav repost from $pkg")
+            Log.i(TAG, "ignoring distance-less nav repost")
             return
         }
         activeNavKey = key
@@ -249,11 +254,8 @@ class MapsNotificationListener : NotificationListenerService() {
             pictogram = parsed.pictogram,
             provider = pkg,
         )
-        Log.i(
-            TAG,
-            "nav from $pkg: '${step.title}' / '${step.street}' " +
-                "d=${step.distanceMeters}m eta=${step.etaMinutes}m pic=${step.pictogram}",
-        )
+        // Maneuver text and street names are route data; never write them.
+        Log.i(TAG, "nav step mirrored")
         Session.onHud {
             it.copy(
                 active = true,
@@ -291,7 +293,8 @@ class MapsNotificationListener : NotificationListenerService() {
         }
         val name = "$type${title.ifBlank { number }.ifBlank { "Incoming call" }}"
         val label = appLabel(pkg).takeUnless { it == "Phone" } ?: ""
-        Log.i(TAG, "call from $pkg: '$name' '$number'")
+        // Caller name/number are personal data, and the log is exported.
+        Log.i(TAG, "call mirrored")
         Session.onAlert(
             ClusterAlert(
                 kind = ClusterAlert.Kind.CALL,
@@ -317,7 +320,7 @@ class MapsNotificationListener : NotificationListenerService() {
         }
         // Never write a message body or notification title to the on-device
         // log: it is personal data and the file is exported by design.
-        Log.i(TAG, "message from $pkg: mirrored")
+        Log.i(TAG, "message mirrored")
         Session.onAlert(
             ClusterAlert(
                 kind = ClusterAlert.Kind.MESSAGE,
@@ -385,7 +388,7 @@ class MapsNotificationListener : NotificationListenerService() {
                 Log.i(TAG, "nav notification replaced; keeping the step")
                 return@Runnable
             }
-            Log.i(TAG, "navigation ended (${removed.packageName})")
+            Log.i(TAG, "navigation ended")
             Session.onHud { it.copy(active = false) }
             _navigating.value = false
             _instruction.value = null
@@ -397,7 +400,7 @@ class MapsNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.i(TAG, "listener connected; allowed: ${allowedPackages().joinToString()}")
+        Log.i(TAG, "listener connected; ${allowedPackages().size} allowed maps packages")
     }
 
     override fun onListenerDisconnected() {

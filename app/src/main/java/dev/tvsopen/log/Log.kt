@@ -257,6 +257,7 @@ object Log {
      * that logs should be gettable off a phone you cannot root.
      */
     private val MAC_RE = Regex("""\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b""")
+    private val HEX_PII_RE = Regex("""\b(OUT|IN)\s+5B\s+(52|53)\b.*""")
 
     /**
      * The log records nav maneuver text verbatim, caller numbers and the
@@ -265,6 +266,10 @@ object Log {
      */
     private fun redact(line: String): String {
         var out = MAC_RE.replace(line, "[MAC]")
+        // Older logs contain raw rider-name / alert hex; scrub them too.
+        out = HEX_PII_RE.replace(out) { m ->
+            "${m.groupValues[1]} 5B ${m.groupValues[2]} [REDACTED] FF"
+        }
         if ("nav from " in out) {
             out = out.substringBefore("nav from ") + "nav from [REDACTED]"
         }
@@ -427,6 +432,22 @@ object Log {
      * and in the file.
      */
     fun frame(direction: String, bytes: ByteArray, atMillis: Long = System.currentTimeMillis()) {
+        // 0x5B 0x52 carries the rider's name and 0x5B 0x53 carries notification
+        // text. Their hex is plain ASCII, so logging the payload would undo
+        // every redaction applied to the higher-level log lines above.
+        val logged = if (bytes.size >= 2 &&
+            (bytes[0].toInt() and 0xFF) == 0x5B &&
+            (bytes[1].toInt() and 0xFF) in setOf(0x52, 0x53)
+        ) {
+            // Keep the 20-byte frame shape so byte counts and pacing stay
+            // honest; only the payload region is overwritten.
+            val masked = bytes.copyOf()
+            val tag = "[REDACTED]".toByteArray()
+            for (i in 2 until minOf(19, masked.size)) {
+                masked[i] = tag.getOrNull(i - 2) ?: 0
+            }
+            masked
+        } else bytes
         // Read-modify-write on a StateFlow: without the lock, concurrent BLE
         // callback threads lose increments and the displayed total undercounts.
         synchronized(lock) {
@@ -435,7 +456,7 @@ object Log {
         if (!captureFrames) return
         // contentHashCode compares content, not identity, so this is a genuine
         // payload test; a collision would only merge two already-identical lines.
-        val sig = 31 * direction.hashCode() + bytes.contentHashCode()
+        val sig = 31 * direction.hashCode() + logged.contentHashCode()
         val id = (bytes.getOrNull(1)?.toInt() ?: -1) and 0xFF
 
         var seen: Int
@@ -455,7 +476,7 @@ object Log {
             frameCounts[sig] = seen
 
             val gate = frameGates.getOrPut(id) { FrameGate() }
-            val sameAsLast = gate.lastBytes?.contentEquals(bytes) == true
+            val sameAsLast = gate.lastBytes?.contentEquals(logged) == true
             gate.pending++
             emit = if (sameAsLast) {
                 // Already written down: count it instead. The tally below
@@ -473,7 +494,7 @@ object Log {
                 suppressed = gate.pending - 1
                 gate.pending = 0
                 gate.lastEmitAt = atMillis
-                gate.lastBytes = bytes.copyOf()
+                gate.lastBytes = logged.copyOf()
             }
         }
         if (!emit) {
@@ -483,7 +504,7 @@ object Log {
             return
         }
         val suffix = if (suppressed > 0) " (+$suppressed more)" else ""
-        log(Level.DEBUG, "BLE", "$direction ${hex(bytes)} (${bytes.size} bytes)$suffix")
+        log(Level.DEBUG, "BLE", "$direction ${hex(logged)} (${logged.size} bytes)$suffix")
     }
 
     /**
