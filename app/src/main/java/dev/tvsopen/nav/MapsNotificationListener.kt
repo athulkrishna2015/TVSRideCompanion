@@ -420,6 +420,7 @@ class MapsNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        bound.value = true
         // A route may already be running when the listener (re)binds. Replay
         // current notifications so the cluster picks it up immediately; old
         // call/message alerts are deliberately not sent as new ones.
@@ -453,6 +454,7 @@ class MapsNotificationListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        bound.value = false
         Log.w(TAG, "listener disconnected — navigation mirroring unavailable")
         // An OEM can kill the listener without unbinding us. Rebind so mirroring
         // recovers without a reinstall or a toggle cycle.
@@ -463,6 +465,10 @@ class MapsNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MapsNavListener"
+
+        /** Whether Android has actually bound the reader, not just granted access. */
+        val bound = MutableStateFlow(false)
+
 
         // Known message/call packages are no longer hard-coded here. Notification
         // category, telecom extras, MessagingStyle and the rider's own selections

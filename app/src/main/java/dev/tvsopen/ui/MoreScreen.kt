@@ -209,9 +209,12 @@ fun MoreScreen(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
+                    val readerBound by dev.tvsopen.nav.MapsNotificationListener.bound
+                        .collectAsStateWithLifecycle()
                     Text(
                         if (notificationAccessGranted)
-                            "Notification access: granted"
+                            if (readerBound) "Notification access: granted and receiving"
+                            else "Notification access: granted, reader not bound"
                         else
                             "Notification access: required to read navigation, calls and messages",
                         style = MaterialTheme.typography.bodyMedium,
