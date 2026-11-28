@@ -193,7 +193,10 @@ class NavParsingTest {
         assertEquals(0, NavParsing.distanceFromProgress(1200, 1000))
         assertEquals(-1, NavParsing.distanceFromProgress(-1, 1000))
         assertEquals(-1, NavParsing.distanceFromProgress(300, -1))
-        val p = NavParsing.parse("", "Example Road", "", "", 300, 1000, ninePm)
+        val p = NavParsing.parse(
+            "", "Example Road", "", "", ninePm,
+            progress = 300, progressMax = 1000,
+        )
         assertEquals(700, p.distanceMeters)
     }
 }

@@ -110,9 +110,9 @@ object NavParsing {
         text: String,
         bigText: String,
         subText: String,
+        nowMinutes: Int = nowMinutes(),
         progress: Int = -1,
         progressMax: Int = -1,
-        nowMinutes: Int = nowMinutes(),
     ): ParsedNav {
         val distance = extractDistance(title, text, bigText, subText)
             .takeIf { it >= 0 }

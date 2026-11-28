@@ -169,7 +169,10 @@ class MapsNotificationListener : NotificationListenerService() {
         val progressMax = runCatching {
             extras.getInt(Notification.EXTRA_PROGRESS_MAX, -1)
         }.getOrDefault(-1)
-        val parsed = NavParsing.parse(title, text, bigText, subText, progress, progressMax)
+        val parsed = NavParsing.parse(
+            title, text, bigText, subText,
+            progress = progress, progressMax = progressMax,
+        )
         val distance = parsed.distanceMeters
         val category = n.notification?.category
         // Kept at DEBUG: the Log tab is the evidence base for why a given
