@@ -60,7 +60,8 @@ object DataExport {
         root.put(
             "prefs",
             JSONObject()
-                .put("riderName", prefs.riderName ?: JSONObject.NULL)
+                // The rider name is personal data: keep it on the device and
+                // out of a file that is meant to be shared.
                 .put("navigationMirroring", prefs.navigationMirroring)
                 .put("mirrorPhoneCalls", prefs.mirrorPhoneCalls)
                 .put("mirrorMessages", prefs.mirrorMessages)

@@ -163,7 +163,13 @@ class MapsNotificationListener : NotificationListenerService() {
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim().orEmpty()
         val ongoing = n.isOngoing
 
-        val parsed = NavParsing.parse(title, text, bigText, subText)
+        val progress = runCatching {
+            extras.getInt(Notification.EXTRA_PROGRESS, -1)
+        }.getOrDefault(-1)
+        val progressMax = runCatching {
+            extras.getInt(Notification.EXTRA_PROGRESS_MAX, -1)
+        }.getOrDefault(-1)
+        val parsed = NavParsing.parse(title, text, bigText, subText, progress, progressMax)
         val distance = parsed.distanceMeters
         val category = n.notification?.category
         // Kept at DEBUG: the Log tab is the evidence base for why a given
@@ -252,6 +258,9 @@ class MapsNotificationListener : NotificationListenerService() {
             return
         }
         activeNavKey = key
+        lastNavStepAt = System.currentTimeMillis()
+        handler.removeCallbacks(navWatchdog)
+        handler.postDelayed(navWatchdog, NAV_STALE_MS)
         val step = NavInstruction(
             title = parsed.maneuver,
             street = parsed.street,
@@ -280,7 +289,7 @@ class MapsNotificationListener : NotificationListenerService() {
     }
 
     private fun postCall(key: String, pkg: String, extras: Bundle, title: String, text: String) {
-        if (replaying) return
+        if (replaying || !alertDedup.firstTime("call:$key")) return
         // Telecom puts a Uri here, not a String — getString() always returned
         // null and the number was taken from the notification text instead.
         val addr = extras.get("android.telecom.extra.INCOMING_CALL_ADDRESS")
@@ -313,7 +322,7 @@ class MapsNotificationListener : NotificationListenerService() {
     }
 
     private fun postMessage(key: String, pkg: String, extras: Bundle, title: String) {
-        if (replaying) return
+        if (replaying || !alertDedup.firstTime("msg:$key")) return
         val info = extractMessageInfo(extras, title)
         val app = appLabel(pkg)
         val withText = RidePrefs.load(this).mirrorMessageText && info.body.isNotBlank()
@@ -421,6 +430,24 @@ class MapsNotificationListener : NotificationListenerService() {
 
     private var replaying = false
 
+    // Mirrored alerts are deduped by the Android notification key only; no
+    // caller number or message text is retained, hashed or logged.
+    private val alertDedup = AlertDedup()
+
+    // Some maps apps leave the navigation notification posted after the ride
+    // ends. A watchdog clears the HUD when no new step arrives in time.
+    private var lastNavStepAt = 0L
+    private val navWatchdog = Runnable {
+        if (Session.hud.value.active &&
+            System.currentTimeMillis() - lastNavStepAt >= NAV_STALE_MS
+        ) {
+            Log.i(TAG, "navigation step timed out; clearing HUD")
+            Session.onHud { it.copy(active = false) }
+            _navigating.value = false
+            _instruction.value = null
+        }
+    }
+
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Log.w(TAG, "listener disconnected — navigation mirroring unavailable")
@@ -452,6 +479,7 @@ class MapsNotificationListener : NotificationListenerService() {
         // time. A short grace wiped a live route whenever the gap exceeded a
         // few seconds; only give up after a long silence.
         private const val CLEAR_GRACE_MS = 15_000L
+        private const val NAV_STALE_MS = 60_000L
 
         val DEFAULT_MAPS_PACKAGES = setOf(
             "com.google.android.apps.maps",       // Google Maps

@@ -499,12 +499,7 @@ private fun LinkCard(telemetry: Telemetry) {
     ) {
         Column(Modifier.padding(18.dp)) {
             Text(
-                when {
-                    age == null -> "No telemetry received yet"
-                    age < 3_000 -> "Telemetry live"
-                    age < Telemetry.STALE_AFTER_MS -> "Telemetry ${age / 1000}s old"
-                    else -> "Telemetry stale — ${age / 1000}s since last frame"
-                },
+                freshnessLabel(age),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -554,13 +549,21 @@ private fun NavigationStrip(hud: HudState) {
     }
 }
 
-private fun relativeTime(ms: Long): String {
-    val min = (ms / 60_000).toInt()
+internal fun relativeTime(ms: Long): String {
+    val min = (ms / 60_000).toInt().coerceAtLeast(0)
     return when {
         min < 60 -> "${min}m"
         min < 60 * 24 -> "${min / 60}h"
         else -> "${min / (60 * 24)}d"
     }
+}
+
+/** Pure freshness label; negative clock skew is treated as "live". */
+internal fun freshnessLabel(ageMs: Long?): String = when {
+    ageMs == null -> "No telemetry received yet"
+    ageMs < 3_000L -> "Telemetry live"
+    ageMs < Telemetry.STALE_AFTER_MS -> "Telemetry ${ageMs / 1000}s old"
+    else -> "Telemetry stale — ${ageMs / 1000}s since last frame"
 }
 
 @Composable

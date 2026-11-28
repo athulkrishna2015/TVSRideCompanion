@@ -186,4 +186,14 @@ class NavParsingTest {
         val p = NavParsing.parse("Arrive", "Example Road", "", "9:00 PM", ninePm)
         assertEquals(0, p.etaMinutes)
     }
+
+    @Test
+    fun `progress style distance is used only when no unit text exists`() {
+        assertEquals(700, NavParsing.distanceFromProgress(300, 1000))
+        assertEquals(0, NavParsing.distanceFromProgress(1200, 1000))
+        assertEquals(-1, NavParsing.distanceFromProgress(-1, 1000))
+        assertEquals(-1, NavParsing.distanceFromProgress(300, -1))
+        val p = NavParsing.parse("", "Example Road", "", "", 300, 1000, ninePm)
+        assertEquals(700, p.distanceMeters)
+    }
 }

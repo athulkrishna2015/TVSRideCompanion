@@ -43,6 +43,8 @@ import dev.tvsopen.session.Telemetry
 import dev.tvsopen.ui.theme.LocalTilePalette
 import dev.tvsopen.ui.theme.NumberStyle
 import java.util.Locale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 /**
  * Vehicle Overview.
@@ -353,7 +355,10 @@ private fun FuelGauge(bars: Int?) {
                 )
                 Spacer(Modifier.width(10.dp))
                 Row(
-                    Modifier.weight(1f),
+                    Modifier.weight(1f).semantics(mergeDescendants = true) {
+                        contentDescription = if (bars == null) "Fuel reading unavailable"
+                        else "Fuel $filled of ${Telemetry.FUEL_BAR_MAX} bars"
+                    },
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     repeat(Telemetry.FUEL_BAR_MAX) { i ->

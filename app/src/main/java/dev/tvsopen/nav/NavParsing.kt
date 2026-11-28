@@ -99,14 +99,24 @@ object NavParsing {
      * because Google Maps puts it there and nowhere else — searching only the
      * text meant `distanceMeters` stayed -1 for an entire journey.
      */
+    /** Remaining distance from a ProgressStyle notification, when no unit text exists. */
+    fun distanceFromProgress(progress: Int, progressMax: Int): Int {
+        if (progress < 0 || progressMax <= 0) return -1
+        return (progressMax - progress).coerceAtLeast(0)
+    }
+
     fun parse(
         title: String,
         text: String,
         bigText: String,
         subText: String,
+        progress: Int = -1,
+        progressMax: Int = -1,
         nowMinutes: Int = nowMinutes(),
     ): ParsedNav {
         val distance = extractDistance(title, text, bigText, subText)
+            .takeIf { it >= 0 }
+            ?: distanceFromProgress(progress, progressMax)
         val street = text.ifBlank { bigText }.ifBlank { subText }
         // Having found the distance in the title, do not then display the title
         // as the maneuver: "550 m" is not an instruction.
