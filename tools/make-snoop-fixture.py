@@ -32,9 +32,9 @@ def record(flags, data, epoch_seconds):
     return struct.pack(">IIIIq", len(data), len(data), flags, 0, ts) + data
 
 
-def acl(handle, att, pb=2):
+def acl(handle, att, pb=2, cid=0x0004):
     """Wrap ATT in L2CAP + an HCI ACL packet."""
-    l2cap = struct.pack("<HH", len(att), 0x0004) + att
+    l2cap = struct.pack("<HH", len(att), cid) + att
     return (
         bytes([0x02])
         + struct.pack("<H", (handle & 0x0FFF) | (pb << 12))
@@ -66,8 +66,8 @@ def build():
         t + 1,
     )
 
-    # A non-ATT L2CAP channel: must be filtered out by the CID check.
-    out += record(0x01, l2cap(0x0005, bytes.fromhex("00112233")), t + 1)
+    # A non-ATT L2CAP channel on an ACL packet: the CID filter must drop it.
+    out += record(0x01, acl(0x2A, bytes.fromhex("00112233"), cid=0x0005), t + 1)
 
     # An ordinary ATT write with no SmartXonnect start byte.
     out += record(0x00, acl(0x2A, bytes([0x52, 0x01, 0x02, 0x03])), t + 2)

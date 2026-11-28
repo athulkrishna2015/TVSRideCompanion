@@ -217,6 +217,8 @@ object RollingText {
         val body = text.trim(' ', '-')
         val loop = body + GAP
         val off = ((tick % loop.length) + loop.length) % loop.length
-        return (loop + loop).substring(off, off + width)
+        // Guard pathological input where the loop is shorter than the row.
+        val repeats = (off + width + loop.length - 1) / loop.length
+        return loop.repeat(repeats).substring(off, off + width)
     }
 }

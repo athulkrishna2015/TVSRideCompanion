@@ -57,7 +57,7 @@ class RideService : android.app.Service() {
      * on the same flows, and a stale one could restart the *old* bridge's
      * keepalive after it was stopped — duplicate pings. */
     private var linkJob: Job? = null
-    private var lastModel: VehicleModel = VehicleModel.NTORQ
+    private var lastModel: VehicleModel = VehicleModel.DEFAULT_MODEL
     private var lastAddress: String? = null
     /** Driver for the current link; needed outside connect() by the rider-name send. */
     private var driver: ProtocolDriver? = null
@@ -161,7 +161,7 @@ class RideService : android.app.Service() {
                 } else {
                     val model = intent.getStringExtra(EXTRA_MODEL)
                         ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
-                        ?: VehicleModel.NTORQ
+                        ?: VehicleModel.DEFAULT_MODEL
                     connect(address, model)
                 }
             }
@@ -207,7 +207,7 @@ class RideService : android.app.Service() {
         }
         val model = prefs.lastModelId
             ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
-            ?: VehicleModel.NTORQ
+            ?: VehicleModel.DEFAULT_MODEL
         Log.i(TAG, "sticky restart; resuming $address")
         connect(address, model)
     }
@@ -286,6 +286,7 @@ class RideService : android.app.Service() {
             return false
         }
 
+        val drv = driver
         linkJob = scope.launch {
             // The link owns a wake lock while connected; without it the
             // keepalive and nav loops stall the moment the screen goes off.
@@ -393,9 +394,9 @@ class RideService : android.app.Service() {
                         return@collect
                     }
                     if (alert != null) {
-                        sendAlert(driver, t, alert)
+                        sendAlert(drv, t, alert)
                     } else if (lastAlert?.kind == ClusterAlert.Kind.CALL) {
-                        sendCallEnded(driver, t)
+                        sendCallEnded(drv, t)
                     }
                     lastAlert = alert
                 }

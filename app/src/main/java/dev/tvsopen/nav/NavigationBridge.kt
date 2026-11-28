@@ -86,8 +86,13 @@ class NavigationBridge(
     // Rolling offset for overflowing text. Advances once per send so a line
     // wider than the row scrolls instead of clipping its tail. Reset whenever
     // the instruction changes so a new turn starts at its head, not mid-scroll.
-    private var scrollTick = 0
-    private var lastInstructionKey: String? = null
+    // Two independent windows: Maps reposts the same turn every second with
+    // a smaller distance, so one shared key reset scrolling on every update
+    // and the tail of a long street name was never shown.
+    private var maneuverTick = 0
+    private var streetTick = 0
+    private var lastManeuverKey: String? = null
+    private var lastStreetKey: String? = null
 
     /**
      * Start the keepalive. The cluster drops the link if the presence packet
@@ -141,10 +146,18 @@ class NavigationBridge(
                         delay(controlIntervalMs)
                         continue
                     }
-                    val key = "${step.title}|${step.street}|${step.distanceMeters}"
-                    if (key != lastInstructionKey) {
-                        lastInstructionKey = key
-                        scrollTick = 0
+                    val maneuverKey = "${step.title}|${step.pictogram}"
+                    if (maneuverKey != lastManeuverKey) {
+                        lastManeuverKey = maneuverKey
+                        maneuverTick = 0
+                    }
+                    // ETA/distance live in the sub-text or metrics and change
+                    // constantly; key the street window on the place itself.
+                    val streetBase = step.street.substringBefore("ETA ").trim()
+                    val streetKey = "$streetBase|${step.provider}"
+                    if (streetKey != lastStreetKey) {
+                        lastStreetKey = streetKey
+                        streetTick = 0
                     }
                     val nav = step.toNavStep()
                     // Both cluster lines are always populated together: the
@@ -157,8 +170,8 @@ class NavigationBridge(
                     // the turn was built for a 12-cell row and clipped.
                     // Rider's layout: line 1 is the maneuver (turn / U-turn),
                     // line 2 is the place name and trip metrics, both rolling.
-                    val maneuver = step.maneuverLine(firstTextRowChars, scrollTick)
-                    val fullMetrics = step.streetLine(secondTextRowChars, scrollTick)
+                    val maneuver = step.maneuverLine(firstTextRowChars, maneuverTick)
+                    val fullMetrics = step.streetLine(secondTextRowChars, streetTick)
 
                     // Two lines when the driver has a second row, else alternate.
                     //
@@ -212,7 +225,8 @@ class NavigationBridge(
                         showingMetrics = !showingMetrics
                     }
                     lastTwoRows = twoRows
-                    scrollTick++
+                    maneuverTick++
+                    streetTick++
                 }
                 delay(if (lastTwoRows || showingMetrics) controlIntervalMs else textSwapIntervalMs)
             }
@@ -222,8 +236,10 @@ class NavigationBridge(
     fun stopNavigation() {
         controlJob?.cancel()
         controlJob = null
-        scrollTick = 0
-        lastInstructionKey = null
+        maneuverTick = 0
+        streetTick = 0
+        lastManeuverKey = null
+        lastStreetKey = null
         _hud.value = HudState(active = false)
     }
 

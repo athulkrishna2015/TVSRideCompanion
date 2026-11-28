@@ -53,7 +53,7 @@ class BootReceiver : BroadcastReceiver() {
                     .putExtra(RideService.EXTRA_ADDRESS, address)
                     .putExtra(
                         RideService.EXTRA_MODEL,
-                        prefs.lastModelId ?: VehicleModel.NTORQ.name,
+                        prefs.lastModelId ?: VehicleModel.DEFAULT_MODEL.name,
                     ),
             )
         }.onFailure {

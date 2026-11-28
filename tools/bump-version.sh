@@ -53,6 +53,7 @@ fi
 git add "$FILE"
 git commit -q -m "release: bump to $NEW ($NEWCODE)"
 git tag -a "v$NEW" -m "v$NEW"
-git push -q origin master
-git push -q origin "v$NEW"
+# Atomic: a failed tag push must not leave a version bump on master with no
+# release, and a retry must not bump a second time.
+git push -q --atomic origin master "v$NEW"
 echo "pushed master + tag v$NEW — CI will publish the GitHub Release"

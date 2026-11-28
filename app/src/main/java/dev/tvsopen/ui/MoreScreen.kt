@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,11 +65,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
- * More / settings screen.
- *
- * The transparency panel is the important part: it states exactly which
- * protocol facts are verified and which still await hardware confirmation, so
- * a user reading this app knows what they can trust.
+ * More / settings screen: connection, permissions, alerts, appearance, rides,
+ * data export and Home-card preferences. Verification confidence is documented
+ * in docs/PROTOCOL.md and docs/NAVIGATION.md, not in the app.
  */
 @Composable
 fun MoreScreen(
@@ -255,10 +252,13 @@ fun MoreScreen(
         item {
             val ctx = LocalContext.current
             val prefs = RidePrefs.load(ctx)
-            var chosen by remember {
+            // Key on the model: a connection in the background can change it
+            // while More is still composed, and the supported set with it.
+            var chosen by remember(vehicleModel) {
                 mutableStateOf(
-                    prefs.homeCardsOverride?.let { HomeCard.fromKeys(it) }
-                        ?: HomeCard.defaults(vehicleModel),
+                    (prefs.homeCardsOverride?.let { HomeCard.fromKeys(it) }
+                        ?: HomeCard.defaults(vehicleModel))
+                        intersect HomeCard.supported(vehicleModel),
                 )
             }
             Card(Modifier.fillMaxWidth()) {
@@ -302,6 +302,7 @@ fun MoreScreen(
             val prefs = remember { RidePrefs.load(ctx) }
             var mirrorCalls by remember { mutableStateOf(prefs.mirrorPhoneCalls) }
             var mirrorMessages by remember { mutableStateOf(prefs.mirrorMessages) }
+            var anyApp by remember { mutableStateOf(prefs.mirrorAnyAppNotifications) }
             var mirrorText by remember { mutableStateOf(prefs.mirrorMessageText) }
             var callDetails by remember { mutableStateOf(prefs.mirrorCallDetails) }
             Card(Modifier.fillMaxWidth()) {
@@ -366,8 +367,11 @@ fun MoreScreen(
                             )
                         }
                         AppSwitch(
-                            checked = prefs.mirrorAnyAppNotifications,
-                            onCheckedChange = { prefs.mirrorAnyAppNotifications = it },
+                            checked = anyApp,
+                            onCheckedChange = {
+                                anyApp = it
+                                prefs.mirrorAnyAppNotifications = it
+                            },
                         )
                     }
                     HorizontalDivider()

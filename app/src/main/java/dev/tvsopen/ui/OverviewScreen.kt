@@ -117,7 +117,7 @@ fun OverviewScreen(
         BigStat(
             Modifier.fillMaxWidth(),
             Icons.Filled.Timer,
-            telemetry.timeTo60Sec?.let { String.format("%.1f", it) } ?: "—",
+            telemetry.timeTo60Sec?.let { String.format(Locale.US, "%.1f", it) } ?: "—",
             "sec",
             "Best 0–60",
             LocalTilePalette.current.neutral,
@@ -134,14 +134,14 @@ fun OverviewScreen(
             DistanceStat(
                 Modifier.weight(1f),
                 Icons.Filled.Route,
-                telemetry.odometerKm?.let { String.format("%.1f", it) } ?: "—",
+                telemetry.odometerKm?.let { String.format(Locale.US, "%.1f", it) } ?: "—",
                 "Total distance",
             )
             DistanceStat(
                 Modifier.weight(1f),
                 Icons.Filled.Route,
                 telemetry.connectedDistanceKm()
-                    ?.let { String.format("%.1f", it) } ?: "—",
+                    ?.let { String.format(Locale.US, "%.1f", it) } ?: "—",
                 "This connection",
             )
         }

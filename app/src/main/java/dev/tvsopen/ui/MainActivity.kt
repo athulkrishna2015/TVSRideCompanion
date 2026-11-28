@@ -331,8 +331,9 @@ class MainActivity : AppCompatActivity() {
                                 scanning.value = false
                                 RidePrefs.load(this@MainActivity)
                                     .updateSelectedModel(address, model.name)
-                                RidePrefs.load(this@MainActivity)
-                                    .updateLastConnection(address, model.name)
+                                val prefs = RidePrefs.load(this@MainActivity)
+                                prefs.updateLastConnection(address, model.name)
+                                if (autoConnectState) setUpCompanion(address)
                                 connectTo(address, model)
                             },
                             onBack = { scanning.value = false },
@@ -493,7 +494,7 @@ class MainActivity : AppCompatActivity() {
         }
         val model = prefs.lastModelId
             ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
-            ?: VehicleModel.NTORQ
+            ?: VehicleModel.DEFAULT_MODEL
         connectTo(address, model)
     }
 
@@ -637,7 +638,7 @@ class MainActivity : AppCompatActivity() {
         }
         val model = prefs.lastModelId
             ?.let { runCatching { VehicleModel.valueOf(it) }.getOrNull() }
-            ?: VehicleModel.NTORQ
+            ?: VehicleModel.DEFAULT_MODEL
         Log.i("MainActivity", "auto-connecting to ${model.displayName}")
         connectToRememberedCluster()
         // Opt-in only: register with Android so a later ignition can connect
@@ -698,6 +699,13 @@ class MainActivity : AppCompatActivity() {
             then()
             return
         }
+        // The system dialog was already shown and declined. Do not nag on
+        // every launch; More -> Auto-connect can be toggled to try again.
+        if (address in prefs.companionAsked) {
+            Log.i("MainActivity", "association already asked for $address; not repeating")
+            then()
+            return
+        }
         prefs.companionAsked = prefs.companionAsked + address
         val filter = BluetoothLeDeviceFilter.Builder()
             .setScanFilter(
@@ -739,7 +747,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasNotificationAccess(): Boolean =
         Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-            ?.contains(packageName) == true
+            ?.split(':')
+            ?.any { it.equals(packageName, ignoreCase = true) } == true
 
     private fun openNotificationAccess() {
         val i = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)

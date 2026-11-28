@@ -19,6 +19,12 @@ ADB="${ADB:-adb}"
 TIMEOUT="${1:-1800}"
 OUT_DIR="${OUT_DIR:-captures}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# OUT_DIR is used both as a path on its own and joined to REPO below. Resolve
+# it once so running the script from another directory still works.
+case "$OUT_DIR" in
+  /*) ;;
+  *) OUT_DIR="$REPO/$OUT_DIR" ;;
+esac
 STAMP=$(date +%Y%m%d-%H%M%S)
 
 say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
@@ -44,7 +50,7 @@ while [ "$waited" -lt "$TIMEOUT" ]; do
 
   # A TVS-named peripheral showing up at all is a strong signal.
   if "$ADB" shell dumpsys bluetooth_manager 2>/dev/null \
-       | grep -qiE 'smartxonnect|tvs[^a-z]|ntorq|jupiter'; then
+       | grep -qiE 'smartxonnect|tvs(bt[0-9]|[^[:alpha:]])|ntorq|jupiter'; then
     connected=1
     say "detected a TVS/SmartXonnect peripheral"
     break
@@ -69,8 +75,8 @@ fi
 say "letting traffic flow for 20s so the capture has substance..."
 sleep 20
 
-mkdir -p "$REPO/$OUT_DIR"
-zip="$REPO/$OUT_DIR/bugreport-$STAMP.zip"
+mkdir -p "$OUT_DIR"
+zip="$OUT_DIR/bugreport-$STAMP.zip"
 
 # -no-stream avoids the interactive progress meter, which hangs when stdin is
 # not a tty. Consent prompts are per-device and cannot be suppressed by adb.
@@ -92,13 +98,20 @@ if [ -z "$member" ]; then
   say "no btsnoop_hci.log in the archive. Candidates:"
   unzip -l "$zip" 2>/dev/null | awk '{print $4}' | grep -iE 'bluetooth' | head -20
   say "falling back to full extract for manual inspection"
-  unzip -o -q "$zip" -d "$REPO/$OUT_DIR/bugreport-$STAMP/"
+  # A bugreport contains accounts, Wi-Fi credentials and notification text.
+  # Never unpack it inside the repository where `git add -f` can pick it up.
+  fallback="$HOME/ntorq-capture/bugreport-$STAMP"
+  unzip -o -q "$zip" -d "$fallback" || exit 2
+  say "PRIVATE: extracted to $fallback (do not commit or share)"
   exit 2
 fi
 
-out="$REPO/$OUT_DIR/btsnoop-$STAMP.btsnoop_hci.log"
-unzip -o -q -j "$zip" "$member" -d "$OUT_DIR" 2>/dev/null
-mv "$OUT_DIR/$(basename "$member")" "$out" 2>/dev/null || out="$REPO/$OUT_DIR/$member"
+out="$OUT_DIR/btsnoop-$STAMP.btsnoop_hci.log"
+if ! unzip -o -q -j "$zip" "$member" -d "$OUT_DIR"; then
+  say "could not extract $member from the bugreport"
+  exit 2
+fi
+mv "$OUT_DIR/$(basename "$member")" "$out"
 
 say "saved: $out ($(du -h "$out" | cut -f1))"
 say ""

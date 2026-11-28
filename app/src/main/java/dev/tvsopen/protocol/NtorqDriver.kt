@@ -64,7 +64,12 @@ data class FrameLayout(
 ) {
     fun decode(raw: ByteArray): DecodedFrame? {
         if (raw.size < 20) return null
-        if ((raw[0].toInt() and 0xFF) != StartId.A5) return null
+        val lead = raw[0].toInt() and 0xFF
+        // The drivers accept 0x5A / 0x9B / 0x5B leads; rejecting anything but
+        // 0x5A here degraded those frames to a framing-only GenericDriver
+        // result, so the tiles kept stale values while `lastFrameAt` looked
+        // fresh. Accept what the driver already declared as valid.
+        if (lead != StartId.A5 && lead != StartId.B9 && lead != StartId.B5) return null
         if ((raw[1].toInt() and 0xFF) != dataId) return null
 
         val fieldMap = LinkedHashMap<Int, Field>()
@@ -74,7 +79,7 @@ data class FrameLayout(
             fieldMap[spec.offset] = spec.field
             values[spec.offset] = v
         }
-        return DecodedFrame(StartId.A5, dataId, fieldMap, values, raw)
+        return DecodedFrame(lead, dataId, fieldMap, values, raw)
     }
 }
 

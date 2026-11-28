@@ -159,8 +159,7 @@ class MapsNotificationListener : NotificationListenerService() {
         val category = n.notification?.category
         // Kept at DEBUG: the Log tab is the evidence base for why a given
         // notification did or did not reach the cluster.
-        Log.d(TAG, "notification posted pkg=$pkg category=$category " +
-            "ongoing=$ongoing title='$title'")
+        Log.d(TAG, "notification posted pkg=$pkg category=$category ongoing=$ongoing")
 
         // Trust known maps packages and explicit navigation extras. For unknown
         // packages, require CATEGORY_NAVIGATION as well as distance-like content:
@@ -234,6 +233,13 @@ class MapsNotificationListener : NotificationListenerService() {
     }
 
     private fun postNav(pkg: String, parsed: ParsedNav, key: String) {
+        // Maps reposts "Starting navigation…" with no distance mid-route.
+        // Replacing a usable step with it blanks the cluster until the next
+        // post; keep the live turn instead.
+        if (parsed.distanceMeters < 0 && Session.hud.value.active) {
+            Log.i(TAG, "ignoring distance-less nav repost from $pkg")
+            return
+        }
         activeNavKey = key
         val step = NavInstruction(
             title = parsed.maneuver,
@@ -266,7 +272,10 @@ class MapsNotificationListener : NotificationListenerService() {
     }
 
     private fun postCall(key: String, pkg: String, extras: Bundle, title: String, text: String) {
-        val number = extras.getString("android.telecom.extra.INCOMING_CALL_ADDRESS")
+        // Telecom puts a Uri here, not a String — getString() always returned
+        // null and the number was taken from the notification text instead.
+        val addr = extras.get("android.telecom.extra.INCOMING_CALL_ADDRESS")
+        val number = (addr as? android.net.Uri)?.schemeSpecificPart
             ?: extras.getString("android.text")
             ?: text.takeIf { it.isNotBlank() }
             ?: ""
@@ -274,7 +283,7 @@ class MapsNotificationListener : NotificationListenerService() {
             when {
                 title.contains("missed", ignoreCase = true) -> "Missed "
                 title.contains("outgoing", ignoreCase = true) ||
-                    extras.getString("android.telecom.extra.CALL_TYPE") == "2" -> "Out "
+                    extras.getInt("android.telecom.extra.CALL_TYPE", -1) == 2 -> "Out "
                 else -> ""
             }
         } else {
@@ -306,7 +315,9 @@ class MapsNotificationListener : NotificationListenerService() {
             info.count > 1 -> "$app: ${info.count} msgs"
             else -> app.ifBlank { "Message" }
         }
-        Log.i(TAG, "message from $pkg: '$display'")
+        // Never write a message body or notification title to the on-device
+        // log: it is personal data and the file is exported by design.
+        Log.i(TAG, "message from $pkg: mirrored")
         Session.onAlert(
             ClusterAlert(
                 kind = ClusterAlert.Kind.MESSAGE,
@@ -411,14 +422,15 @@ class MapsNotificationListener : NotificationListenerService() {
         /**
          * How long a cancelled navigation notification is given to be replaced.
          *
-         * Nine seconds was the gap actually observed, so this sits just above
-         * it. Long enough to survive a refresh, short enough that genuinely
-         * ending a route clears the cluster promptly.
+         * Fifteen seconds: long enough to survive a Maps repost (observed
+         * around nine seconds), short enough that an ended route clears the
+         * cluster promptly. The pending callback re-checks for a live nav
+         * notification before clearing.
          */
         // Maps can drop and repost its notification with a new key at any
         // time. A short grace wiped a live route whenever the gap exceeded a
         // few seconds; only give up after a long silence.
-        private const val CLEAR_GRACE_MS = 300_000L
+        private const val CLEAR_GRACE_MS = 15_000L
 
         val DEFAULT_MAPS_PACKAGES = setOf(
             "com.google.android.apps.maps",       // Google Maps

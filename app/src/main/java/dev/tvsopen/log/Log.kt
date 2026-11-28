@@ -272,6 +272,10 @@ object Log {
             "call from " in out -> "call from "
             "call alert:" in out -> "call alert:"
             "message alert:" in out -> "message alert:"
+            // The producer logs the full (optionally body-bearing) message
+            // under "message from", and every notification title at DEBUG.
+            "message from " in out -> "message from "
+            "notification posted " in out -> "notification posted "
             "parked spot saved:" in out -> "parked spot saved:"
             else -> null
         }

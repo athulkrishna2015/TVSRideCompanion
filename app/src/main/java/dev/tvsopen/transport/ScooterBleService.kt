@@ -94,6 +94,7 @@ class ScooterBleService(private val context: Context) {
     // failure this class had.
     @Volatile
     private var gatt: BluetoothGatt? = null
+    @Volatile
     private var writeChar: BluetoothGattCharacteristic? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -102,6 +103,7 @@ class ScooterBleService(private val context: Context) {
      * cannot both start discovery. */
     @Volatile
     private var discoveryStarted = false
+    private var discoveryAttempts = 0
 
     /**
      * Whether the current link outage has already been reported.
@@ -136,10 +138,7 @@ class ScooterBleService(private val context: Context) {
             // Connected but writes went nowhere and the user had to reconnect
             // manually. Close the stale client and carry on.
             Log.w(TAG, "closing stale GATT client before reconnect")
-            runCatching { gatt?.close() }
-                .onFailure { Log.w(TAG, "stale gatt close: ${it.message}") }
-            gatt = null
-            writeChar = null
+            gatt?.let { closeGatt(it) }
         }
         val a = adapter ?: return false
         val device: BluetoothDevice = try {
@@ -149,11 +148,24 @@ class ScooterBleService(private val context: Context) {
             return false
         }
         _state.value = ConnectionState.CONNECTING
+        discoveryAttempts = 0
 
-        gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            device.connectGatt(context, config.autoConnect, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-            device.connectGatt(context, config.autoConnect, gattCallback)
+        try {
+            gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context, config.autoConnect, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                @Suppress("DEPRECATION")
+                device.connectGatt(context, config.autoConnect, gattCallback)
+            }
+        } catch (e: SecurityException) {
+            // Without this the transport stayed CONNECTING with a stale client
+            // and refused every later connect even after permission was granted.
+            Log.e(TAG, "connectGatt refused: ${e.message}")
+            gatt = null
+            writeChar = null
+            discoveryStarted = false
+            _state.value = ConnectionState.DISCONNECTED
+            return false
         }
         return true
     }
@@ -198,6 +210,7 @@ class ScooterBleService(private val context: Context) {
         mainHandler.removeCallbacksAndMessages(null)
         gatt = null
         discoveryStarted = false
+        discoveryAttempts = 0
         runCatching { g.close() }
             .onFailure { Log.w(TAG, "gatt close: ${it.message}") }
     }
@@ -303,6 +316,12 @@ class ScooterBleService(private val context: Context) {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        Log.w(TAG, "GATT connect failed (status=$status)")
+                        closeGatt(g)
+                        _state.value = ConnectionState.DISCONNECTED
+                        return
+                    }
                     Log.i(TAG, "GATT connected (status=$status)")
                     _state.value = ConnectionState.CONNECTED
                     try {
@@ -339,6 +358,11 @@ class ScooterBleService(private val context: Context) {
 
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "service discovery failed (status=$status)")
+                discoveryStarted = false
+                return
+            }
             val svc = resolveVerifiedService(g)
             if (svc == null) {
                 Log.w(TAG, "no verified SmartXonnect service on ${g.device.address}")
@@ -470,7 +494,17 @@ class ScooterBleService(private val context: Context) {
         if (g !== gatt || discoveryStarted) return
         discoveryStarted = true
         mainHandler.removeCallbacksAndMessages(null)
-        if (!discoverServices(g)) discoveryStarted = false
+        if (!discoverServices(g)) {
+            discoveryStarted = false
+            // discoverServices() can answer BUSY transiently. Cancelling the
+            // fallback timer without retrying left the link CONNECTED with no
+            // write characteristic forever.
+            if (discoveryAttempts++ < DISCOVERY_RETRIES) {
+                mainHandler.postDelayed({ startDiscovery(g) }, 500L * discoveryAttempts)
+            } else {
+                Log.w(TAG, "service discovery gave up after $discoveryAttempts attempts")
+            }
+        }
     }
 
     /**
@@ -530,7 +564,9 @@ class ScooterBleService(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun enableNotifications(g: BluetoothGatt, svc: android.bluetooth.BluetoothGattService) {
         val pending = ArrayList<BluetoothGattDescriptor>()
-        for (uuid in listOf(Gatt.READ, Gatt.DEVICE_INFO)) {
+        // DEVICE_INFO is the CCCD descriptor UUID, not a characteristic;
+        // getCharacteristic() could never find it. Subscribe the notify char.
+        for (uuid in listOf(Gatt.READ)) {
             val ch = svc.getCharacteristic(UUID.fromString(uuid)) ?: continue
             g.setCharacteristicNotification(ch, true)
             val cccd = ch.getDescriptor(CCCD)
@@ -558,6 +594,7 @@ class ScooterBleService(private val context: Context) {
          * enough that a stack which never reports it does not stall the link.
          */
         private const val DISCOVERY_FALLBACK_MS = 2500L
+        private const val DISCOVERY_RETRIES = 3
 
         /** Max wait for the write characteristic after a GATT connect. */
         private const val WRITE_READY_WAIT_MS = 2_000L

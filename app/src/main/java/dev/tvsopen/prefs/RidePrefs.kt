@@ -13,7 +13,8 @@ import androidx.compose.runtime.setValue
 
 class RidePrefs private constructor(private val ctx: Context) {
 
-    private val sp = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+    private val sp = ctx.applicationContext
+        .getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
     /** Observable for Compose. */
     var rideMode by mutableStateOf(sp.getBoolean(KEY_RIDE_MODE, false))

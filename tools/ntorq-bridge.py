@@ -269,8 +269,12 @@ def decode_outbound(b: bytes) -> dict | None:
     if len(b) < FRAME_SIZE or b[19] != END:
         return {"kind": "bad-frame", "len": len(b), "end": b[19] if len(b) > 19 else None}
     start, data_id = b[0], b[1]
-    if data_id in (0xF1, 0xF2):
+    # Auth lives on the 0x9A/0x9B challenge leads. The app's brightness
+    # command is 0x5A 0xF1 and must not be counted as a dropped auth frame.
+    if start in (0x9A, 0x9B) and data_id in (0xF1, 0xF2):
         return {"kind": "auth", "start": start, "dataId": data_id}
+    if start == START_PHONE and data_id == 0xF1:
+        return {"kind": "brightness", "value": b[2]}
     if data_id == 0x37:
         # Calibration write. Logged only: never answer, never replay.
         return {"kind": "calibration", "command": b[2], "calId": b[3],
@@ -317,7 +321,9 @@ class Physics:
         self.throttle_pct = 0.0
         self.fuel_inj_ms = 0.0
         self.iss_count = 0
-        self.dt = 1.0
+        # poll() runs every 100 ms; tick() is called once per poll. Keep the
+        # documented ~3 kph/s ramp instead of running physics at 10x speed.
+        self.dt = 0.1
 
     def tick(self) -> None:
         if not self.ignition:
@@ -746,6 +752,7 @@ class Bridge:
         self.link_up = up
         if up:
             self.telemetry.address_frame_done = False
+            self.telemetry.zero_frames_left = 2
         await self.hub.send_json({"t": "ble", "connected": bool(up)})
         log.info("link %s", "UP (notify subscribed)" if up else "DOWN")
 
@@ -838,7 +845,15 @@ class Bridge:
             try:
                 async for msg in ws:
                     if isinstance(msg, bytes):
-                        # manual frame injection: straight to the phone
+                        # Manual injection must pass the same safety checks as
+                        # a BLE write: no auth or calibration frames to phone.
+                        if len(msg) != FRAME_SIZE:
+                            log.warning("dropping injected frame of %d bytes", len(msg))
+                            continue
+                        decoded = decode_outbound(bytes(msg))
+                        if decoded is not None and decoded.get("kind") in ("auth", "calibration"):
+                            log.warning("dropped injected %s frame", decoded["kind"])
+                            continue
                         await self.ble_notify(bytes(msg))
                         continue
                     try:

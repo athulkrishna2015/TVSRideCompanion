@@ -268,7 +268,7 @@ object Session {
         // than hardcoding the Ntorq rule for every model.
         val fuelLowNibble = DriverRegistry.forModel(_connection.value.model)
             .capabilities.fuelLowNibble
-        _telemetry.value = when (frame.dataId) {
+        val updated = when (frame.dataId) {
             0x10 -> cur.copy(
                 speedKmh = frame.field(Field.SPEED)?.toInt() ?: cur.speedKmh,
                 odometerKm = scaled(Field.ODOMETER, 10.0) ?: cur.odometerKm,
@@ -304,7 +304,7 @@ object Session {
                 tripFMeters = scaled(Field.TRIP_F_METER, 10.0)?.toInt() ?: cur.tripFMeters,
                 engineRpm = frame.field(Field.ENGINE_RPM)?.toInt() ?: cur.engineRpm,
                 lastFrameAt = now,
-            ).also { trackRideDistance() }
+            )
 
             0x11 -> cur.copy(
                 serviceDue = (frame.field(Field.SERVICE_REMINDER)?.toInt()?.let { it != 0 })
@@ -336,6 +336,11 @@ object Session {
 
             else -> cur.copy(lastFrameAt = now)
         }
+        // Assign first, then fold into the ride. The old `.also` ran before
+        // the assignment, so every distance update was one frame stale and
+        // the last frame of a short ride was never recorded.
+        _telemetry.value = updated
+        if (frame.dataId == 0x10) trackRideDistance()
     }
 
     fun onHud(update: (HudState) -> HudState) {

@@ -245,7 +245,7 @@ class ScooterScanner(private val context: Context) {
         stop()
         // Unfiltered scans keep whatever was already found; a fresh filtered scan
         // starts clean, because the old entries may not have advertised the UUID.
-        if (!wasScanning) found.clear()
+        if (!wasScanning || onlySmartXonnect) found.clear()
         publish()
         start(onlySmartXonnect)
     }

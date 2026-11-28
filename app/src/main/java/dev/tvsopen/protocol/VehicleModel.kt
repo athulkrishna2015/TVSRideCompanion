@@ -65,6 +65,9 @@ enum class VehicleModel(
         this == NTORQ || this == NTORQ_125_RACE || this == RAIDER_125 || this == RAIDER_180
 
     companion object {
+        /** The rider's own bike. Every entry point must agree on this. */
+        val DEFAULT_MODEL = NTORQ_125_RACE
+
         /**
          * Best-effort match from a advertised local name / model string.
          * Returns [UNKNOWN] rather than throwing — the driver registry then
