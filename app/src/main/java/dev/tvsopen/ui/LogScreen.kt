@@ -34,6 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tvsopen.log.Level
 import dev.tvsopen.log.Log
@@ -60,6 +66,30 @@ fun LogScreen(modifier: Modifier = Modifier) {
     // one tap away and the caption below says so.
     var minLevel by remember { mutableStateOf(Level.INFO) }
     var autoScroll by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    // Let the rider pick where the bundle goes (Downloads, Drive, ...). The
+    // app-scoped Android/data folder is hidden from most file managers, so a
+    // file saved there was effectively lost to anyone without adb.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult // cancelled
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    ctx.contentResolver.openOutputStream(uri)?.use { Log.exportTo(it) } ?: false
+                }.getOrDefault(false)
+            }
+            Toast.makeText(
+                ctx,
+                if (ok) "Log saved" else "Export failed",
+                Toast.LENGTH_SHORT,
+            ).show()
+            // No URI in the log: it can carry a display name or path.
+            if (ok) Log.i(TAG, "exported logs") else Log.w(TAG, "log export failed")
+        }
+    }
 
     val visible = remember(records, minLevel) {
         records.filter { it.level >= minLevel }
@@ -104,18 +134,12 @@ fun LogScreen(modifier: Modifier = Modifier) {
                     }
                     TextButton(onClick = { Log.clear() }) { Text("Clear") }
                     OutlinedButton(onClick = {
-                        val out = Log.export(Log.exportDir(ctx))
-                        if (out == null) {
+                        if (!Log.hasLogFile()) {
                             Toast.makeText(ctx, "No log file yet", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(
-                                ctx,
-                                "Saved to ${out.absolutePath}",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                            Log.i(TAG, "exported logs to ${out.absolutePath}")
+                            exportLauncher.launch(Log.exportFileName("txt"))
                         }
-                    }) { Text("Export") }
+                    }) { Text("Export…") }
                 }
             }
         }

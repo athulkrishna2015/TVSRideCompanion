@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.io.OutputStream
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.text.SimpleDateFormat
@@ -288,32 +289,57 @@ object Log {
         return out
     }
 
-    fun export(dir: File): File? {
-        val source = logFile() ?: return null
+    /**
+     * Default name for an exported bundle, e.g. `tvsride-20261128-142501.log`.
+     * The system picker appends `.txt` to anything saved as text/plain that
+     * does not already end in it, so the picker path asks for `txt`.
+     */
+    fun exportFileName(ext: String = "log"): String {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
             .format(Date(System.currentTimeMillis()))
-        val out = File(dir, "tvsride-$stamp.log")
+        return "tvsride-$stamp.$ext"
+    }
+
+    /** True once there is a log file worth exporting. */
+    fun hasLogFile(): Boolean = logFile()?.exists() == true
+
+    /**
+     * Write the redacted bundle (rotated files oldest first, then the current
+     * one) to [out]. The caller owns [out] and closes it. Returns false when
+     * there is no log file yet or the write fails.
+     */
+    fun exportTo(out: OutputStream): Boolean {
+        val source = logFile()?.takeIf { it.exists() } ?: return false
         return runCatching {
-            if (!dir.exists()) dir.mkdirs()
             fileSizeBytes() // flush before copying
             // Hold the lock across the copy: a concurrent frame must not rotate
             // the files out from under us and produce a truncated bundle.
             synchronized(lock) {
-                out.bufferedWriter().use { w ->
-                    (2..FILE_KEEP)
-                        .map { File(source.parentFile, "tvsride.$it.log") }
-                        .filter { it.exists() }
-                        .sortedByDescending { it.name }
-                        .forEach { f ->
-                            w.write("===== ${f.name} (older) =====\n")
-                            f.forEachLine { w.write("${redact(it)}\n") }
-                        }
-                    w.write("===== ${source.name} (current) =====\n")
-                    source.forEachLine { w.write("${redact(it)}\n") }
-                }
+                val w = out.bufferedWriter()
+                (2..FILE_KEEP)
+                    .map { File(source.parentFile, "tvsride.$it.log") }
+                    .filter { it.exists() }
+                    .sortedByDescending { it.name }
+                    .forEach { f ->
+                        w.write("===== ${f.name} (older) =====\n")
+                        f.forEachLine { w.write("${redact(it)}\n") }
+                    }
+                w.write("===== ${source.name} (current) =====\n")
+                source.forEachLine { w.write("${redact(it)}\n") }
+                w.flush()
             }
-            out
-        }.getOrNull()
+            true
+        }.getOrDefault(false)
+    }
+
+    /** Export into the app-scoped [dir] (reachable with `adb pull`). */
+    fun export(dir: File): File? {
+        if (!hasLogFile()) return null
+        val out = File(dir, exportFileName())
+        return runCatching {
+            if (!dir.exists()) dir.mkdirs()
+            out.outputStream().use { exportTo(it) }
+        }.getOrDefault(false).let { ok -> if (ok) out else null }
     }
 
     /** Where [export] should write. App-scoped, so no storage permission. */
