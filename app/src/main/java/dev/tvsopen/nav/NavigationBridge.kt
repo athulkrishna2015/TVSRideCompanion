@@ -193,7 +193,7 @@ class NavigationBridge(
 
                     val control = nav.copy(rows = if (twoRows) 2 else 1)
                     driver.buildNavControl(control)?.let { frame ->
-                        if (ble.write(frame)) {
+                        if (sendWithRetry(frame)) {
                             _hud.value = _hud.value.copy(
                                 framesSent = _hud.value.framesSent + 1, lastError = null,
                             )
@@ -231,6 +231,16 @@ class NavigationBridge(
                 delay(if (lastTwoRows || showingMetrics) controlIntervalMs else textSwapIntervalMs)
             }
         }
+    }
+
+    /** One retry for a transient GATT write failure; keepalive/pings do not
+     *  need it, but losing a nav control frame blanks the HUD until the next
+     *  1.5 s tick. */
+    private suspend fun sendWithRetry(bytes: ByteArray?): Boolean {
+        if (bytes == null) return false
+        if (ble.write(bytes)) return true
+        delay(80)
+        return ble.write(bytes)
     }
 
     fun stopNavigation() {

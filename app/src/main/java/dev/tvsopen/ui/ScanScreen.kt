@@ -452,6 +452,7 @@ private val CHOICES = listOf(
     VehicleModel.NTORQ,
     VehicleModel.RAIDER_125,
     VehicleModel.RAIDER_180,
+    VehicleModel.JUPITER_110,
     VehicleModel.JUPITER_125,
     VehicleModel.APACHE_160,
     VehicleModel.IQUBE,

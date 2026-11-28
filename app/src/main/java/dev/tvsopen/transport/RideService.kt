@@ -119,7 +119,11 @@ class RideService : android.app.Service() {
         super.onCreate()
         // Logs go to the app's own files so a crash can still be diagnosed.
         Log.enableFileSink(java.io.File(filesDir, "logs"))
-        Log.i(TAG, "service created (sdk ${android.os.Build.VERSION.SDK_INT})")
+        // Ride history must be available even when the service is started
+        // from boot or companion presence with no Activity in front.
+        Session.attachRideLog(applicationContext)
+        Log.i(TAG, "service created (sdk ${android.os.Build.VERSION.SDK_INT}, " +
+            "app ${dev.tvsopen.BuildConfig.VERSION_NAME})")
 
         // A `connectedDevice` foreground service needs BLUETOOTH_CONNECT or
         // BLUETOOTH_SCAN to be *granted*, not merely declared. Starting it

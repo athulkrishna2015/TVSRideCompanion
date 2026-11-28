@@ -124,6 +124,12 @@ class RideLog(context: Context) {
         val current = _rides.value
         val open = current.firstOrNull() ?: return
         if (!open.inProgress) return
+        // A BLE flap that produced only a few metres is not a ride; recording
+        // it as "0.0 km" polluted the history and the totals.
+        if (open.distanceKm < MIN_RIDE_DISTANCE_KM) {
+            persist(current.drop(1))
+            return
+        }
         sp.edit()
             .putInt(KEY_TOTAL, totalRides + 1)
             .putString(KEY_DIST, (totalDistanceKm + open.distanceKm).toString())
@@ -136,6 +142,7 @@ class RideLog(context: Context) {
         private const val KEY_TOTAL = "ride_total_count"
         private const val KEY_DIST = "ride_total_distance"
         private const val MAX_RIDES = 100
+        private const val MIN_RIDE_DISTANCE_KM = 0.1
 
         /** An open ride older than this belongs to a process that died. */
         private const val STALE_OPEN_RIDE_MS = 6 * 60 * 60 * 1000L

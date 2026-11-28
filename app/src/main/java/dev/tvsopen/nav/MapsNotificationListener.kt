@@ -226,7 +226,9 @@ class MapsNotificationListener : NotificationListenerService() {
     /** Never mirror the app's own or the system UI's notifications as messages. */
     private fun isSystemNotification(pkg: String): Boolean =
         pkg == packageName || pkg == "com.android.systemui" ||
-            pkg == "android" || pkg.startsWith("com.android.")
+            pkg == "android" || pkg.startsWith("com.android.") ||
+            pkg == "com.samsung.android.app.routines" ||
+            pkg == "com.samsung.android.lool"
 
     /** Call-shaped wording, for apps that do not set the telecom extras. */
     private fun looksLikeCall(title: String, text: String): Boolean {

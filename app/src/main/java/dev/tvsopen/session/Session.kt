@@ -220,6 +220,16 @@ object Session {
         _hud.value = HudState()
     }
 
+    /** Mirror RideLog state into Session right after start/finish, not only
+     *  when a distance frame arrives. Otherwise the More tab shows a stale
+     *  ride list for the first stretch of every ride. */
+    private fun syncRideFlows() {
+        val log = rideLog ?: return
+        _rides.value = log.rides.value
+        _totalRides.value = log.totalRides
+        _totalRideDistanceKm.value = log.totalDistanceKm
+    }
+
     fun onConnection(state: ConnectionState, model: VehicleModel, address: String?) {
         val previous = _connection.value
         val wasConnected = previous.state == ConnectionState.CONNECTED
@@ -234,11 +244,11 @@ object Session {
         if (isConnected && !wasConnected) {
             _telemetry.value = _telemetry.value.copy(odometerAtConnectKm = null)
             rideLog?.start()
+            syncRideFlows()
         }
         if (!isConnected && wasConnected) {
             rideLog?.finish()
-            _totalRides.value = rideLog?.totalRides ?: _totalRides.value
-            _totalRideDistanceKm.value = rideLog?.totalDistanceKm ?: _totalRideDistanceKm.value
+            syncRideFlows()
         }
 
         _connection.value = ConnectionState1(state, model, address)
