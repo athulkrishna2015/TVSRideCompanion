@@ -83,6 +83,7 @@ fun MoreScreen(
     onOpenNotificationAccess: () -> Unit,
     onScan: () -> Unit,
     onDisconnect: () -> Unit,
+    onExit: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -463,6 +464,24 @@ fun MoreScreen(
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                     )
+                }
+            }
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Exit app", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Disconnect, stop the background service and close the app. " +
+                            "Your settings and rides stay on the device for next launch.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = onExit) { Text("Exit") }
                 }
             }
         }
