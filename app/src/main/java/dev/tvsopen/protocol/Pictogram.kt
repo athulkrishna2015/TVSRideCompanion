@@ -138,7 +138,7 @@ object ManeuverResolver {
         // Specific exit rules first: the generic roundabout rule below matches
         // "second exit at the roundabout" and would otherwise win.
         Regex(
-            "\\broundabout\\b.*\\b(?:first|1st)\\s+exit\\b|\\bfirst exit\\b|\\bprimera salida\\b|\\b1\\.?a? salida\\b",
+            "\\bexit\\b.*\\broundabout\\b|\\broundabout\\b.*\\b(?:first|1st)\\s+exit\\b|\\bfirst exit\\b|\\bprimera salida\\b|\\b1\\.?a? salida\\b",
             RegexOption.IGNORE_CASE,
         ) to 65,
         Regex("\\broundabout\\b.*\\b(?:second|2nd)\\s+exit\\b", RegexOption.IGNORE_CASE) to 66,
@@ -160,12 +160,12 @@ object ManeuverResolver {
             "\\bslight right\\b|\\bkeep right\\b|\\bligeramente a la derecha\\b|\\bmantente a la derecha\\b|\\bcarril derecho\\b",
             RegexOption.IGNORE_CASE,
         ) to 5,
-        Regex("\\bturn left\\b|\\bleft\\b|\\bgira a la izquierda\\b|\\bizquierda\\b", RegexOption.IGNORE_CASE) to 0,
-        Regex("\\bturn right\\b|\\bright\\b|\\bgira a la derecha\\b|\\bderecha\\b", RegexOption.IGNORE_CASE) to 3,
-        Regex("\\bearlier\\b|\\bexit\\b|\\btoma la salida\\b|\\bsal por\\b|\\bsalida\\b", RegexOption.IGNORE_CASE) to 9,
         Regex("\\bmerge\\b.*\\bleft\\b", RegexOption.IGNORE_CASE) to 22,
         Regex("\\bmerge\\b.*\\bright\\b", RegexOption.IGNORE_CASE) to 24,
         Regex("\\bmerge\\b|\\bincorporate\\b", RegexOption.IGNORE_CASE) to 14,
+        Regex("\\bturn left\\b|\\bleft\\b|\\bgira a la izquierda\\b|\\bizquierda\\b", RegexOption.IGNORE_CASE) to 0,
+        Regex("\\bturn right\\b|\\bright\\b|\\bgira a la derecha\\b|\\bderecha\\b", RegexOption.IGNORE_CASE) to 3,
+        Regex("\\bearlier\\b|\\bexit\\b|\\btoma la salida\\b|\\bsal por\\b|\\bsalida\\b", RegexOption.IGNORE_CASE) to 9,
         Regex("\\bfork\\b|\\bbifurcacion\\b", RegexOption.IGNORE_CASE) to 15,
         Regex(
             "\\barrive|\\bdestination\\b|\\byou have arrived\\b|\\bhas llegado\\b|\\bllegaras\\b|\\bdestino\\b",
