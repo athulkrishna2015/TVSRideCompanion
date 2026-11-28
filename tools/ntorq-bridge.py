@@ -249,13 +249,29 @@ def decode_keepalive(b: bytes) -> dict:
 
 
 def decode_nav_control(b: bytes) -> dict:
-    """PacketBuilder.navigationControl: BE u16 distance[2..3], u16 eta[4..5],
-    u24 remainingTrip[6..8], pictogram[9], rows[10], status[11]."""
-    return {
-        "kind": "nav-control",
+    """Decode 0x5A 0x4E under BOTH byte orders.
+
+    Our app writes big-endian, but the only captured outbound frame
+    (docs/PROTOCOL.md §4c) reads as little-endian and matches the companion
+    0x5B 0x4F text. Do not declare either order settled without a cluster
+    capture; expose both so a test session can tell them apart.
+    """
+    be = {
         "distanceM": get_u16_be(b, 2),
         "etaMinutes": get_u16_be(b, 4),
         "remainingTripM": get_u24_be(b, 6),
+    }
+    le = {
+        "distanceM": int.from_bytes(b[2:4], "little"),
+        "etaMinutes": int.from_bytes(b[4:6], "little"),
+        "remainingTripM": int.from_bytes(b[6:9], "little"),
+    }
+    return {
+        "kind": "nav-control",
+        **be,
+        "be": be,
+        "le": le,
+        "byteOrder": "UNVERIFIED: app writes BE, captured frame looks LE",
         "pictogram": b[9],
         "rows": b[10],
         "status": b[11],
@@ -376,8 +392,11 @@ class Telemetry:
         self.phys = phys
         self.opts = opts
         self.next_at = {k: 0.0 for k in CADENCE}
-        self.address_frame_done = False
-        self.zero_frames_left = 2  # capture: two all-zero frames at connect
+        # The preserved session logs show a burst of ~9 all-zero frames at
+        # link-up and ~6 identity frames in the first 10 s (~2 s apart).
+        self.zero_frames_left = 9
+        self.identity_left = 6
+        self.next_identity_at = 0.0
 
     def poll(self, now: float) -> list[bytes]:
         """Return the frames due now. Called every ~100 ms."""
@@ -386,9 +405,10 @@ class Telemetry:
         if self.zero_frames_left and p.ignition:
             out.extend([bytes(FRAME_SIZE) for _ in range(self.zero_frames_left)])
             self.zero_frames_left = 0
-        if not self.address_frame_done:
+        if self.identity_left and now >= self.next_identity_at:
             out.append(build_address_frame(self.opts.address))
-            self.address_frame_done = True
+            self.identity_left -= 1
+            self.next_identity_at = now + 2.0
         if not p.ignition:
             return out
         p.tick()
@@ -751,8 +771,9 @@ class Bridge:
     async def on_link(self, up: bool) -> None:
         self.link_up = up
         if up:
-            self.telemetry.address_frame_done = False
-            self.telemetry.zero_frames_left = 2
+            self.telemetry.identity_left = 6
+            self.telemetry.next_identity_at = 0.0
+            self.telemetry.zero_frames_left = 9
         await self.hub.send_json({"t": "ble", "connected": bool(up)})
         log.info("link %s", "UP (notify subscribed)" if up else "DOWN")
 
@@ -943,6 +964,18 @@ def selftest() -> int:
     check("ka pm", d["pm"], True)
     check("ka date", (d["day"], d["month"], d["year"]), (13, 11, 2026))
     check("ka findMy", d["findMy"], False)
+
+    # Captured outbound control frame (docs/PROTOCOL.md §4c). Decode under
+    # both orders; the companion text says 550 m / 411 min / 550 m.
+    captured = bytes.fromhex(
+        "5A 4E 26 02 9B 01 26 02 00 07 01 01 00 00 00 00 00 00 00 FF"
+    )
+    d = decode_nav_control(captured)
+    check("captured LE distance", d["le"]["distanceM"], 550)
+    check("captured LE eta", d["le"]["etaMinutes"], 411)
+    check("captured LE remaining", d["le"]["remainingTripM"], 550)
+    check("captured BE distance", d["be"]["distanceM"], 9730)
+    check("captured pictogram", d["pictogram"], 7)
 
     # nav control: the app builds big-endian (putUInt16/24)
     b = bytearray(20)

@@ -382,6 +382,19 @@ wire for the first time:
 text row. They alternate on a short interval so the display shows the street and
 the metrics in turn.
 
+**Byte order is unresolved.** The app currently writes big-endian
+(`PacketBuilder.navigationControl`), and its unit test pins that choice using a
+frame built by the same encoder. The only captured outbound control frame above
+reads `26 02` / `9B 01` / `26 02`, which is 550 m / 411 min / 550 m in
+**little-endian** and matches the companion text row exactly; big-endian would
+read 9730 m / 39681 min / 2490368 m. No capture has confirmed that the cluster
+accepts either form, so this stays open rather than being declared settled.
+`tools/ntorq-bridge.py` decodes both orders and labels the discrepancy.
+
+The captured `5A 16` pattern has only its first 16 bytes observed; the remaining
+four are zero filler in both tools. Treat the tail as unknown, not as evidence
+that the cluster sends zeros there.
+
 Two things were broken before this, and both produced a screen that looked right:
 
 - **The bridge was never given an instruction.** It read its own `_hud` flow,

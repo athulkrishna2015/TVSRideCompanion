@@ -157,8 +157,10 @@ phone app  --BLE GATT-->  ntorq-bridge.py  --WebSocket-->  controller/script
   built to `NtorqDriver`'s field tables (speed, BE odometer×0.1, fuel bars,
   avg/top/throttle, byte-12 ignition 128/64, BE trip-F×0.1, BE rpm, battery×0.1 V,
   run time, etc.). Emits the **captured `0x16` byte pattern** statically (layout
-  unknown) and a one-shot `0x42` address frame, as observed in `docs/PROTOCOL.md`
-  §4a. Two all-zero connect frames precede telemetry. `0x19` (SM3) is off by
+  unknown) and six `0x42` identity frames about 2 s apart, as observed in the
+  preserved session logs. A burst of nine all-zero connect frames precedes
+  telemetry. Only the first 16 bytes of the captured `0x16` pattern were
+  observed; the tail is filler, not evidence. `0x19` (SM3) is off by
   default (`--with-19`) — the real cluster never sent it. Minimal physics drives
   speed/rpm/temps/odo; fuel bars 0..6.
 - **Outbound decode** mirrors the app's own builders byte-for-byte: `0x4A`
