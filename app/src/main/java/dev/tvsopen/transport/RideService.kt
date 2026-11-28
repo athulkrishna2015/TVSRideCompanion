@@ -122,8 +122,12 @@ class RideService : android.app.Service() {
         // Ride history must be available even when the service is started
         // from boot or companion presence with no Activity in front.
         Session.attachRideLog(applicationContext)
+        val appVersion = runCatching {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrDefault("unknown")
         Log.i(TAG, "service created (sdk ${android.os.Build.VERSION.SDK_INT}, " +
-            "app ${dev.tvsopen.BuildConfig.VERSION_NAME})")
+            "app $appVersion)")
 
         // A `connectedDevice` foreground service needs BLUETOOTH_CONNECT or
         // BLUETOOTH_SCAN to be *granted*, not merely declared. Starting it
